@@ -21,6 +21,7 @@ measures nothing but memory.
 |---|---|---|---|---|---|---|
 | F1 — Walking skeleton: sign in → Vision → start Sprint → Today → Close Day | 2026-09-05T04:15Z | 2026-09-05T17:27Z | 13h12m | 2 (Docker Desktop not running before `supabase start`; commit-scope approval for the `mockup/today` branch and the fast-forward to main) | 0 | 0 |
 | F2 — Cue and Impediment libraries; Highest Impediment; Day Close selections | 2026-09-05T18:05Z | 2026-09-05T19:16Z | 1h11m | 0 | 0 | 0 |
+| F3 — Custom daily targets; reconciliation; target locking; intention pre-planning | 2026-09-05T19:25Z | 2026-09-05T19:55Z | 0h30m | 0 | 0 | 0 |
 
 ### Who opens the row
 
@@ -70,6 +71,10 @@ and the metric cannot be read.
 
 (Newest first. One line per shipped milestone, dated.)
 
+- 2026-09-05 — **F3 custom targets green** (no evaluator trigger; six DB mutations and one UI
+  mutation each turned their test red; visual check in Chrome; `npm run verify` green:
+  unit 43, DB 120, Playwright 6). Migration `0005_targets.sql`, `save_targets`, the
+  rule-10 row trigger, wizard custom mode with per-day intentions, Today plan card.
 - 2026-09-05 — **F2 libraries green** (eval-02: 10/10 criteria PASS, 0 P0/P1, 3 P2 →
   BACKLOG). Cue and Impediment libraries with rank/scope/archive/restore, sprint
   membership (date-ranged, 1–3 / 1–5), Highest Impediment with WHEN → THEN, two-step

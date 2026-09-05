@@ -6,6 +6,40 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-05 — F3 plans: the DB owns balance and locking; the mockup's "informational mismatch" is rejected
+
+**Decision.** A plan is written by exactly two SECURITY DEFINER functions, both explicit
+user actions: `start_sprint` (initial 14) and `save_targets` (future days). Both call one
+validator that requires the 14 targets to sum to the goal (rule 11) and to sit on the
+measurement's planning step; `save_targets` and a row trigger both refuse a change to any
+day whose date has begun in the sprint's zone (rule 10). The UI mirrors the same rule
+only to disable the button early — it never decides.
+
+**Why.** The handoff mockup (`docs/mockups/today/handoff_sprint_ui`) says a plan that does
+not match the goal "is informational and does not block starting", and its "Same" chip
+re-spreads the remaining goal over future days. The PRD §6 says the opposite on both
+counts: "Save (and Start Sprint) is disabled until planned total = Sprint Goal. No
+partial or unbalanced plan is ever persisted", and rule 12 forbids auto-redistribution.
+The SPEC restates the PRD, and the SPEC wins over the mockup on behaviour (the mockup
+governs look only). Rules 13–14 are proven structurally rather than by example: the DB
+suite scans `pg_proc` for any function that UPDATEs `sprint_days.target` and expects
+exactly `save_targets`; adding a `rebalance_plan` function turns that test red.
+
+**Also settled.** (1) Custom mode is one-way once a sprint has started: there is no
+"back to Same" because that would be a redistribution. Before start, the wizard lets
+the user flip between the two freely and keeps the typed values. (2) The lock is
+`date <= today` in the sprint zone — today's target locks the moment the day begins,
+not at first close — which is what "today's Target after the Day begins" (rule 10)
+says; for a sprint starting tomorrow all 14 days stay open until midnight. (3) Hours
+targets are entered as `h:mm`; money and quantity as whole units; cents are rejected
+by the DB (`target_precision`), not rounded.
+
+**Rejected.** A "spread the remainder evenly" helper button on Today. User-initiated,
+so not rule 12, but the SPEC lists suggested rebalancing as a non-goal and the PRD's
+accepted trade-off is that the user loads the difference by hand.
+
+---
+
 ## 2026-09-05 — F2 membership boundaries are midnight in the sprint's zone; one SQL owner for "what Day Close offers"
 
 **Decision.** `day_offered_items(day_id)` decides which cues and impediments a day

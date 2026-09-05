@@ -102,6 +102,7 @@ describe("public schema access model", () => {
       "move_item",
       "remove_sprint_item",
       "restore_item",
+      "save_targets",
       "set_highest_impediment",
       "set_item_scope",
       "start_sprint",
@@ -110,8 +111,15 @@ describe("public schema access model", () => {
 
   it("anon cannot execute the write functions", async () => {
     const [row] = await sql<{ start: boolean; close: boolean }[]>`
-      select has_function_privilege('anon', 'public.start_sprint(text,text,text,text,text,bigint,int,text,text,text,jsonb,text,date,uuid[],uuid[],uuid,text,text,text)', 'execute') as "start",
+      select has_function_privilege('anon', 'public.start_sprint(text,text,text,text,text,bigint,int,text,text,text,jsonb,text,date,uuid[],uuid[],uuid,text,text,text,bigint[],text[])', 'execute') as "start",
              has_function_privilege('anon', 'public.close_day(uuid,bigint,text,uuid[],uuid,uuid[],uuid)', 'execute') as close`;
     expect(row).toEqual({ start: false, close: false });
+  });
+
+  it("the plan validator and the lock trigger function are not callable by the API roles", async () => {
+    const [row] = await sql<{ validate: boolean; lock: boolean }[]>`
+      select has_function_privilege('authenticated', 'public.validate_targets(text,bigint,bigint[])', 'execute') as validate,
+             has_function_privilege('authenticated', 'public.sprint_days_target_locked()', 'execute') as lock`;
+    expect(row).toEqual({ validate: false, lock: false });
   });
 });

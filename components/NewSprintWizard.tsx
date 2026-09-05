@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { Fragment, useMemo, useState, useTransition } from "react";
 import { createItem, startSprintAction, type StartSprintInput } from "@/app/(app)/actions";
 import { OptionRow } from "@/components/OptionRow";
+import { effectivePlan, PlanGrid, type PlanCell } from "@/components/PlanGrid";
 import type { AreaKey } from "@/lib/areas";
 import type { LibraryItem } from "@/lib/data";
-import { formatIsoDate, SHORT_DOW, dayOfWeek, dayOfMonth } from "@/lib/dates";
-import { formatAmount, formatNumber, toBaseUnits, unitLabel, type Measurement, type Measured } from "@/lib/format";
+import { formatIsoDate } from "@/lib/dates";
+import { toBaseUnits, unitLabel, type Measurement, type Measured } from "@/lib/format";
 import { addDays, localDateIn } from "@/lib/sprintDay";
-import { hasRoundingDifference, measurementStep, sameDailyTargets } from "@/lib/targets";
+import { formatTargetInput, hasRoundingDifference, measurementStep, parseTargetInput, sameDailyTargets } from "@/lib/targets";
 
 type AreaOption = { key: AreaKey; name: string; hasVision: boolean; hasSprint: boolean };
 
@@ -28,7 +29,11 @@ type Draft = {
   why: string;
   celebration: string;
   mantra: string;
-  intention: string;
+  /** Daily Intentions by day, index 0 = day 1 (PRD §6: setup may pre-fill any day). */
+  intentions: string[];
+  mode: "same" | "custom";
+  /** Raw custom-target inputs by day; parsed with parseTargetInput. */
+  custom: string[];
   impedimentIds: string[];
   highestId: string | null;
   proofWhen: string;
@@ -64,7 +69,9 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
     why: "",
     celebration: "",
     mantra: "",
-    intention: "",
+    intentions: Array(14).fill(""),
+    mode: "same",
+    custom: Array(14).fill(""),
     impedimentIds: [],
     highestId: null,
     proofWhen: "",
@@ -88,7 +95,37 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
         ? null
         : toBaseUnits(d.measurement, { whole: Number(d.goalWhole) });
   const amountValid = amount !== null && Number.isInteger(amount) && amount > 0 && (d.measurement !== "hours" || Number(d.goalMinutes || 0) < 60);
-  const targets = amountValid ? sameDailyTargets(amount!, measurementStep(d.measurement)) : null;
+  const sameTargets = amountValid ? sameDailyTargets(amount!, measurementStep(d.measurement)) : null;
+  const [showIntentions, setShowIntentions] = useState(false);
+
+  // F3: before the sprint starts every day is editable, today included (it locks at start).
+  const planCells: PlanCell[] = (sameTargets ?? Array<number>(14).fill(0)).map((t, i) => ({
+    dayIndex: i + 1,
+    date: addDays(startDate, i),
+    locked: false,
+    target: t,
+    actual: null,
+  }));
+  const customParsed = d.custom.map((raw) => parseTargetInput(d.measurement, raw));
+  const customPlan = d.mode === "custom" ? effectivePlan(planCells, true, customParsed) : null;
+  const targets = d.mode === "custom" ? customPlan : sameTargets;
+  const planDeltaValue = targets && amount !== null ? targets.reduce((a, b) => a + b, 0) - amount : null;
+  const planHint =
+    d.mode !== "custom"
+      ? null
+      : customPlan === null
+        ? "Every day needs a whole-number target."
+        : planDeltaValue !== 0
+          ? "The 14 targets must add up to the goal."
+          : null;
+
+  function pickMode(mode: "same" | "custom") {
+    if (mode === "custom" && sameTargets && d.custom.every((v) => v.trim() === "")) {
+      setD((p) => ({ ...p, mode, custom: sameTargets.map((t) => formatTargetInput(p.measurement, t)) }));
+      return;
+    }
+    set("mode", mode);
+  }
 
   // Rules 3–6 at setup: eligible = global or the chosen area; 1–5 impediments, one
   // highest with a complete WHEN → THEN, 1–3 cues.
@@ -114,7 +151,9 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
             ? "Each usage row needs a label and an amount."
             : null,
     d.confidence === null ? "Pick a confidence from 1 to 10." : !d.why.trim() ? "Say why this matters." : !d.celebration.trim() ? "Name a celebration." : !d.mantra.trim() ? "A mantra is required." : null,
-    d.impedimentIds.length === 0
+    planHint
+      ? planHint
+      : d.impedimentIds.length === 0
       ? "Select 1–5 impediments."
       : !d.highestId
         ? "Designate the highest impediment."
@@ -129,7 +168,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
   const canNext = stepHint[step] === null;
 
   function submit() {
-    if (!d.area || !amountValid || amount === null) return;
+    if (!d.area || !amountValid || amount === null || !targets) return;
     const input: StartSprintInput = {
       area: d.area,
       outcome: d.outcome,
@@ -144,7 +183,9 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
       usageOfFunds: d.measurement === "money" ? usageRows.map((u) => ({ label: u.label.trim(), amount: toBaseUnits("money", { whole: Number(u.amount) }) })) : [],
       tz,
       startDate,
-      intention: d.intention || null,
+      intention: null,
+      intentions: d.intentions.some((t) => t.trim()) ? d.intentions : null,
+      targets: d.mode === "custom" ? targets : null,
       cueIds: d.cueIds,
       impedimentIds: d.impedimentIds,
       highestImpedimentId: d.highestId,
@@ -348,36 +389,36 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
           </>
         ) : null}
 
-        {step === 3 && targets ? (
+        {step === 3 && sameTargets ? (
           <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-              <div className="label-accent">14 daily targets · same each day</div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <span className="chip chip-on">Same</span>
-                <span className="chip" title="Custom targets arrive with a later feature" style={{ opacity: 0.5 }}>
-                  Custom · soon
-                </span>
+              <div className="label-accent">14 daily targets · {d.mode === "same" ? "same each day" : "custom"}</div>
+              <div style={{ display: "flex", gap: 6 }} role="group" aria-label="Target mode">
+                <button type="button" className={`chip ${d.mode === "same" ? "chip-on" : ""}`} aria-pressed={d.mode === "same"} onClick={() => pickMode("same")}>
+                  Same
+                </button>
+                <button type="button" className={`chip ${d.mode === "custom" ? "chip-on" : ""}`} aria-pressed={d.mode === "custom"} onClick={() => pickMode("custom")}>
+                  Custom
+                </button>
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 6, marginTop: 12 }} data-strip>
-              {targets.map((t, i) => {
-                const date = addDays(startDate, i);
-                return (
-                  <div key={i} style={{ border: "1px solid var(--divider)", borderRadius: 10, padding: "8px 6px", textAlign: "center", minWidth: 0 }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: "var(--accent)" }}>D{i + 1}</div>
-                    <div style={{ fontSize: 9.5, color: "var(--muted)" }}>
-                      {SHORT_DOW[dayOfWeek(date)]} {dayOfMonth(date)}
-                    </div>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 2 }}>{formatNumber(measured, t)}</div>
-                  </div>
-                );
-              })}
+            <div style={{ marginTop: 12 }}>
+              <PlanGrid
+                measured={measured}
+                goal={amount!}
+                cells={planCells}
+                editing={d.mode === "custom"}
+                values={d.custom}
+                parsed={customParsed}
+                onChange={(i, raw) => set("custom", d.custom.map((x, j) => (j === i ? raw : x)))}
+              />
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--muted)", marginTop: 10, flexWrap: "wrap", gap: 8 }}>
-              <span>
-                Planned {formatAmount(measured, targets.reduce((a, b) => a + b, 0))} · Goal {formatAmount(measured, amount!)} · balanced
-              </span>
-              {hasRoundingDifference(targets) ? <span>The goal does not split evenly, so the first days carry one extra {unitLabel(measured)}.</span> : null}
+            <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10, lineHeight: 1.5, maxWidth: "64ch" }}>
+              {d.mode === "custom"
+                ? `Each day stands alone — zero is fine for a day off. Start is available once the plan totals the goal.${d.measurement === "hours" ? " Enter hours as h:mm." : ""}`
+                : hasRoundingDifference(sameTargets)
+                  ? `The goal does not split evenly, so the first days carry one extra ${unitLabel(measured)}.`
+                  : "Goal ÷ 14, the same every day. Choose Custom to set days individually."}
             </div>
 
             <div style={{ marginTop: 26, paddingTop: 22, borderTop: "1px solid var(--divider)" }} data-testid="wizard-impediments">
@@ -464,10 +505,25 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
               </div>
             </div>
 
-            <label className="label-accent" htmlFor="intention" style={{ display: "block", marginTop: 22 }}>
+            <label className="label-accent" htmlFor="intention-1" style={{ display: "block", marginTop: 22 }}>
               Day 1 intention · optional
             </label>
-            <textarea id="intention" className="input" rows={2} value={d.intention} onChange={(e) => set("intention", e.target.value)} placeholder="Today I will…" style={{ marginTop: 6 }} />
+            <textarea id="intention-1" className="input" rows={2} value={d.intentions[0]} onChange={(e) => set("intentions", d.intentions.map((x, j) => (j === 0 ? e.target.value : x)))} placeholder="Today I will…" style={{ marginTop: 6 }} />
+            <button type="button" className="disclosure" style={{ marginTop: 10 }} aria-expanded={showIntentions} onClick={() => setShowIntentions((v) => !v)} data-testid="intentions-toggle">
+              {showIntentions ? "▾" : "▸"} Pre-plan intentions for days 2–14
+            </button>
+            {showIntentions ? (
+              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "8px 12px", marginTop: 10, alignItems: "center" }} data-testid="intentions">
+                {planCells.slice(1).map((c) => (
+                  <Fragment key={c.dayIndex}>
+                    <label htmlFor={`intention-${c.dayIndex}`} style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap" }}>
+                      <strong style={{ color: "var(--accent)", fontWeight: 700 }}>D{c.dayIndex}</strong> {formatIsoDate(c.date, { weekday: "short", day: "numeric" })}
+                    </label>
+                    <input id={`intention-${c.dayIndex}`} className="input" value={d.intentions[c.dayIndex - 1]} onChange={(e) => set("intentions", d.intentions.map((x, j) => (j === c.dayIndex - 1 ? e.target.value : x)))} placeholder="On this day I will…" style={{ fontSize: 13.5, padding: "8px 12px" }} />
+                  </Fragment>
+                ))}
+              </div>
+            ) : null}
 
             <label style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 22, cursor: "pointer" }}>
               <span

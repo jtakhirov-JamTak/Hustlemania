@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { deleteUser, seedUser, signInViaMagicLink } from "./helpers";
+import { admin, deleteUser, seedUser, signInViaMagicLink } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -71,8 +71,32 @@ test.describe("golden path", () => {
     await page.getByLabel(/Mantra/).fill("Boring money is the money that stays.");
     await page.getByRole("button", { name: "Continue" }).click();
     // Step 4: 14 targets sum to the goal; rounding note present (8000 / 14 is uneven).
-    await expect(page.getByText("Planned 8,000 USD · Goal 8,000 USD · balanced")).toBeVisible();
+    const summary = page.getByTestId("plan-summary");
+    await expect(summary).toContainText("Planned 8,000 USD");
+    await expect(summary).toContainText("Goal · locked 8,000 USD");
+    await expect(page.getByTestId("plan-delta")).toHaveText("Balanced");
     await expect(page.getByText(/does not split evenly/)).toBeVisible();
+
+    // F3: Custom mode — every day is editable before the start, today included. Zeroing
+    // day 7 leaves the plan 571 short; nothing is redistributed, and Start stays off
+    // until the user loads the difference onto another day.
+    await page.getByRole("button", { name: "Custom", exact: true }).click();
+    await expect(page.getByLabel("Day 1 target")).toHaveValue("572");
+    await expect(page.getByLabel("Day 7 target")).toHaveValue("571");
+    await page.getByLabel("Day 7 target").fill("0");
+    await expect(page.getByTestId("plan-delta")).toHaveText("−571 USD below goal");
+    await expect(page.getByTestId("plan-delta")).toHaveAttribute("data-state", "below");
+    await expect(page.getByLabel("Day 8 target")).toHaveValue("571");
+    await expect(page.getByText("The 14 targets must add up to the goal.")).toBeVisible();
+    await page.getByLabel("Day 8 target").fill("1143");
+    await expect(page.getByTestId("plan-delta")).toHaveText("+1 USD above goal");
+    await page.getByLabel("Day 8 target").fill("1142");
+    await expect(page.getByTestId("plan-delta")).toHaveText("Balanced");
+    await expect(page.getByText("The 14 targets must add up to the goal.")).toHaveCount(0);
+
+    // F3: pre-plan an intention for day 2.
+    await page.getByTestId("intentions-toggle").click();
+    await page.getByLabel(/^D2 /).fill("Move the second $600 before lunch.");
 
     // F2: the sprint cannot start without impediments, a highest with WHEN → THEN, and cues.
     const start = page.getByRole("button", { name: "Start sprint" });
@@ -116,6 +140,39 @@ test.describe("golden path", () => {
     await page.getByTestId("sprint-items-toggle").click();
     await expect(page.getByTestId("sprint-items").getByText("Ask how much this pays")).toBeVisible();
     await page.getByTestId("sprint-items-toggle").click();
+
+    // F3: the 14-day plan on Today. The sprint started custom; day 1 is locked (it is
+    // today), day 7 is the zero the wizard saved, and day 2's intention was pre-filled.
+    const plan = page.getByTestId("plan-card");
+    await expect(plan.getByTestId("plan-target-7")).toHaveText("0");
+    await expect(plan.getByTestId("plan-target-8")).toHaveText("1,142");
+    await expect(plan.locator('[data-day="1"]')).toHaveAttribute("data-locked", "true");
+    await expect(plan.locator('[data-day="2"]')).toHaveAttribute("data-locked", "false");
+    const day2 = await admin.from("sprint_days").select("intention").eq("user_id", user.id).eq("day_index", 2).single();
+    expect(day2.error).toBeNull();
+    expect(day2.data!.intention).toBe("Move the second $600 before lunch.");
+
+    // Edit the future plan: day 1 has no input, Save waits for balance, then persists.
+    await plan.getByRole("button", { name: "Custom · edit" }).click();
+    await expect(plan.getByLabel("Day 1 target")).toHaveCount(0);
+    await expect(plan.getByLabel("Day 14 target")).toHaveValue("571");
+    const savePlan = plan.getByRole("button", { name: "Save plan" });
+    await expect(savePlan).toBeDisabled();
+    await expect(plan.getByText("Nothing has changed yet.")).toBeVisible();
+    await plan.getByLabel("Day 14 target").fill("0");
+    await expect(plan.getByTestId("plan-delta")).toHaveText("−571 USD below goal");
+    await expect(savePlan).toBeDisabled();
+    await plan.getByLabel("Day 13 target").fill("1142");
+    await expect(plan.getByTestId("plan-delta")).toHaveText("Balanced");
+    await expect(savePlan).toBeEnabled();
+    await savePlan.click();
+    await expect(plan.getByText("Saved")).toBeVisible();
+    await expect(plan.getByTestId("plan-target-14")).toHaveText("0");
+    await expect(plan.getByTestId("plan-target-13")).toHaveText("1,142");
+    await page.reload();
+    await expect(page.getByTestId("plan-card").getByTestId("plan-target-14")).toHaveText("0");
+    await expect(page.getByTestId("plan-card").getByTestId("plan-target-1")).toHaveText("572");
+    await expect(hero).toHaveText("572");
 
     // Rule 28: no HIT/MISS labels anywhere in the rendered DOM.
     const bodyText = await page.locator("body").innerText();

@@ -520,6 +520,10 @@ export type Database = {
         Args: { p_amount: number; p_step?: number }
         Returns: number[]
       }
+      save_targets: {
+        Args: { p_sprint_id: string; p_targets: number[] }
+        Returns: undefined
+      }
       set_highest_impediment: {
         Args: { p_impediment_id: string; p_sprint_id: string }
         Returns: undefined
@@ -543,18 +547,24 @@ export type Database = {
           p_highest_impediment_id: string
           p_impediment_ids: string[]
           p_intention?: string
+          p_intentions?: string[]
           p_mantra: string
           p_measurement: string
           p_outcome: string
           p_proof_then?: string
           p_proof_when?: string
           p_start_date: string
+          p_targets?: number[]
           p_tz: string
           p_unit: string
           p_usage_of_funds: Json
           p_why: string
         }
         Returns: string
+      }
+      validate_targets: {
+        Args: { p_amount: number; p_measurement: string; p_targets: number[] }
+        Returns: undefined
       }
     }
     Enums: {

@@ -14,6 +14,23 @@
 - **Duplicate ids in `p_cue_ids` / `p_hurt` are silently de-duplicated** rather than
   rejected. Observation only. `supabase/migrations/0004_libraries.sql`.
 
+## Found during F3 (2026-09-05), not fixed there
+
+- **`sprint_invalid_reason` null-default bug is still open** — 0005 did not touch that
+  function, so the `coalesce(…, false)` fix (below) waits for the next migration that
+  does.
+- **Hours-measurement plan editing is covered by the unit table and the DB suite only**;
+  the e2e golden path edits a money plan. A second e2e sprint in hours would also cover
+  the `h:mm` inputs end to end.
+- **Wizard: switching Same → Custom → Same keeps the typed custom values** in memory and
+  submits the same plan; switching back to Custom shows them again. Intended, but the
+  chips give no sign the draft survived.
+- **Harness, not app:** Chrome's window stayed at 1138 × 810 after `resize_window`
+  reported success at 1280 × 900; `Page.captureScreenshot` timed out or returned a
+  blank frame on the first attempt after most interactions and succeeded on retry.
+  The shell guard also fails closed on a one-liner mixing `python -c` and nested quotes;
+  scripts went to `$CLAUDE_JOB_DIR/tmp` and ran via stdin instead.
+
 ## Found during F2 (2026-09-05), not fixed there
 
 - **`sprint_invalid_reason(sprint, kind, item)` is wrong when called with its null

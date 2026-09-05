@@ -128,6 +128,8 @@ export type StartSprintArgs = SprintItems & {
   p_intention?: string | null;
   p_proof_when?: string | null;
   p_proof_then?: string | null;
+  p_targets?: number[] | null;
+  p_intentions?: (string | null)[] | null;
 };
 
 export function moneySprintArgs(overrides: Partial<StartSprintArgs> & { p_start_date: string } & SprintItems): StartSprintArgs {

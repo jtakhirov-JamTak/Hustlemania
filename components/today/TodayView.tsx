@@ -3,13 +3,14 @@ import { DayStrip } from "@/components/today/DayStrip";
 import { HighestImpedimentCard } from "@/components/today/HighestImpedimentCard";
 import { IntentionCard } from "@/components/today/IntentionCard";
 import { MantraCard } from "@/components/today/MantraCard";
+import { PlanCard } from "@/components/today/PlanCard";
 import { SprintItemsRow } from "@/components/today/SprintItemsRow";
 import { areaName, type AreaKey } from "@/lib/areas";
 import type { LibraryItem, OfferedItems, Sprint, SprintDay, SprintItems } from "@/lib/data";
 import { formatIsoDate } from "@/lib/dates";
 import { formatAmount, formatNumber, unitLabel, type Measured } from "@/lib/format";
 import { hasRoundingDifference, measurementStep } from "@/lib/targets";
-import type { SprintDayPosition } from "@/lib/sprintDay";
+import { localDateIn, type SprintDayPosition } from "@/lib/sprintDay";
 
 type UsageRow = { label: string; amount: number };
 
@@ -48,6 +49,8 @@ export function TodayView({
   const cannotCloseReason =
     position.kind === "before" ? "Day 1 begins tomorrow." : position.kind === "after" ? "The 14 days are over." : undefined;
   const sprintOver = position.kind === "after";
+  // Rule 10 is decided in the sprint's zone; the DB re-checks on save.
+  const todayInSprintTz = position.kind === "during" ? position.date : localDateIn(sprint.tz, new Date());
 
   return (
     <div>
@@ -128,6 +131,16 @@ export function TodayView({
         cannotCloseReason={cannotCloseReason}
         tz={sprint.tz}
         celebration={sprint.celebration}
+      />
+
+      <PlanCard
+        sprintId={sprint.id}
+        measured={measured}
+        goal={goal}
+        initialMode={sprint.target_mode === "custom" ? "custom" : "same"}
+        days={days}
+        todayInSprintTz={todayInSprintTz}
+        locked={sprintOver}
       />
     </div>
   );

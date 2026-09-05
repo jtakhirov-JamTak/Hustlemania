@@ -305,6 +305,51 @@ per PRD), hours → minutes, quantity → whole units.
 - **Risks.** Precision per measurement (minutes vs whole units) — one formatter/parser
   pair with a table test.
 - **Evaluator.** none (additive columns on existing tables; no production rows).
+- **As built (2026-09-05; no evaluator trigger).**
+  - Migration `0005_targets.sql`, no new table or column. `validate_targets(measurement,
+    amount, targets[])` is the one owner of the plan rules — shape (14), sign, precision
+    (a multiple of `measurement_step`: 100 minor units for money, 1 minute / 1 item
+    otherwise), then the sum (rule 11) — and both writers call it. `save_targets(sprint_id,
+    targets[14])` (SECURITY DEFINER) refuses any change to a day whose `date <= today` in
+    the sprint's zone (`target_locked`, rule 10), replaces only the future days that
+    differ, and sets `target_mode = 'custom'`. Trigger `sprint_days_target_locked`
+    (BEFORE UPDATE) repeats the rule-10 check for every role, the postgres role included;
+    it fires after `sprint_days_immutable_after_close`, so a closed day still says
+    `day_closed`. `start_sprint` gained optional `p_targets bigint[]` (starts in
+    `custom`; today's target locks at start) and `p_intentions text[]` (per-day Daily
+    Intentions; day 1 falls back to `p_intention`); the 0004 overload is dropped.
+  - Ownership (rules 12–14) is asserted, not assumed: a DB test scans `pg_proc` and
+    requires `save_targets` to be the only function whose body UPDATEs
+    `sprint_days.target` and `start_sprint` the only one that INSERTs it; a second test
+    reads every trigger on `sprints` / `sprint_days` and finds no `new.target :=`; a
+    third finds no `cron.job` touching `sprint_days` when pg_cron is installed.
+    `authenticated` has no column privilege on `target` (grants test unchanged: nine
+    writable columns). Closing a day below target leaves every future target unchanged
+    (rule 13, tested).
+  - UI: one `PlanGrid` (7 × 2 cells, D#, weekday, date; input on editable days, target
+    + "locked" / actual on the rest; summary line Planned · Goal · locked · delta with
+    `data-state` balanced | below | above | invalid) serves the wizard's step 4 and the
+    new `PlanCard` at the bottom of Today. Wizard: Same / Custom chips; Custom pre-fills
+    the 14 inputs from Goal ÷ 14 and every day is editable, today included; Start is
+    disabled with "The 14 targets must add up to the goal." until the delta is 0. A
+    "Pre-plan intentions for days 2–14" disclosure adds one input per day. Today:
+    "Custom" opens the future days for editing (one-way after the first save); Save is
+    disabled until the plan balances and something changed; day rows are locked from
+    `closed_at` or `date <= today` computed in the sprint zone, and the DB re-checks.
+  - Hours targets are typed as `h:mm` (also `2h 30m`, `45m`, `2`), money and quantity
+    as whole numbers; `parseTargetInput` / `formatTargetInput` are the one pair, table
+    tested (16 parse cases, 6 round trips).
+  - Deviation from the handoff mockup, on purpose: the mockup treats an unbalanced plan
+    as "informational" and lets the user start or save; the PRD (§6, rule 11) and this
+    spec forbid persisting one, so Save / Start stay disabled. The mockup's "Same"
+    re-spread of the remaining goal during a sprint is not built (non-goal: suggested
+    rebalancing; rule 12).
+  - Falsifiability: six live DB mutations (sum check dropped, lock check dropped,
+    trigger comparing in UTC, trigger dropped, anon granted execute, a second
+    target-writing function added) each turned exactly their test red; the Today Save
+    gate ignoring the delta turned the e2e red at the unbalanced-plan assertion.
+    Visual check in Chrome (window held at 1138 px; it would not resize to 1280):
+    Today plan card in view and edit state, wizard step 4 in custom mode.
 
 ### F4 — Tasks
 - **Behavior.** Each day has an optional task list: text + done, unlimited, one blank

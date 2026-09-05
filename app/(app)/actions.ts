@@ -52,12 +52,22 @@ export type StartSprintInput = {
   highestImpedimentId: string | null;
   proofWhen: string | null;
   proofThen: string | null;
+  /** F3: a custom plan in base units (14 entries summing to `amount`), or null for Goal ÷ 14. */
+  targets: number[] | null;
+  /** F3: pre-planned Daily Intentions by day (14 entries; blank = none). */
+  intentions: string[] | null;
 };
 
 /** Calls start_sprint; on success redirects to the new sprint's Today. */
 export async function startSprintAction(input: StartSprintInput): Promise<{ error: string }> {
   if (!isAreaKey(input.area)) return { error: "Unknown area." };
   if (!input.highestImpedimentId) return { error: friendlyError("no_highest_impediment") };
+  if (input.targets) {
+    const bad = validTargets(input.targets);
+    if (bad) return { error: bad };
+    if (input.targets.reduce((a, b) => a + b, 0) !== input.amount) return { error: friendlyError("targets_sum_mismatch") };
+  }
+  const intentions = input.intentions?.map((t) => t.trim());
   const supabase = await createClient();
   const res = await supabase.rpc("start_sprint", {
     p_area: input.area,
@@ -80,11 +90,34 @@ export async function startSprintAction(input: StartSprintInput): Promise<{ erro
     p_intention: input.intention?.trim() || undefined,
     p_proof_when: input.proofWhen?.trim() || undefined,
     p_proof_then: input.proofThen?.trim() || undefined,
+    p_targets: input.targets ?? undefined,
+    p_intentions: intentions?.some((t) => t) ? intentions : undefined,
   });
   if (res.error) return { error: friendlyError(res.error.message) };
 
   revalidatePath("/", "layout");
   redirect(`/sprints/${input.area}`);
+}
+
+function validTargets(targets: number[]): string | null {
+  if (targets.length !== 14) return friendlyError("invalid_targets");
+  if (targets.some((t) => !Number.isInteger(t) || t < 0)) return friendlyError("negative_target");
+  return null;
+}
+
+/**
+ * F3: replaces the plan through save_targets, which enforces the sum (rule 11) and the
+ * lock on begun days (rule 10). Returns the fresh day rows so the card re-renders.
+ */
+export async function saveTargetsAction(sprintId: string, targets: number[]): Promise<Result<{ days: SprintDay[] }>> {
+  const bad = validTargets(targets);
+  if (bad) return { error: bad };
+  const supabase = await createClient();
+  const res = await supabase.rpc("save_targets", { p_sprint_id: sprintId, p_targets: targets });
+  if (res.error) return { error: friendlyError(res.error.message) };
+  const days = await loadDays(supabase, sprintId);
+  revalidatePath("/sprints", "layout");
+  return { days };
 }
 
 export async function saveIntention(dayId: string, text: string): Promise<Result> {
