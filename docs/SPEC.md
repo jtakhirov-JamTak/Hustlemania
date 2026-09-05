@@ -98,17 +98,23 @@ per PRD), hours → minutes, quantity → whole units.
   - Unauthenticated request to `/sprints` → redirect to `/login` (middleware).
   - Tables `visions`, `sprints`, `sprint_days` created with RLS enabled and policies in
     the same migration. Integration test: user B `select` on user A's sprint returns 0
-    rows; the same test FAILS when the SELECT policy is dropped (falsifiability run
-    once, recorded in the test file header).
-  - `start_sprint(...)` DB function (SECURITY INVOKER) creates the sprint and its 14
-    `sprint_days` atomically; rejects: no active vision for the Area (PRD rule 2),
+    rows; the same test FAILS when RLS is disabled on the table (falsifiability run
+    once, recorded in the test file header). *Amended 2026-09-05: dropping the SELECT
+    policy cannot be the mutation — RLS with no policy denies everything, so B would
+    still see 0 rows and the test could not fail.*
+  - `start_sprint(...)` DB function (SECURITY DEFINER, identity from `auth.uid()`
+    inside; the authenticated role has no INSERT on `sprints`/`sprint_days`, so this
+    function is the only write path — see `docs/DECISIONS.md` 2026-09-05) creates the
+    sprint and its 14 `sprint_days` atomically; rejects: no active vision for the Area (PRD rule 2),
     an active sprint already in that Area (rule 1, also enforced by partial unique
     index `(user_id, area) WHERE status = 'active'`), empty mantra (rule 7), goal ≤ 0,
     confidence outside 1–10, measurement not in `money|hours|quantity`, money without
     3-letter currency, quantity without unit name.
   - Same-daily distribution: 14 targets sum to the Goal exactly for goal ∈ {14, 15,
-    27, 100, 1} (table test); remainder distributed as whole base units; UI shows the
-    rounding note when any two days differ.
+    27, 100, 1} (table test); remainder distributed in whole planning units — one
+    whole currency unit (100 minor) for money, one minute for hours, one for quantity
+    (PRD §6 "whole-unit or minute remainders"; amended 2026-09-05 from "base units");
+    UI shows the rounding note when any two days differ.
   - Sprint stores `tz` (IANA) and `start_date`/`end_date`; `end_date = start_date +
     13`; start is today or tomorrow in that zone only.
   - Trigger `sprints_lock_after_start` rejects UPDATE of `amount`, `measurement`,
@@ -414,7 +420,8 @@ Notes with anyone · any XP/points/labels (rule 28).
 - STAGED: rules 3–6 enforced from F2, rule 26 from F6; no real sprint before F10.
 
 ## 6. Stack, auth/security model, shared entities
-- Next.js 15 App Router, TypeScript, Tailwind; Supabase (Postgres 17, Auth, RLS);
+- Next.js 16 App Router (current release at build time; "middleware" is `proxy.ts`
+  in 16), TypeScript, Tailwind; Supabase (Postgres 17, Auth, RLS);
   Vercel Hobby; Resend free tier for reminders; Vitest + Playwright; local stack via
   `npx supabase start` (Docker); migrations in `supabase/migrations/`, forward-only.
 - Auth: Supabase magic link, signups disabled, users exist only via dashboard seed
@@ -452,8 +459,9 @@ Notes with anyone · any XP/points/labels (rule 28).
 - Then the executable Today mockup on `mockup/today`; screenshot at 1280/390; compare
   with the prototype; back to main.
 - F1: `supabase/migrations/0001_init.sql` (set_updated_at, visions, sprints,
-  sprint_days, RLS, start_sprint, close_day, triggers) · `app/login`,
-  `app/auth/callback`, `middleware.ts` · `app/(app)/layout.tsx` (tabs + sidebar) ·
+  sprint_days, RLS, start_sprint, close_day, triggers), `0002_function_privileges.sql`,
+  `0003_targets_step.sql` (as built) · `app/login`,
+  `app/auth/callback`, `proxy.ts` · `app/(app)/layout.tsx` (tabs + sidebar) ·
   `app/(app)/sprints/[area]/page.tsx` (Today) · `app/(app)/sprints/new` ·
   `lib/supabase/{server,client}.ts` · `lib/sprintDay.ts` · tests under `tests/db`,
   `tests/unit`, `e2e/`.

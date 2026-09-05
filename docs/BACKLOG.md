@@ -2,6 +2,32 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## Hustlemania — from eval-01 (F1, 2026-09-05), all P2
+
+- **Wizard step 4: clicking the confirmation label text does not toggle** — the box is a
+  `<span role="checkbox">` inside a `<label>` with no control; only the 18px square
+  responds. `components/NewSprintWizard.tsx`.
+- **Close dialog: primary stays enabled for a fractional actual** (`1.5`); native
+  `step=1` stops submission, not the SPEC's hint-beside-disabled-primary pattern.
+  `components/today/CloseCard.tsx`.
+- **Login echoes the email in the redirect URL** (`/login?sent=1&email=…`) — PII in
+  browser history and server logs. Move to a cookie or a POST-rendered state.
+  `app/login/actions.ts`.
+- **Implicit-flow magic links fail at the callback** (`#access_token=` fragment, no PKCE
+  verifier). App-requested links work; a dashboard "Send magic link" would not. Handle
+  the fragment client-side or document that sign-in starts at `/login`.
+  `app/auth/callback/route.ts`.
+- **`supabase/config.toml` reads contradictory**: `[auth] enable_signup = false` with
+  `[auth.email] enable_signup = true`. Behaviour is right (the email toggle is the
+  provider switch; turning it off disables email login entirely, found 2026-09-05) —
+  add the comment.
+- **No write path yet to archive a vision** (`archived_at` not grantable by design);
+  arrives with "Replace & archive" — note when that feature is specified.
+- **Harness, not app:** the evaluator's shell allowlist blocks `cut`, `sed`, `cd`,
+  `docker`, and any command containing `<`/`>`; the auto-mode classifier blocked
+  `npx supabase status -o env`. It worked around them with Node scripts. Consider
+  allowlisting `docker exec … psql` for DB inspection.
+
 ## Found during the template P0 pass (2026-08-25), not fixed there
 
 - **No app was ever scaffolded via `new-app.ps1`** — all four predate it (Feb-Jun

@@ -19,7 +19,7 @@ measures nothing but memory.
 
 | Feature | started_at | green_at | cycle_time | human_stops | rework | defects_after_green |
 |---|---|---|---|---|---|---|
-| F1 — Walking skeleton: sign in → Vision → start Sprint → Today → Close Day | 2026-09-05T04:15Z | — | — | 0 | 0 | 0 |
+| F1 — Walking skeleton: sign in → Vision → start Sprint → Today → Close Day | 2026-09-05T04:15Z | 2026-09-05T17:27Z | 13h12m | 2 (Docker Desktop not running before `supabase start`; commit-scope approval for the `mockup/today` branch and the fast-forward to main) | 0 | 0 |
 
 ### Who opens the row
 
@@ -68,3 +68,8 @@ and the metric cannot be read.
 ## Shipped milestones
 
 (Newest first. One line per shipped milestone, dated.)
+
+- 2026-09-05 — **F1 walking skeleton green** (eval-01: 14/14 criteria PASS, 0 P0/P1,
+  6 P2 → BACKLOG). Magic-link sign-in, Vision, sprint wizard, Today, Close Day, on
+  three migrations with RLS + deny-by-default grants; verify = typecheck, lint, 19
+  unit, 51 DB, 6 e2e.

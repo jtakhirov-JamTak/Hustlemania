@@ -166,6 +166,104 @@ a {
   letter-spacing: -0.02em;
 }
 
+.input {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 11px 13px;
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.input:disabled {
+  background: var(--faint);
+  color: var(--muted);
+}
+
+.input-hero {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  padding: 10px 14px;
+  margin-top: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--divider);
+  border-radius: 999px;
+  background: var(--panel);
+  padding: 7px 13px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.chip:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.chip-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--accent-ink);
+}
+
+.error-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  background: color-mix(in srgb, var(--under) 9%, var(--panel));
+  color: var(--under);
+}
+
+.dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(11, 22, 32, 0.52);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 8vh 16px 16px;
+  overflow: auto;
+}
+
+.dialog {
+  width: 100%;
+  background: var(--panel);
+  border-radius: 22px;
+  padding: 26px 28px;
+  box-shadow: 0 24px 60px rgba(11, 22, 32, 0.28);
+  animation: riseIn 180ms ease-out;
+}
+
+@keyframes popIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 @keyframes riseIn {
   from {
     transform: translateY(10px);
@@ -177,15 +275,41 @@ a {
   }
 }
 
+/* Desktop: the page scrolls as one; the sidebar stays put under the sticky header. */
+[data-sidebar] {
+  position: sticky;
+  top: 56px;
+  align-self: flex-start;
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+}
+
 @media (max-width: 940px) {
   [data-shell] {
     flex-direction: column;
   }
   [data-sidebar] {
+    position: static;
+    max-height: none;
+    overflow: visible;
     width: 100% !important;
     flex: none !important;
     border-right: none !important;
     box-shadow: 0 1px 0 var(--divider);
+  }
+  [data-header] .brand {
+    min-width: 0 !important;
+    padding: 0 14px !important;
+  }
+  [data-header] .brand .heading {
+    font-size: 14px !important;
+  }
+  [data-header] nav a {
+    padding: 0 10px !important;
+    font-size: 13px !important;
+  }
+  [data-header] form {
+    padding-right: 10px !important;
   }
   [data-main] {
     padding: 20px 16px 90px !important;
@@ -198,5 +322,11 @@ a {
   }
   [data-strip] {
     overflow-x: auto;
+  }
+  .hide-narrow {
+    display: none;
+  }
+  .dialog {
+    padding: 22px 18px;
   }
 }

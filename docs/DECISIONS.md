@@ -6,6 +6,45 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-05 — F1 data layer: writes only through SECURITY DEFINER functions; deny-by-default grants
+
+**Chosen.** `start_sprint` and `close_day` are SECURITY DEFINER with identity taken from
+`auth.uid()` inside the body and `set search_path = ''`. The authenticated role gets
+SELECT on the three tables plus column-level UPDATE on exactly `visions.body`,
+`sprints.mantra`, `sprint_days.intention`, and INSERT on `visions`. No INSERT on
+`sprints`/`sprint_days`, no DELETE anywhere. The SPEC said SECURITY INVOKER; that would
+have required granting INSERT on both tables, and a direct insert then skips the
+no-active-vision rule (PRD rule 2) and the atomic 14-row creation. The grants test
+(`tests/db/grants.test.ts`) pins the exact set and fails when a later migration widens
+it without deciding to.
+
+**Default privileges revoked for the postgres role in `public`** (0001) so a table added
+by a later migration is unreachable through the API until granted — parity with the
+hosted project's "automatically expose new tables = off", verified by a probe test that
+creates a table in a transaction and asserts anon/authenticated have no privilege.
+Functions were still PUBLIC-executable after that (verified: `proacl` null), so 0002
+revokes them explicitly; the grants test asserts only `start_sprint` and `close_day`
+are callable by authenticated.
+
+**Local env comes from the running stack.** `scripts/local-env.mjs` writes `.env.local`
+from `supabase status` before `dev`, `test:db` and `test:e2e`; Next loads it ahead of
+`.env` (hosted keys). It refuses non-loopback hosts, and every DB/e2e test asserts a
+loopback URL before running — the tests drop RLS to prove it works, and must never be
+pointable at production. Local stack runs on ports 54341–54349 so it can coexist with
+another project's stack on the defaults.
+
+**Rejected:** editing `0001` in place after it was applied locally (the write guard
+blocks it and the rule is forward-only regardless — hence 0002 and 0003 rather than a
+rewrite) · WebKit for the phone e2e project (the SPEC checks layout at 390px, not an
+engine; Chromium with a phone profile avoids a 100 MB download).
+
+**Money planning unit.** `same_daily_targets(amount, step)` spreads remainders in steps
+of 100 minor units for money (0003), so a USD 8,000 goal plans 572/571 whole dollars,
+not 571.43/571.42. Storage stays minor units (the 2026-09-05 stack decision); only the
+distribution granularity changed, and the SPEC line was amended.
+
+---
+
 ## 2026-09-05 — Hustlemania stack: Next.js + Supabase over PurePath's Vite/Express/Drizzle
 
 Direction gate of the `/interview` for Hustlemania (the 14-day goal sprint app; PRD in
