@@ -20,6 +20,7 @@ measures nothing but memory.
 | Feature | started_at | green_at | cycle_time | human_stops | rework | defects_after_green |
 |---|---|---|---|---|---|---|
 | F1 — Walking skeleton: sign in → Vision → start Sprint → Today → Close Day | 2026-09-05T04:15Z | 2026-09-05T17:27Z | 13h12m | 2 (Docker Desktop not running before `supabase start`; commit-scope approval for the `mockup/today` branch and the fast-forward to main) | 0 | 0 |
+| F2 — Cue and Impediment libraries; Highest Impediment; Day Close selections | 2026-09-05T18:05Z | 2026-09-05T19:16Z | 1h11m | 0 | 0 | 0 |
 
 ### Who opens the row
 
@@ -69,6 +70,11 @@ and the metric cannot be read.
 
 (Newest first. One line per shipped milestone, dated.)
 
+- 2026-09-05 — **F2 libraries green** (eval-02: 10/10 criteria PASS, 0 P0/P1, 3 P2 →
+  BACKLOG). Cue and Impediment libraries with rank/scope/archive/restore, sprint
+  membership (date-ranged, 1–3 / 1–5), Highest Impediment with WHEN → THEN, two-step
+  Day Close with hurt/helped selections; migration 0004 with RLS, seven live mutations
+  each turning a test red; verify = typecheck, lint, 19 unit, 94 DB, 6 e2e.
 - 2026-09-05 — **F1 walking skeleton green** (eval-01: 14/14 criteria PASS, 0 P0/P1,
   6 P2 → BACKLOG). Magic-link sign-in, Vision, sprint wizard, Today, Close Day, on
   three migrations with RLS + deny-by-default grants; verify = typecheck, lint, 19

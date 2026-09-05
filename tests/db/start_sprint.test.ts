@@ -7,7 +7,9 @@ import {
   expectRpcError,
   insertVision,
   moneySprintArgs,
+  seedItems,
   sql,
+  type SprintItems,
   startSprint,
   type TestUser,
 } from "./helpers";
@@ -22,9 +24,11 @@ describe("start_sprint", () => {
   let tomorrow: string;
   let dayAfter: string;
   let yesterday: string;
+  let items: SprintItems;
 
   beforeAll(async () => {
     u = await createTestUser("start");
+    items = await seedItems(u);
     today = await dbTodayIn(TZ);
     const [r] = await sql<{ t: string; d: string; y: string }[]>`
       select to_char(${today}::date + 1, 'YYYY-MM-DD') as t,
@@ -41,12 +45,12 @@ describe("start_sprint", () => {
   });
 
   it("rejects when the area has no active vision (rule 2)", async () => {
-    await expectRpcError(u, "start_sprint", moneySprintArgs({ p_tz: TZ, p_start_date: today }), "no_active_vision");
+    await expectRpcError(u, "start_sprint", moneySprintArgs({ ...items, p_tz: TZ, p_start_date: today }), "no_active_vision");
   });
 
   it("creates the sprint and exactly 14 days whose targets sum to the goal", async () => {
     await insertVision(u, "wealth");
-    const id = await startSprint(u, moneySprintArgs({ p_tz: TZ, p_start_date: today, p_amount: 10_000, p_intention: "  Move the money  " }));
+    const id = await startSprint(u, moneySprintArgs({ ...items, p_tz: TZ, p_start_date: today, p_amount: 10_000, p_intention: "  Move the money  " }));
 
     const s = await u.client.from("sprints").select("*").eq("id", id).single();
     expect(s.error).toBeNull();
@@ -68,7 +72,7 @@ describe("start_sprint", () => {
   });
 
   it("rejects a second active sprint in the same area (rule 1)", async () => {
-    await expectRpcError(u, "start_sprint", moneySprintArgs({ p_tz: TZ, p_start_date: today }), "active_sprint_exists");
+    await expectRpcError(u, "start_sprint", moneySprintArgs({ ...items, p_tz: TZ, p_start_date: today }), "active_sprint_exists");
   });
 
   it("the partial unique index also rejects a direct duplicate insert (rule 1, belt and braces)", async () => {
@@ -94,16 +98,16 @@ describe("start_sprint", () => {
   });
 
   it("rejects a money amount that is not a whole currency unit", async () => {
-    await expectRpcError(u, "start_sprint", moneySprintArgs({ p_area: "relationships", p_tz: TZ, p_start_date: today, p_amount: 150 }), "no_active_vision");
+    await expectRpcError(u, "start_sprint", moneySprintArgs({ ...items, p_area: "relationships", p_tz: TZ, p_start_date: today, p_amount: 150 }), "no_active_vision");
     await insertVision(u, "relationships");
-    await expectRpcError(u, "start_sprint", moneySprintArgs({ p_area: "relationships", p_tz: TZ, p_start_date: today, p_amount: 150 }), "invalid_amount");
+    await expectRpcError(u, "start_sprint", moneySprintArgs({ ...items, p_area: "relationships", p_tz: TZ, p_start_date: today, p_amount: 150 }), "invalid_amount");
   });
 
   describe("setup validation (health area, fresh vision)", () => {
     beforeAll(async () => {
       await insertVision(u, "health");
     });
-    const base = () => moneySprintArgs({ p_area: "health", p_tz: TZ, p_start_date: today });
+    const base = () => moneySprintArgs({ ...items, p_area: "health", p_tz: TZ, p_start_date: today });
 
     it("accepts tomorrow but rejects yesterday and the day after tomorrow", async () => {
       await expectRpcError(u, "start_sprint", { ...base(), p_start_date: yesterday }, "invalid_start_date");

@@ -240,8 +240,10 @@ per PRD), hours → minutes, quantity → whole units.
     RLS DELETE policy `USING (user_id = auth.uid() AND NOT EXISTS (membership))`.
   - Restore sets `archived_at = NULL` and creates no membership rows (rule 21).
   - Day Close offers exactly the items whose membership overlapped that day's date
-    (`added_at::date <= day.date AND (removed_at IS NULL OR removed_at::date >= day.date)`),
-    including later-archived items (rule 23); test with a removed-then-closed day.
+    (`(added_at AT TIME ZONE sprint.tz)::date <= day.date AND (removed_at IS NULL OR
+    (removed_at AT TIME ZONE sprint.tz)::date >= day.date)` — the boundary is midnight
+    in the sprint's zone, not UTC), including later-archived items (rule 23); test with
+    a removed-then-closed day and a six-case midnight table test in `Pacific/Kiritimati`.
   - Library list, selection lists, and filters exclude archived items; the collapsed
     Archived section includes them (rule 24). Filtered views keep relative rank order.
   - At most one `sprint_impediments.is_highest = true` per sprint (partial unique
@@ -254,6 +256,36 @@ per PRD), hours → minutes, quantity → whole units.
   archive validation duplicated in UI and DB (UI calls the DB function and renders its
   result; no client-side re-implementation).
 - **Evaluator.** migrations creating user-data tables.
+- **As built (2026-09-05, eval-02: 10/10 criteria PASS, 0 P0/P1, 3 P2).**
+  - Migration `0004_libraries.sql`. Both libraries carry `rank` (per user, assigned by a
+    BEFORE INSERT trigger; `move_item(kind, id, 'up'|'down')` swaps neighbours) and
+    `archived_at`. `authenticated` may INSERT `user_id, name, explanation, scope`
+    (+ `proof_when, proof_then` on impediments) and UPDATE the free-text columns
+    directly; `scope`, `rank`, `archived_at` and every membership/selection table are
+    written only through SECURITY DEFINER functions: `add_sprint_item`,
+    `remove_sprint_item`, `set_highest_impediment`, `archive_item`, `set_item_scope`,
+    `restore_item`, `move_item`. `archive_item` / `set_item_scope` return
+    `{"ok": true, "removed_from": n}` or `{"ok": false, "failing": [{sprint_id, area,
+    outcome, reason}]}`; the reason is the first violated rule in the order 3, 4, 5, 6.
+  - `start_sprint` gained `p_cue_ids uuid[]`, `p_impediment_ids uuid[]`,
+    `p_highest_impediment_id uuid`, and optional `p_proof_when` / `p_proof_then` that
+    write the Highest Impediment's Proof Point atomically with the start; the F1
+    overload is dropped. `close_day` gained `p_hurt`, `p_most_damaging`, `p_helped`,
+    `p_most_useful` (F1 overload dropped) and snapshots `highest_impediment_id`,
+    `proof_when`, `proof_then` onto `sprint_days`, which the immutability trigger now
+    locks too. Selection rows have an UPDATE-only immutability trigger (a DELETE trigger
+    would fire on the account-deletion cascade).
+  - `day_offered_items(day_id)` (SECURITY INVOKER, RLS-scoped) is the single owner of
+    rule 23; `close_day` validates against it and the UI loads the dialog's options
+    from it.
+  - Inline creation (wizard, Today pickers) saves with scope `global`. The library page
+    lives at `/vision/cues` and `/vision/impediments`, listed in the Vision sidebar
+    under "Libraries" with active counts. Selection rows are buttons with a leading
+    square (multi) or circle (single), `role=checkbox|radio`.
+  - Falsifiability: seven live mutations (DELETE policy without the membership guard,
+    rule-22 trigger dropped, UTC boundaries, validation short-circuited, one-highest
+    index dropped, selection immutability dropped, restore re-adding membership) each
+    turned their test red; RLS is proven by the disable/enable run inside the suite.
 
 ### F3 — Custom daily targets, reconciliation, target locking, intention pre-planning
 - **Behavior.** Setup and the active Sprint offer "custom" mode: edit each future

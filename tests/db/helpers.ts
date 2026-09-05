@@ -67,7 +67,51 @@ export async function insertVision(user: TestUser, area: string, body = "A 1-yea
   return res.data.id as string;
 }
 
-export type StartSprintArgs = {
+export async function insertCue(user: TestUser, name: string, scope = "global", explanation: string | null = null): Promise<string> {
+  const res = await user.client.from("cues").insert({ user_id: user.id, name, scope, explanation }).select("id").single();
+  if (res.error) throw new Error(res.error.message);
+  return res.data.id as string;
+}
+
+export async function insertImpediment(
+  user: TestUser,
+  name: string,
+  opts: { scope?: string; proofWhen?: string | null; proofThen?: string | null; explanation?: string | null } = {},
+): Promise<string> {
+  const res = await user.client
+    .from("impediments")
+    .insert({
+      user_id: user.id,
+      name,
+      scope: opts.scope ?? "global",
+      explanation: opts.explanation ?? null,
+      proof_when: opts.proofWhen ?? null,
+      proof_then: opts.proofThen ?? null,
+    })
+    .select("id")
+    .single();
+  if (res.error) throw new Error(res.error.message);
+  return res.data.id as string;
+}
+
+export type SprintItems = {
+  p_cue_ids: string[];
+  p_impediment_ids: string[];
+  p_highest_impediment_id: string;
+};
+
+/** One global cue and one global impediment with a complete Proof Point — the minimum start_sprint accepts. */
+export async function seedItems(user: TestUser, scope = "global"): Promise<SprintItems> {
+  const cue = await insertCue(user, "Ask how much this pays", scope);
+  const imp = await insertImpediment(user, "Starting late", {
+    scope,
+    proofWhen: "I notice myself delaying my first work block",
+    proofThen: "I start a 10-minute timer on the smallest executable task",
+  });
+  return { p_cue_ids: [cue], p_impediment_ids: [imp], p_highest_impediment_id: imp };
+}
+
+export type StartSprintArgs = SprintItems & {
   p_area: string;
   p_outcome: string;
   p_measurement: "money" | "hours" | "quantity";
@@ -82,9 +126,11 @@ export type StartSprintArgs = {
   p_tz: string;
   p_start_date: string;
   p_intention?: string | null;
+  p_proof_when?: string | null;
+  p_proof_then?: string | null;
 };
 
-export function moneySprintArgs(overrides: Partial<StartSprintArgs> & { p_start_date: string }): StartSprintArgs {
+export function moneySprintArgs(overrides: Partial<StartSprintArgs> & { p_start_date: string } & SprintItems): StartSprintArgs {
   return {
     p_area: "wealth",
     p_outcome: "Save for the emergency fund",
@@ -115,4 +161,11 @@ export async function expectRpcError(user: TestUser, fn: string, args: Record<st
   if (!res.error.message.includes(message)) {
     throw new Error(`${fn} failed with "${res.error.message}", expected "${message}"`);
   }
+}
+
+/** Calls an RPC as the user and returns its data, or throws the DB message. */
+export async function rpc<T = unknown>(user: TestUser, fn: string, args: Record<string, unknown>): Promise<T> {
+  const res = await user.client.rpc(fn, args);
+  if (res.error) throw new Error(res.error.message);
+  return res.data as T;
 }

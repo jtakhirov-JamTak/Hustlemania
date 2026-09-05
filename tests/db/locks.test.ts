@@ -6,6 +6,7 @@ import {
   expectRpcError,
   insertVision,
   moneySprintArgs,
+  seedItems,
   sql,
   startSprint,
   type TestUser,
@@ -22,7 +23,7 @@ describe("locks: sprint after start, day after close", () => {
   beforeAll(async () => {
     u = await createTestUser("locks");
     await insertVision(u, "wealth");
-    sprintId = await startSprint(u, moneySprintArgs({ p_tz: TZ, p_start_date: await dbTodayIn(TZ), p_amount: 1400 }));
+    sprintId = await startSprint(u, moneySprintArgs({ ...(await seedItems(u)), p_tz: TZ, p_start_date: await dbTodayIn(TZ), p_amount: 1400 }));
     const days = await sql<{ id: string; day_index: number }[]>`
       select id, day_index from public.sprint_days where sprint_id = ${sprintId} order by day_index`;
     day1 = days[0].id;
@@ -82,6 +83,7 @@ describe("locks: sprint after start, day after close", () => {
 
     it("closes day 1 with actual and trimmed notes", async () => {
       const res = await u.client.rpc("close_day", { p_sprint_day_id: day1, p_actual: 0, p_notes: "  a truthful zero  " });
+      expect(res.error).toBeNull();
       expect(res.error).toBeNull();
       const [row] = await sql<{ actual: string; notes: string; closed_at: Date | null }[]>`
         select actual, notes, closed_at from public.sprint_days where id = ${day1}`;

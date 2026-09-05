@@ -5,6 +5,7 @@ import {
   deleteTestUser,
   insertVision,
   moneySprintArgs,
+  seedItems,
   sql,
   startSprint,
   type TestUser,
@@ -27,7 +28,7 @@ describe("RLS isolation", () => {
     a = await createTestUser("rls-a");
     b = await createTestUser("rls-b");
     await insertVision(a, "wealth");
-    sprintId = await startSprint(a, moneySprintArgs({ p_start_date: await dbTodayIn("America/Los_Angeles") }));
+    sprintId = await startSprint(a, moneySprintArgs({ ...(await seedItems(a)), p_start_date: await dbTodayIn("America/Los_Angeles") }));
   });
 
   afterAll(async () => {

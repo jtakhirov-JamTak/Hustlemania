@@ -1,9 +1,11 @@
 import { CloseCard } from "@/components/today/CloseCard";
 import { DayStrip } from "@/components/today/DayStrip";
+import { HighestImpedimentCard } from "@/components/today/HighestImpedimentCard";
 import { IntentionCard } from "@/components/today/IntentionCard";
 import { MantraCard } from "@/components/today/MantraCard";
+import { SprintItemsRow } from "@/components/today/SprintItemsRow";
 import { areaName, type AreaKey } from "@/lib/areas";
-import type { Sprint, SprintDay } from "@/lib/data";
+import type { LibraryItem, OfferedItems, Sprint, SprintDay, SprintItems } from "@/lib/data";
 import { formatIsoDate } from "@/lib/dates";
 import { formatAmount, formatNumber, unitLabel, type Measured } from "@/lib/format";
 import { hasRoundingDifference, measurementStep } from "@/lib/targets";
@@ -11,7 +13,21 @@ import type { SprintDayPosition } from "@/lib/sprintDay";
 
 type UsageRow = { label: string; amount: number };
 
-export function TodayView({ sprint, days, position }: { sprint: Sprint; days: SprintDay[]; position: SprintDayPosition }) {
+export function TodayView({
+  sprint,
+  days,
+  position,
+  items,
+  library,
+  offered,
+}: {
+  sprint: Sprint;
+  days: SprintDay[];
+  position: SprintDayPosition;
+  items: SprintItems;
+  library: { cues: LibraryItem[]; impediments: LibraryItem[] };
+  offered: OfferedItems;
+}) {
   const measured: Measured = { measurement: sprint.measurement as Measured["measurement"], currency: sprint.currency, unit: sprint.unit };
   const goal = Number(sprint.amount);
 
@@ -31,6 +47,7 @@ export function TodayView({ sprint, days, position }: { sprint: Sprint; days: Sp
   const canClose = position.kind === "during" && day.closed_at === null;
   const cannotCloseReason =
     position.kind === "before" ? "Day 1 begins tomorrow." : position.kind === "after" ? "The 14 days are over." : undefined;
+  const sprintOver = position.kind === "after";
 
   return (
     <div>
@@ -94,6 +111,10 @@ export function TodayView({ sprint, days, position }: { sprint: Sprint; days: Sp
 
       <IntentionCard key={day.id} dayId={day.id} initial={day.intention ?? ""} locked={day.closed_at !== null} />
 
+      <HighestImpedimentCard sprintId={sprint.id} impediments={items.impediments} locked={sprintOver} />
+
+      <SprintItemsRow sprintId={sprint.id} items={items} library={library} locked={sprintOver} />
+
       <MantraCard sprintId={sprint.id} initial={sprint.mantra} />
 
       <CloseCard
@@ -102,6 +123,7 @@ export function TodayView({ sprint, days, position }: { sprint: Sprint; days: Sp
         goal={goal}
         day={day}
         days={days}
+        offered={offered}
         canClose={canClose}
         cannotCloseReason={cannotCloseReason}
         tz={sprint.tz}

@@ -232,6 +232,81 @@ a {
   color: var(--under);
 }
 
+/* Selection rows: leading square (multi) or circle (single), never a native input. */
+.option-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 11px 13px;
+  margin-top: 6px;
+  color: var(--ink);
+  text-align: left;
+}
+
+.option-row:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--divider));
+}
+
+.option-row:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.option-row-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+}
+
+.option-mark {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 6px;
+  border: 1.5px solid var(--divider);
+  background: var(--panel);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.option-mark-circle {
+  border-radius: 999px;
+  font-size: 9px;
+}
+
+.option-row-on .option-mark {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.option-tag {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  border: 1px solid var(--divider);
+  border-radius: 999px;
+  padding: 3px 9px;
+  margin-top: 1px;
+}
+
+.disclosure {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent-ink);
+}
+
 .dialog-scrim {
   position: fixed;
   inset: 0;

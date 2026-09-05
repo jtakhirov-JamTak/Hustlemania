@@ -26,21 +26,50 @@ describe("public schema access model", () => {
     expect(rows).toEqual([]);
   });
 
-  it("authenticated cannot INSERT into sprints or sprint_days, and cannot DELETE anywhere", async () => {
+  it("authenticated may INSERT only library items and DELETE only library items (rule 19 via RLS)", async () => {
     const rows = await sql<{ table_name: string; privilege_type: string }[]>`
       select table_name, privilege_type from information_schema.role_table_grants
-      where table_schema = 'public' and grantee = 'authenticated'
-        and (privilege_type = 'DELETE'
-          or (privilege_type = 'INSERT' and table_name in ('sprints', 'sprint_days')))`;
-    expect(rows).toEqual([]);
+      where table_schema = 'public' and grantee = 'authenticated' and privilege_type in ('INSERT', 'DELETE')
+      order by table_name, privilege_type`;
+    // Table-level: DELETE only on the libraries. INSERT is granted per column (below),
+    // which role_table_grants does not report.
+    expect(rows).toEqual([
+      { table_name: "cues", privilege_type: "DELETE" },
+      { table_name: "impediments", privilege_type: "DELETE" },
+    ]);
+    const cols = await sql<{ table_name: string; column_name: string }[]>`
+      select table_name, column_name from information_schema.column_privileges
+      where table_schema = 'public' and grantee = 'authenticated' and privilege_type = 'INSERT'
+      order by table_name, column_name`;
+    expect(cols).toEqual([
+      { table_name: "cues", column_name: "explanation" },
+      { table_name: "cues", column_name: "name" },
+      { table_name: "cues", column_name: "scope" },
+      { table_name: "cues", column_name: "user_id" },
+      { table_name: "impediments", column_name: "explanation" },
+      { table_name: "impediments", column_name: "name" },
+      { table_name: "impediments", column_name: "proof_then" },
+      { table_name: "impediments", column_name: "proof_when" },
+      { table_name: "impediments", column_name: "scope" },
+      { table_name: "impediments", column_name: "user_id" },
+      { table_name: "visions", column_name: "area" },
+      { table_name: "visions", column_name: "body" },
+      { table_name: "visions", column_name: "user_id" },
+    ]);
   });
 
-  it("authenticated may update only body, mantra and intention directly", async () => {
+  it("authenticated may update only free-text columns directly (never scope, rank, archived_at, flags)", async () => {
     const rows = await sql<{ table_name: string; column_name: string }[]>`
       select table_name, column_name from information_schema.column_privileges
       where table_schema = 'public' and grantee = 'authenticated' and privilege_type = 'UPDATE'
       order by table_name, column_name`;
     expect(rows).toEqual([
+      { table_name: "cues", column_name: "explanation" },
+      { table_name: "cues", column_name: "name" },
+      { table_name: "impediments", column_name: "explanation" },
+      { table_name: "impediments", column_name: "name" },
+      { table_name: "impediments", column_name: "proof_then" },
+      { table_name: "impediments", column_name: "proof_when" },
       { table_name: "sprint_days", column_name: "intention" },
       { table_name: "sprints", column_name: "mantra" },
       { table_name: "visions", column_name: "body" },
@@ -58,20 +87,31 @@ describe("public schema access model", () => {
     });
   });
 
-  it("anon can execute no function in public; authenticated only the two RPC entry points", async () => {
+  it("anon can execute no function in public; authenticated only the RPC entry points", async () => {
     const rows = await sql<{ proname: string; anon: boolean; authed: boolean }[]>`
       select p.proname,
              has_function_privilege('anon', p.oid, 'execute') as anon,
              has_function_privilege('authenticated', p.oid, 'execute') as authed
       from pg_proc p where p.pronamespace = 'public'::regnamespace order by 1`;
     expect(rows.filter((r) => r.anon).map((r) => r.proname)).toEqual([]);
-    expect(rows.filter((r) => r.authed).map((r) => r.proname)).toEqual(["close_day", "start_sprint"]);
+    expect(rows.filter((r) => r.authed).map((r) => r.proname)).toEqual([
+      "add_sprint_item",
+      "archive_item",
+      "close_day",
+      "day_offered_items",
+      "move_item",
+      "remove_sprint_item",
+      "restore_item",
+      "set_highest_impediment",
+      "set_item_scope",
+      "start_sprint",
+    ]);
   });
 
   it("anon cannot execute the write functions", async () => {
     const [row] = await sql<{ start: boolean; close: boolean }[]>`
-      select has_function_privilege('anon', 'public.start_sprint(text,text,text,text,text,bigint,int,text,text,text,jsonb,text,date,text)', 'execute') as "start",
-             has_function_privilege('anon', 'public.close_day(uuid,bigint,text)', 'execute') as close`;
+      select has_function_privilege('anon', 'public.start_sprint(text,text,text,text,text,bigint,int,text,text,text,jsonb,text,date,uuid[],uuid[],uuid,text,text,text)', 'execute') as "start",
+             has_function_privilege('anon', 'public.close_day(uuid,bigint,text,uuid[],uuid,uuid[],uuid)', 'execute') as close`;
     expect(row).toEqual({ start: false, close: false });
   });
 });

@@ -11,22 +11,10 @@ export type SideItem = {
   sub?: string;
 };
 
-export function SideNav({ title, items, children }: { title: string; items: SideItem[]; children?: React.ReactNode }) {
+export function SideNavList({ items }: { items: SideItem[] }) {
   const pathname = usePathname();
   return (
-    <aside
-      data-sidebar
-      style={{
-        width: 266,
-        flex: "0 0 266px",
-        borderRight: "1px solid var(--divider)",
-        padding: "20px 0 40px",
-        background: "var(--panel)",
-      }}
-    >
-      <div className="label-muted" style={{ padding: "0 24px 10px" }}>
-        {title}
-      </div>
+    <>
       {items.map((it) => {
         const active = pathname === it.href || pathname.startsWith(it.href + "/");
         return (
@@ -67,6 +55,26 @@ export function SideNav({ title, items, children }: { title: string; items: Side
           </Link>
         );
       })}
+    </>
+  );
+}
+
+export function SideNav({ title, items, children }: { title: string; items: SideItem[]; children?: React.ReactNode }) {
+  return (
+    <aside
+      data-sidebar
+      style={{
+        width: 266,
+        flex: "0 0 266px",
+        borderRight: "1px solid var(--divider)",
+        padding: "20px 0 40px",
+        background: "var(--panel)",
+      }}
+    >
+      <div className="label-muted" style={{ padding: "0 24px 10px" }}>
+        {title}
+      </div>
+      <SideNavList items={items} />
       {children}
     </aside>
   );

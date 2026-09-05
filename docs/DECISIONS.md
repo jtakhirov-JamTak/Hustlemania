@@ -6,6 +6,32 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-05 — F2 membership boundaries are midnight in the sprint's zone; one SQL owner for "what Day Close offers"
+
+**Decision.** `day_offered_items(day_id)` decides which cues and impediments a day
+offers, comparing `added_at` / `removed_at` converted `AT TIME ZONE sprint.tz` against
+the day's date. Both `close_day` (validation) and the UI (options) call it; no client
+re-implementation.
+
+**Why.** The SPEC's draft rule `added_at::date <= day.date` casts in the server zone
+(UTC). For a `Pacific/Kiritimati` sprint (UTC+14) an item added at 23:59 on day D is
+already D+1 in UTC and would have been hidden from D's close — rule 23 broken at the
+exact boundary the SPEC listed as a risk. A six-case table test at D 00:00:00,
+D 23:59:59, D+1 00:00:00, D-1 23:59:59 in that zone is red under the UTC version (run
+2026-09-05: the D 23:59:59 case failed) and green under the zone version.
+
+**Also settled.** (1) A blocked archive / scope change reports the *first* violated
+rule in PRD order (3 cues, 4 impediments, 5 highest, 6 proof) — archiving a sprint's
+only impediment says "no impediments", not "no highest", though both hold. (2) Library
+free-text columns are column-granted for direct UPDATE; every invariant-bearing column
+(`scope`, `rank`, `archived_at`, memberships, selections) is function-only, so the
+grants test enumerates exactly nine writable columns across the schema.
+
+**Test-authoring note.** postgres.js serialises a parameter that Postgres infers as
+`timestamp` through `new Date()`, i.e. in the machine's local zone; every boundary in
+the table test shifted by the local UTC offset until the parameter was cast `::text`
+first. Recorded here rather than in FIX_LOG because it never reached app code.
+
 ## 2026-09-05 — F1 data layer: writes only through SECURITY DEFINER functions; deny-by-default grants
 
 **Chosen.** `start_sprint` and `close_day` are SECURITY DEFINER with identity taken from

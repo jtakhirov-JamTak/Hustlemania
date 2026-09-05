@@ -73,8 +73,27 @@ test.describe("golden path", () => {
     // Step 4: 14 targets sum to the goal; rounding note present (8000 / 14 is uneven).
     await expect(page.getByText("Planned 8,000 USD · Goal 8,000 USD · balanced")).toBeVisible();
     await expect(page.getByText(/does not split evenly/)).toBeVisible();
-    await page.getByRole("checkbox").click();
-    await page.getByRole("button", { name: "Start sprint" }).click();
+
+    // F2: the sprint cannot start without impediments, a highest with WHEN → THEN, and cues.
+    const start = page.getByRole("button", { name: "Start sprint" });
+    await expect(start).toBeDisabled();
+    await expect(page.getByText("Select 1–5 impediments.")).toBeVisible();
+    await page.getByLabel("Create a new impediment").fill("Starting late");
+    await page.getByTestId("wizard-impediments").getByRole("button", { name: "Create" }).click();
+    await expect(page.getByTestId("wizard-impediments").getByRole("checkbox", { name: "Starting late" })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByText("Designate the highest impediment.")).toBeVisible();
+    await page.getByTestId("wizard-highest").getByRole("radio", { name: /Starting late/ }).click();
+    await expect(page.getByText("The highest impediment needs a WHEN → THEN.")).toBeVisible();
+    await page.getByLabel("WHEN").fill("I notice myself delaying my first work block");
+    await page.getByLabel("THEN").fill("I start a 10-minute timer on the smallest executable task");
+    await expect(page.getByText("Select 1–3 execution cues.")).toBeVisible();
+    await page.getByLabel("Create a new execution cue").fill("Ask how much this pays");
+    await page.getByTestId("wizard-cues").getByRole("button", { name: "Create" }).click();
+    await expect(page.getByTestId("wizard-cues").getByRole("checkbox", { name: "Ask how much this pays" })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByText("Confirm the outcome advances the vision.")).toBeVisible();
+    await page.getByRole("checkbox", { name: "Vision alignment" }).click();
+    await expect(start).toBeEnabled();
+    await start.click();
 
     // Today, Day 1.
     await expect(page).toHaveURL(/\/sprints\/health$/);
@@ -86,6 +105,17 @@ test.describe("golden path", () => {
     // Per-day remaining is a whole currency unit (8000 / 14 rounds up to 572), never cents.
     await expect(page.getByTestId("target-hero")).toContainText("14 days left · 572 USD a day");
     await expect(page.getByRole("blockquote")).toHaveText("Boring money is the money that stays.");
+
+    // F2: Highest Impediment card with WHEN → THEN; collapsed row with counts.
+    const highest = page.getByTestId("highest-impediment");
+    await expect(highest.getByTestId("highest-name")).toHaveText("Starting late");
+    expect(await highest.getByTestId("highest-name").evaluate((el) => getComputedStyle(el).fontSize)).toBe("22px");
+    await expect(highest.getByTestId("proof-when")).toHaveText("I notice myself delaying my first work block");
+    await expect(highest.getByTestId("proof-then")).toHaveText("I start a 10-minute timer on the smallest executable task");
+    await expect(page.getByTestId("sprint-items-toggle")).toHaveText("▸ Other impediments (0) · Execution cues (1)");
+    await page.getByTestId("sprint-items-toggle").click();
+    await expect(page.getByTestId("sprint-items").getByText("Ask how much this pays")).toBeVisible();
+    await page.getByTestId("sprint-items-toggle").click();
 
     // Rule 28: no HIT/MISS labels anywhere in the rendered DOM.
     const bodyText = await page.locator("body").innerText();
@@ -103,12 +133,24 @@ test.describe("golden path", () => {
     await page.reload();
     await expect(page.getByLabel("Daily intention")).toHaveValue("Today I will move the $600 before lunch.");
 
-    // Close Day 1 with an actual above target → green result, then locked.
+    // Close Day 1 with an actual above target → two-step dialog → green result, then locked.
     await page.getByRole("button", { name: "Enter actual result" }).click();
     const dialog = page.getByRole("dialog");
+    await expect(dialog.getByTestId("close-step")).toHaveText("Close day 1 · step 1 of 2");
     await expect(dialog.getByText("Today's target was 572 USD.", { exact: false })).toBeVisible();
+    const cont = dialog.getByRole("button", { name: "Continue" });
+    await expect(cont).toBeDisabled();
     await dialog.getByLabel("Actual result").fill("600");
-    await dialog.getByRole("button", { name: "Close the day" }).click();
+    await expect(dialog.getByText("Say which impediments hurt, or none.")).toBeVisible();
+    await dialog.getByRole("checkbox", { name: /Starting late/ }).click();
+    await expect(cont).toBeEnabled();
+    await cont.click();
+    await expect(dialog.getByTestId("close-step")).toHaveText("Close day 1 · step 2 of 2");
+    const close = dialog.getByRole("button", { name: "Close the day" });
+    await expect(close).toBeDisabled();
+    await dialog.getByRole("checkbox", { name: "Ask how much this pays" }).click();
+    await expect(close).toBeEnabled();
+    await close.click();
 
     const result = page.getByTestId("result-actual");
     await expect(result).toHaveText("600");
@@ -130,5 +172,32 @@ test.describe("golden path", () => {
 
     // Sidebar reflects the sprint.
     await expect(page.locator("[data-sidebar]").getByText("Day 1/14")).toBeVisible();
+
+    // F2 library: the impediment is in sprint history; archiving it is blocked because
+    // it is the sprint's highest impediment (rule 20), and nothing changed.
+    await page.goto("/vision/impediments");
+    await expect(page.locator("[data-sidebar]").getByText("Impediments")).toBeVisible();
+    const item = page.getByTestId("library-item").filter({ hasText: "Starting late" });
+    await expect(item.getByText("In sprint history")).toBeVisible();
+    await item.getByRole("button", { name: "Archive" }).click();
+    await expect(item.getByRole("alert")).toContainText("Archive is blocked");
+    // The first violated rule is reported: with one impediment, rule 4 fires before rule 5.
+    await expect(item.getByRole("alert")).toContainText("it would be left without an impediment");
+    await page.reload();
+    await expect(page.getByTestId("library-item").filter({ hasText: "Starting late" })).toBeVisible();
+    await page.getByRole("button", { name: /Show archived/ }).click();
+    await expect(page.getByText("Nothing archived yet.")).toBeVisible();
+
+    // An unused cue can be deleted; a used one only archived (rule 19).
+    await page.goto("/vision/cues");
+    await page.getByLabel("Name").fill("Temporary cue");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    const temp = page.getByTestId("library-item").filter({ hasText: "Temporary cue" });
+    await expect(temp.getByText("Unused")).toBeVisible();
+    await temp.getByRole("button", { name: "Delete" }).click();
+    await expect(temp).toHaveCount(0);
+    const used = page.getByTestId("library-item").filter({ hasText: "Ask how much this pays" });
+    await expect(used.getByRole("button", { name: "Archive" })).toBeVisible();
+    await expect(used.getByRole("button", { name: "Delete" })).toHaveCount(0);
   });
 });

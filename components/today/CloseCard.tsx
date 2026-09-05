@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { closeDayAction } from "@/app/(app)/actions";
-import type { SprintDay } from "@/lib/data";
+import { OptionRow } from "@/components/OptionRow";
+import type { OfferedItems, SprintDay } from "@/lib/data";
 import { formatAmount, formatNumber, toBaseUnits, unitLabel, type Measured } from "@/lib/format";
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
   goal: number;
   day: SprintDay;
   days: SprintDay[];
+  offered: OfferedItems;
   canClose: boolean;
   cannotCloseReason?: string;
   tz: string;
@@ -54,7 +56,7 @@ export function CloseCard(props: Props) {
           <div style={{ maxWidth: "42ch" }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>Close the day</div>
             <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>
-              Actual result first. Close before 11:59 PM {props.tz.replace("_", " ")} — a truthful zero counts.
+              Actual result first, then what hurt and what helped. Close before 11:59 PM {props.tz.replace("_", " ")} — a truthful zero counts.
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -108,11 +110,22 @@ export function CloseCard(props: Props) {
   );
 }
 
+function toggle(list: string[], id: string): string[] {
+  return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+}
+
 function CloseDialog(props: Props & { onCancel: () => void; onClosed: (days: SprintDay[]) => void }) {
-  const { measured, day } = props;
+  const { measured, day, offered } = props;
+  const [step, setStep] = useState<1 | 2>(1);
   const [whole, setWhole] = useState("");
   const [hours, setHours] = useState("");
   const [minutes, setMinutes] = useState("");
+  const [hurt, setHurt] = useState<string[]>([]);
+  const [hurtNone, setHurtNone] = useState(false);
+  const [mostDamaging, setMostDamaging] = useState<string | null>(null);
+  const [helped, setHelped] = useState<string[]>([]);
+  const [helpedNone, setHelpedNone] = useState(false);
+  const [mostUseful, setMostUseful] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -127,12 +140,34 @@ function CloseDialog(props: Props & { onCancel: () => void; onClosed: (days: Spr
       : whole === ""
         ? null
         : toBaseUnits(measured.measurement, { whole: Number(whole) });
-  const valid = value !== null && Number.isFinite(value) && value >= 0 && (measured.measurement !== "hours" || Number(minutes || 0) < 60);
+  const actualValid = value !== null && Number.isInteger(value) && value >= 0 && (measured.measurement !== "hours" || Number(minutes || 0) < 60);
+
+  // Step 1 is complete when the actual is valid and the hurt question is answered:
+  // either "None today", or at least one impediment plus the most damaging one.
+  const hurtAnswered = hurtNone || hurt.length > 0;
+  const damagingOk = hurt.length === 0 || (mostDamaging !== null && hurt.includes(mostDamaging));
+  const step1Hint = !actualValid
+    ? "Enter the actual, zero included."
+    : !hurtAnswered
+      ? "Say which impediments hurt, or none."
+      : !damagingOk
+        ? "Pick the one that hurt most."
+        : null;
+  const helpedAnswered = helpedNone || helped.length > 0;
+  const usefulOk = helped.length === 0 || (mostUseful !== null && helped.includes(mostUseful));
+  const step2Hint = !helpedAnswered ? "Say which cues helped, or none." : !usefulOk ? "Pick the one that helped most." : null;
 
   function submit() {
-    if (!valid || value === null) return;
+    if (step1Hint || step2Hint || value === null) return;
     start(async () => {
-      const res = await closeDayAction(day.id, props.sprintId, value, notes);
+      const res = await closeDayAction(day.id, props.sprintId, {
+        actual: value,
+        notes,
+        hurt,
+        mostDamaging: hurt.length > 0 ? mostDamaging : null,
+        helped,
+        mostUseful: helped.length > 0 ? mostUseful : null,
+      });
       if (res.error || !res.days) {
         setError(res.error ?? "That did not save. Your input is still here — try again.");
         return;
@@ -141,62 +176,159 @@ function CloseDialog(props: Props & { onCancel: () => void; onClosed: (days: Spr
     });
   }
 
+  const hurtItems = offered.impediments;
+  const helpedItems = offered.cues;
+  const hurtPicked = hurtItems.filter((i) => hurt.includes(i.id));
+  const helpedPicked = helpedItems.filter((c) => helped.includes(c.id));
+
   return (
     <div className="dialog-scrim" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && props.onCancel()}>
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="close-title" style={{ maxWidth: 620 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span className="label-muted">Close day {day.day_index} · step 1 of 1</span>
+          <span className="label-muted" data-testid="close-step">
+            Close day {day.day_index} · step {step} of 2
+          </span>
           <button type="button" className="link-quiet" aria-label="Cancel" onClick={props.onCancel} style={{ fontSize: 18, lineHeight: 1 }}>
             ×
           </button>
         </div>
-        <h2 id="close-title" className="heading" style={{ fontSize: 26, margin: "10px 0 0" }}>
-          What was the actual result?
-        </h2>
-        <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>
-          Today&apos;s target was <strong style={{ fontWeight: 600, color: "var(--ink)" }}>{formatAmount(measured, Number(day.target))}</strong>. Zero is a
-          truthful answer.
-        </div>
 
         <form
-          style={{ marginTop: 18 }}
+          style={{ marginTop: 10 }}
           onSubmit={(e) => {
             e.preventDefault();
-            submit();
+            if (step === 1) {
+              if (!step1Hint) setStep(2);
+            } else submit();
           }}
         >
-          {measured.measurement === "hours" ? (
-            <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-              <label style={{ flex: 1 }}>
-                <span className="label-muted">Hours</span>
-                <input ref={first} className="input input-hero" type="number" inputMode="numeric" min={0} step={1} value={hours} onChange={(e) => setHours(e.target.value)} />
-              </label>
-              <label style={{ flex: 1 }}>
-                <span className="label-muted">Minutes</span>
-                <input className="input input-hero" type="number" inputMode="numeric" min={0} max={59} step={1} value={minutes} onChange={(e) => setMinutes(e.target.value)} />
-              </label>
-            </div>
-          ) : (
-            <label style={{ display: "block" }}>
-              <span className="label-muted">Actual · {unitLabel(measured)}</span>
-              <input
-                ref={first}
-                className="input input-hero"
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1}
-                value={whole}
-                onChange={(e) => setWhole(e.target.value)}
-                aria-label="Actual result"
-              />
-            </label>
-          )}
+          {step === 1 ? (
+            <>
+              <h2 id="close-title" className="heading" style={{ fontSize: 26, margin: 0 }}>
+                What was the actual result?
+              </h2>
+              <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>
+                Today&apos;s target was <strong style={{ fontWeight: 600, color: "var(--ink)" }}>{formatAmount(measured, Number(day.target))}</strong>. Zero is a
+                truthful answer.
+              </div>
+              <div style={{ marginTop: 18 }}>
+                {measured.measurement === "hours" ? (
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+                    <label style={{ flex: 1 }}>
+                      <span className="label-muted">Hours</span>
+                      <input ref={first} className="input input-hero" type="number" inputMode="numeric" min={0} step={1} value={hours} onChange={(e) => setHours(e.target.value)} />
+                    </label>
+                    <label style={{ flex: 1 }}>
+                      <span className="label-muted">Minutes</span>
+                      <input className="input input-hero" type="number" inputMode="numeric" min={0} max={59} step={1} value={minutes} onChange={(e) => setMinutes(e.target.value)} />
+                    </label>
+                  </div>
+                ) : (
+                  <label style={{ display: "block" }}>
+                    <span className="label-muted">Actual · {unitLabel(measured)}</span>
+                    <input
+                      ref={first}
+                      className="input input-hero"
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      step={1}
+                      value={whole}
+                      onChange={(e) => setWhole(e.target.value)}
+                      aria-label="Actual result"
+                    />
+                  </label>
+                )}
+              </div>
 
-          <label style={{ display: "block", marginTop: 16 }}>
-            <span className="label-muted">Notes · optional</span>
-            <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything worth remembering about today" style={{ marginTop: 6 }} />
-          </label>
+              <div style={{ marginTop: 22 }} data-testid="hurt-section">
+                <div style={{ fontSize: 15, fontWeight: 600 }}>Which impediments hurt today?</div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>None is a truthful answer.</div>
+                <div role="group" aria-label="Impediments that hurt" style={{ marginTop: 6 }}>
+                  {hurtItems.map((i) => (
+                    <OptionRow
+                      key={i.id}
+                      on={hurt.includes(i.id)}
+                      label={i.name}
+                      sub={i.proof_when && i.proof_then ? `WHEN ${i.proof_when}` : null}
+                      onPick={() => {
+                        const next = toggle(hurt, i.id);
+                        setHurt(next);
+                        setHurtNone(false);
+                        if (mostDamaging && !next.includes(mostDamaging)) setMostDamaging(null);
+                        if (next.length === 1) setMostDamaging(next[0]);
+                      }}
+                    />
+                  ))}
+                  <OptionRow
+                    on={hurtNone}
+                    label="None today"
+                    onPick={() => {
+                      setHurtNone(true);
+                      setHurt([]);
+                      setMostDamaging(null);
+                    }}
+                    testId="hurt-none"
+                  />
+                </div>
+                {hurt.length > 1 ? (
+                  <div style={{ marginTop: 14 }} role="radiogroup" aria-label="Which hurt most?">
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>Which hurt most?</div>
+                    {hurtPicked.map((i) => (
+                      <OptionRow key={i.id} single on={mostDamaging === i.id} label={i.name} onPick={() => setMostDamaging(i.id)} />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 id="close-title" className="heading" style={{ fontSize: 26, margin: 0 }}>
+                Which execution cues helped?
+              </h2>
+              <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>None is a truthful answer.</div>
+              <div role="group" aria-label="Cues that helped" style={{ marginTop: 12 }} data-testid="helped-section">
+                {helpedItems.map((c) => (
+                  <OptionRow
+                    key={c.id}
+                    on={helped.includes(c.id)}
+                    label={c.name}
+                    sub={c.explanation}
+                    onPick={() => {
+                      const next = toggle(helped, c.id);
+                      setHelped(next);
+                      setHelpedNone(false);
+                      if (mostUseful && !next.includes(mostUseful)) setMostUseful(null);
+                      if (next.length === 1) setMostUseful(next[0]);
+                    }}
+                  />
+                ))}
+                <OptionRow
+                  on={helpedNone}
+                  label="None today"
+                  onPick={() => {
+                    setHelpedNone(true);
+                    setHelped([]);
+                    setMostUseful(null);
+                  }}
+                  testId="helped-none"
+                />
+              </div>
+              {helped.length > 1 ? (
+                <div style={{ marginTop: 14 }} role="radiogroup" aria-label="Which helped most?">
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>Which helped most?</div>
+                  {helpedPicked.map((c) => (
+                    <OptionRow key={c.id} single on={mostUseful === c.id} label={c.name} onPick={() => setMostUseful(c.id)} />
+                  ))}
+                </div>
+              ) : null}
+
+              <label style={{ display: "block", marginTop: 18 }}>
+                <span className="label-muted">Notes · optional</span>
+                <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything worth remembering about today" style={{ marginTop: 6 }} />
+              </label>
+            </>
+          )}
 
           {error ? (
             <div role="alert" className="error-bar" style={{ marginTop: 14 }}>
@@ -208,14 +340,27 @@ function CloseDialog(props: Props & { onCancel: () => void; onClosed: (days: Spr
           ) : null}
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 22, flexWrap: "wrap" }}>
-            <button type="button" className="btn btn-ghost" onClick={props.onCancel}>
-              Cancel
-            </button>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              {!valid ? <span className="hint">Enter the actual, zero included.</span> : null}
-              <button type="submit" className="btn btn-primary" disabled={!valid || pending}>
-                {pending ? "Closing…" : "Close the day"}
+            {step === 1 ? (
+              <button type="button" className="btn btn-ghost" onClick={props.onCancel}>
+                Cancel
               </button>
+            ) : (
+              <button type="button" className="btn btn-ghost" onClick={() => setStep(1)}>
+                Back
+              </button>
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {step === 1 && step1Hint ? <span className="hint">{step1Hint}</span> : null}
+              {step === 2 && step2Hint ? <span className="hint">{step2Hint}</span> : null}
+              {step === 1 ? (
+                <button type="submit" className="btn btn-primary" disabled={Boolean(step1Hint)}>
+                  Continue
+                </button>
+              ) : (
+                <button type="submit" className="btn btn-primary" disabled={Boolean(step2Hint) || pending}>
+                  {pending ? "Closing…" : "Close the day"}
+                </button>
+              )}
             </div>
           </div>
         </form>

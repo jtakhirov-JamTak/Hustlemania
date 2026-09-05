@@ -2,6 +2,37 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## Hustlemania — from eval-02 (F2, 2026-09-05), all P2
+
+- **Close dialog stays mounted under the result screen** — two `role="dialog"
+  aria-modal="true"` elements at once; assistive tech sees two modals. Unmount
+  `CloseDialog` when `result` is set. `components/today/CloseCard.tsx`.
+- **Most-damaging / most-useful radio only appears at ≥2 selections**; a single
+  selection is auto-assigned. Functionally equivalent to the SPEC ("radio when ≥1
+  chosen"), but the auto-pick also persists when a second item is added, so the first
+  pick stays "most damaging" unless the user changes it. `CloseCard.tsx`.
+- **Duplicate ids in `p_cue_ids` / `p_hurt` are silently de-duplicated** rather than
+  rejected. Observation only. `supabase/migrations/0004_libraries.sql`.
+
+## Found during F2 (2026-09-05), not fixed there
+
+- **`sprint_invalid_reason(sprint, kind, item)` is wrong when called with its null
+  defaults** — `not (null and …)` is null and drops every row, so "is this sprint valid
+  as it stands" would report `no_cues`. No caller passes null today (every caller names
+  a kind and an item). The migration was already on disk when found and the write guard
+  blocks editing it; fix with `coalesce(…, false)` in the next migration that touches
+  the function.
+- **Scope filter semantics undefined in the SPEC**: the "Wealth" chip lists only
+  `scope = wealth`, not `global + wealth`. Decide and write it into F2 or the library
+  page copy.
+- **e2e covers the single-selection close only**; the "Which hurt most?" radio path was
+  exercised by the evaluator's manual run and by the DB suite, not `golden-path.spec.ts`.
+- **Harness, not app:** Claude in Chrome would not resize the window below desktop
+  width (390×844 requested, 1280 kept), so the phone check rests on the Playwright phone
+  project; `Page.captureScreenshot` timed out on most first attempts after an
+  interaction and succeeded on retry. The evaluator's shell allowlist also lacks `kill`,
+  so its `next dev` on :3000 had to be stopped by the main session.
+
 ## Hustlemania — from eval-01 (F1, 2026-09-05), all P2
 
 - **Wizard step 4: clicking the confirmation label text does not toggle** — the box is a
