@@ -1,0 +1,86 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/id_rsa*)",
+      "Read(**/id_ed25519*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git checkout -- :*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(rm -rf:*)",
+      "PowerShell(git reset --hard:*)",
+      "PowerShell(git clean:*)",
+      "PowerShell(git checkout -- :*)",
+      "PowerShell(git push --force:*)",
+      "PowerShell(git push -f:*)",
+      "PowerShell(Remove-Item -Recurse:*)"
+    ],
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(npm test:*)",
+      "Bash(npm install:*)",
+      "Bash(npm ci)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git stash:*)",
+      "Bash(git branch:*)",
+      "Bash(git worktree:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(mkdir:*)",
+      "Bash(curl localhost:*)",
+      "Bash(curl http://localhost:*)",
+      "Bash(supabase:*)",
+      "PowerShell(npm run:*)",
+      "PowerShell(npm test:*)",
+      "PowerShell(npm install:*)",
+      "PowerShell(npm ci)",
+      "PowerShell(npx:*)",
+      "PowerShell(node:*)",
+      "PowerShell(git status)",
+      "PowerShell(git diff:*)",
+      "PowerShell(git log:*)",
+      "PowerShell(git add:*)",
+      "PowerShell(git stash:*)",
+      "PowerShell(git branch:*)",
+      "PowerShell(git worktree:*)",
+      "PowerShell(Get-ChildItem:*)",
+      "PowerShell(Get-Content:*)",
+      "PowerShell(Select-String:*)",
+      "PowerShell(Test-Path:*)",
+      "PowerShell(Get-Command:*)",
+      "PowerShell(New-Item -ItemType Directory:*)",
+      "PowerShell(curl localhost:*)",
+      "PowerShell(curl http://localhost:*)",
+      "PowerShell(supabase:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "PowerShell(git push:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": ["${CLAUDE_PROJECT_DIR}/scripts/hooks/write_guard.py"]
+          }
+        ]
+      }
+    ]
+  }
+}

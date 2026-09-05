@@ -1,0 +1,31 @@
+
+# Secrets — never committed (mirrors .claude/settings.json permissions.deny)
+# EVERY .env* is secret and there is no exception: the non-secret example file
+# is `env.example` (no leading dot), which is not matched here and so is
+# committed normally. Do not re-add a `!.env.example` negation — it is what
+# made .gitignore, shell_guard.py and write_guard.py disagree (handoff B3).
+.env
+.env.*
+*.pem
+id_rsa*
+id_ed25519*
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Session handoff — local working state, not project history. Written by
+# /save-context, read by /resume-context, overwritten whole each time. There is no
+# archive directory: archiving was removed as ceremony (~/.claude/DECISIONS.md,
+# 2026-08-25), so nothing produces one to ignore.
+session-context.md
