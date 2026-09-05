@@ -6,6 +6,34 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-05 — Hustlemania stack: Next.js + Supabase over PurePath's Vite/Express/Drizzle
+
+Direction gate of the `/interview` for Hustlemania (the 14-day goal sprint app; PRD in
+`docs/references/`). **Chosen: Next.js App Router + Supabase (Postgres, magic-link
+Auth, RLS) on Vercel.** The user's #2 failure condition is corrupted or lost sprint
+data, and this stack enforces isolation (RLS) and the PRD's 29 invariants
+(constraints, triggers, DB functions) in Postgres rather than in per-route code.
+`~/PurePath` — the prior attempt on Vite + Express + Drizzle — records three
+authz/logging slips in its own lessons list of exactly the kind RLS removes. Also:
+the template's `write_guard.py` and `engineering-conventions` already assume
+`supabase/migrations`; $0 on free tiers; Vercel Cron covers the reminder email.
+
+**Rejected:** no-build (Notion/Sheets cannot enforce the invariants, lock closed days,
+or surface cross-day patterns — and "no patterns" is the stated pain); the PurePath
+stack (auth and every ownership check hand-written; needs an always-on Node host).
+**Re-open only if** the circle-visibility RLS in F8 proves unmanageable.
+
+**Amounts:** one BIGINT `amount` in base units (money in minor units although the UI
+accepts whole units only, hours as minutes, quantity whole) — the money convention
+wins over the PRD's "whole units" storage note; behaviour is identical.
+
+**UI reference:** the user's Claude Design handoff (`docs/mockups/UI mockups.zip`)
+is the look; its bundled `spec.md` is an older PRD draft and loses to
+`docs/references/`. Today's section order and the two-step Close dialog are the
+user's calls over both the PRD and the prototype (SPEC Part 2 §5).
+
+---
+
 ## 2026-08-25 — Governance protection goes in the global guard; the pre-commit claim goes in the docs
 
 **Governance shell-writes are blocked in the user-level guard, not a restored

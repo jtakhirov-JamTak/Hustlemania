@@ -19,6 +19,7 @@ measures nothing but memory.
 
 | Feature | started_at | green_at | cycle_time | human_stops | rework | defects_after_green |
 |---|---|---|---|---|---|---|
+| F1 — Walking skeleton: sign in → Vision → start Sprint → Today → Close Day | 2026-09-05T04:15Z | — | — | 0 | 0 | 0 |
 
 ### Who opens the row
 
