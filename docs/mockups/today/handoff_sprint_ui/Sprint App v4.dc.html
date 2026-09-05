@@ -1,0 +1,1836 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/modernist-f0a7c19b-278c-4aa6-958c-4f3157ce6191/styles.css">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="_ds/modernist-f0a7c19b-278c-4aa6-958c-4f3157ce6191/_ds_bundle.js"></script>
+<style>
+html, body { margin: 0; padding: 0; background: #f7fbfd; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+button { font-family: inherit; cursor: pointer; }
+input, textarea, select { font-family: inherit; color: inherit; }
+input::placeholder, textarea::placeholder { color: color-mix(in srgb, currentColor 40%, transparent); }
+a { color: var(--accent-ink); }
+a:hover { color: var(--color-accent); }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.btn { border-radius: 12px; text-transform: none; letter-spacing: 0.01em; font-weight: 600; white-space: nowrap; }
+.tag { border-radius: 999px; }
+@keyframes popIn { from { transform: scale(0.95); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+@keyframes riseIn { from { transform: translateY(10px); opacity: 0 } to { transform: none; opacity: 1 } }
+@media (max-width: 940px) {
+  [data-shell] { flex-direction: column; }
+  [data-sidebar] { width: 100% !important; flex: none !important; border-right: none !important; box-shadow: 0 1px 0 var(--color-divider); }
+  [data-main] { padding: 20px 16px 90px !important; }
+  [data-hero] { font-size: 64px !important; }
+  [data-cols] { grid-template-columns: 1fr !important; }
+  [data-strip] { overflow-x: auto; }
+}
+</style>
+</helmet>
+
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="#2b7ea8"/><rect x="60" y="70" width="80" height="14" rx="4" fill="#ffffff"/><rect x="60" y="94" width="52" height="14" rx="4" fill="#ffffff" opacity="0.7"/><rect x="60" y="118" width="66" height="14" rx="4" fill="#ffffff" opacity="0.42"/></svg></template>
+<div style="--page:linear-gradient(180deg,#eff7fb 0%,#fbfdfe 46%);--panel:#ffffff;--color-bg:#f7fbfd;--color-surface:#ffffff;--color-text:#16242e;--color-accent:#2b7ea8;--accent-ink:#1d6188;--color-accent-100:color-mix(in srgb, #2b7ea8 12%, #fff);--color-accent-200:color-mix(in srgb, #2b7ea8 22%, #fff);--color-accent-600:#1d6188;--color-accent-700:#1d6188;--color-accent-800:#1d6188;--color-accent-900:#16242e;--color-divider:color-mix(in srgb, #16242e 13%, transparent);--muted:color-mix(in srgb, #16242e 62%, transparent);--faint:color-mix(in srgb, #16242e 7%, transparent);--font-heading:'Plus Jakarta Sans', system-ui, sans-serif;--font-body:'Plus Jakarta Sans', system-ui, sans-serif">
+<div style="{{ themeVars }}">
+<div style="min-height:100vh;display:flex;flex-direction:column;background:var(--page);font-family:var(--font-body);color:var(--color-text);text-wrap:pretty">
+
+  <header style="display:flex;align-items:stretch;box-shadow:0 1px 0 var(--color-divider);background:color-mix(in srgb, var(--panel) 88%, transparent);backdrop-filter:blur(10px);position:sticky;top:0;z-index:20">
+    <div style="display:flex;align-items:center;gap:10px;padding:0 26px;min-width:186px">
+      <span style="width:9px;height:9px;border-radius:3px;background:var(--color-accent);display:inline-block"></span>
+      <span style="font-family:var(--font-heading);font-weight:700;font-size:16px;letter-spacing:0.06em">Sprint</span>
+    </div>
+    <nav style="display:flex">
+      <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+        <button onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</button>
+      </sc-for>
+    </nav>
+    <div style="flex:1"></div>
+    <div style="{{ dateBarStyle }}">{{ todayLabel }}</div>
+  </header>
+
+  <div style="flex:1;display:flex;align-items:stretch" data-shell>
+
+    <aside style="width:266px;flex:0 0 266px;border-right:1px solid var(--color-divider);padding:20px 0 40px;background:var(--panel)" data-sidebar>
+      <div style="padding:0 24px 10px;font-size:10.5px;font-weight:600;letter-spacing:0.03em;color:var(--muted)">{{ sideTitle }}</div>
+      <sc-for list="{{ sideItems }}" as="s" hint-placeholder-count="4">
+        <button onClick="{{ s.go }}" style="{{ s.style }}">
+          <span style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;width:100%">
+            <span style="font-weight:600;font-size:13.5px">{{ s.label }}</span>
+            <span style="{{ s.metaStyle }}">{{ s.meta }}</span>
+          </span>
+          <span style="{{ s.subStyle }}">{{ s.sub }}</span>
+        </button>
+      </sc-for>
+      <sc-if value="{{ isSprints }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:14px 20px 0">
+          <button onClick="{{ openCreate }}" class="btn btn-primary btn-block">New Sprint</button>
+        </div>
+      </sc-if>
+    </aside>
+
+    <main style="flex:1;min-width:0;padding:30px 40px 100px;overflow:auto" data-main>
+
+      <!-- ================= TODAY ================= -->
+      <sc-if value="{{ showToday }}" hint-placeholder-val="{{ true }}">
+        <div style="max-width:940px">
+
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:22px;flex-wrap:wrap">
+            <div>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">
+                <span class="tag tag-accent">{{ sp.areaName }}</span>
+                <span style="font-size:11.5px;color:var(--muted)">{{ sp.dateLabel }}</span>
+              </div>
+              <h1 style="font-family:var(--font-heading);font-size:32px;font-weight:700;letter-spacing:-0.02em;margin:0;max-width:28ch;line-height:1.15">{{ sp.outcome }}</h1>
+            </div>
+            <div style="text-align:right">
+              <div style="font-family:var(--font-heading);font-size:30px;font-weight:700;letter-spacing:-0.02em;line-height:1">{{ sp.dayLabel }}</div>
+              <div style="font-size:11.5px;color:var(--muted);margin-top:5px">{{ sp.streakLabel }}</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:6px;margin:22px 0 0" data-strip>
+            <sc-for list="{{ strip }}" as="d" hint-placeholder-count="14">
+              <div style="{{ d.style }}" title="{{ d.title }}">
+                <span style="font-size:9px;font-weight:700;color:var(--color-accent)">{{ d.num }}</span>
+                <span style="font-size:9.5px;color:var(--muted);margin-top:2px">{{ d.dow }}</span>
+                <span style="font-size:14px;font-weight:600;margin-top:1px">{{ d.dom }}</span>
+                <span style="{{ d.markStyle }}"></span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:8px">
+            <span>{{ sp.startLabel }}</span>
+            <span>{{ sp.endLabel }}</span>
+          </div>
+
+          <section style="margin-top:34px;background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:26px 28px">
+            <div style="font-size:10.5px;font-weight:600;letter-spacing:0.03em;color:var(--color-accent)">Today's target</div>
+            <div style="font-family:var(--font-heading);font-size:92px;font-weight:700;letter-spacing:-0.04em;line-height:1;margin:4px 0 0" data-hero>{{ sp.targetBig }}</div>
+            <div style="font-size:17px;font-weight:600;margin-top:4px;color:var(--muted)">{{ sp.targetUnit }}</div>
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:26px" data-cols>
+              <sc-for list="{{ sp.stats }}" as="st" hint-placeholder-count="3">
+                <div style="border:1px solid var(--color-divider);border-radius:14px;padding:14px 16px">
+                  <div style="font-size:10.5px;color:var(--muted)">{{ st.label }}</div>
+                  <div style="font-family:var(--font-heading);font-size:21px;font-weight:700;margin-top:4px;letter-spacing:-0.01em">{{ st.value }}</div>
+                  <div style="font-size:11px;color:var(--muted);margin-top:2px">{{ st.sub }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ sp.hasUsage }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:20px;padding-top:18px;border-top:1px solid var(--color-divider)">
+                <div style="font-size:10.5px;font-weight:600;color:var(--muted);margin-bottom:9px">Usage of funds</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                  <sc-for list="{{ sp.usage }}" as="u" hint-placeholder-count="3">
+                    <span style="border:1px solid var(--color-divider);border-radius:999px;padding:6px 13px;font-size:12.5px"><strong style="font-weight:600">{{ u.amount }}</strong> {{ u.label }}</span>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </section>
+
+          <sc-if value="{{ sp.hasMantra }}" hint-placeholder-val="{{ false }}">
+            <section style="margin-top:20px;padding:24px 28px;border-radius:20px;background:color-mix(in srgb, var(--color-accent) 8%, var(--panel));border:1px solid color-mix(in srgb, var(--color-accent) 22%, transparent)">
+              <sc-if value="{{ sp.mantraView }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:18px">
+                  <div style="font-family:var(--font-heading);font-size:23px;font-weight:500;font-style:italic;line-height:1.35;max-width:34ch;color:var(--accent-ink)">{{ sp.mantra }}</div>
+                  <button onClick="{{ sp.editMantra }}" style="border:none;background:none;font-size:12px;color:var(--muted);padding:2px 0">Edit</button>
+                </div>
+              </sc-if>
+              <sc-if value="{{ sp.mantraEdit }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                  <input value="{{ sp.mantraDraft }}" onChange="{{ sp.setMantraDraft }}" placeholder="An inspirational phrase" style="flex:1;min-width:220px;border:1px solid var(--color-divider);border-radius:12px;background:var(--panel);padding:11px 13px;font-size:15px" />
+                  <button onClick="{{ sp.saveMantra }}" class="btn btn-primary">Save</button>
+                </div>
+              </sc-if>
+            </section>
+          </sc-if>
+
+          <section style="margin-top:20px;background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:24px 26px">
+            <div style="font-size:10.5px;font-weight:600;letter-spacing:0.03em;color:var(--color-accent)">Highest impediment</div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-top:6px">
+              <div style="font-family:var(--font-heading);font-size:22px;font-weight:600;letter-spacing:-0.01em">{{ sp.highestName }}</div>
+              <button onClick="{{ sp.openHighest }}" style="border:none;background:none;font-size:12px;color:var(--muted);padding:2px 0">Change</button>
+            </div>
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 14px;margin-top:16px;padding-top:16px;border-top:1px solid var(--color-divider);align-items:baseline">
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:0.03em;color:var(--color-accent)">WHEN</span>
+              <span style="font-size:15px;line-height:1.45">{{ sp.pWhen }}</span>
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:0.03em;color:var(--color-accent)">THEN</span>
+              <span style="font-size:15px;line-height:1.45">{{ sp.pThen }}</span>
+            </div>
+            <button onClick="{{ sp.editProof }}" style="border:none;background:none;font-size:12px;color:var(--muted);padding:10px 0 0">Edit proof point</button>
+          </section>
+
+          <section style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px" data-cols>
+            <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:22px 24px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+                <span style="font-size:13px;font-weight:600">Other impediments</span>
+                <span style="font-size:11px;color:var(--muted)">{{ sp.impCount }}</span>
+              </div>
+              <sc-for list="{{ sprintImps }}" as="f" hint-placeholder-count="3">
+                <div style="padding:11px 0;border-top:1px solid var(--color-divider)">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+                    <span style="font-size:14px;line-height:1.4">{{ f.name }}</span>
+                    <button onClick="{{ f.remove }}" style="border:none;background:none;font-size:11.5px;color:var(--muted);padding:0;white-space:nowrap">Remove</button>
+                  </div>
+                  <div style="{{ f.proofStyle }}">{{ f.proof }}</div>
+                </div>
+              </sc-for>
+              <button onClick="{{ openAddImp }}" class="btn btn-ghost" style="margin-top:12px">Add impediment</button>
+            </div>
+            <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:22px 24px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+                <span style="font-size:13px;font-weight:600">Execution cues</span>
+                <span style="font-size:11px;color:var(--muted)">{{ sp.cueCount }}</span>
+              </div>
+              <sc-for list="{{ sprintCues }}" as="f" hint-placeholder-count="2">
+                <div style="padding:11px 0;border-top:1px solid var(--color-divider)">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+                    <span style="font-size:14px;line-height:1.4">{{ f.name }}</span>
+                    <button onClick="{{ f.remove }}" style="border:none;background:none;font-size:11.5px;color:var(--muted);padding:0;white-space:nowrap">Remove</button>
+                  </div>
+                  <div style="{{ f.noteStyle }}">{{ f.note }}</div>
+                </div>
+              </sc-for>
+              <button onClick="{{ openAddCue }}" class="btn btn-ghost" style="margin-top:12px">Add cue</button>
+            </div>
+          </section>
+
+          <section style="margin-top:20px;background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:22px 26px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+              <span style="font-size:13px;font-weight:600">Tasks · optional</span>
+              <span style="font-size:11px;color:var(--muted)">{{ sp.tasksHint }}</span>
+            </div>
+            <sc-for list="{{ tasks }}" as="t" hint-placeholder-count="1">
+              <div style="display:flex;align-items:center;gap:13px;border-top:1px solid var(--color-divider);padding:10px 0">
+                <button onClick="{{ t.toggle }}" disabled="{{ sp.dayClosed }}" style="{{ t.boxStyle }}">{{ t.mark }}</button>
+                <input value="{{ t.text }}" onChange="{{ t.edit }}" disabled="{{ sp.dayClosed }}" placeholder="Add a task" style="{{ t.inputStyle }}" />
+                <sc-if value="{{ sp.dayOpen }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ t.remove }}" style="border:none;background:none;color:var(--muted);font-size:17px;line-height:1;padding:3px 6px">×</button>
+                </sc-if>
+              </div>
+            </sc-for>
+            <sc-if value="{{ sp.dayOpen }}" hint-placeholder-val="{{ true }}">
+              <button onClick="{{ addTask }}" class="btn btn-ghost" style="margin-top:12px">Add task</button>
+            </sc-if>
+          </section>
+
+          <section style="margin-top:20px;background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:24px 26px">
+            <sc-if value="{{ sp.dayClosed }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap">
+                <div>
+                  <div style="font-size:10.5px;color:var(--muted)">Day closed · locked</div>
+                  <div style="font-family:var(--font-heading);font-size:28px;font-weight:700;letter-spacing:-0.02em;margin-top:3px;color:{{ sp.closedColor }}">{{ sp.closedLabel }}</div>
+                </div>
+                <div style="font-size:12.5px;color:var(--muted);max-width:36ch;line-height:1.5">A closed day is historical truth. Tomorrow's target is already set — nothing carries over.</div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ sp.dayOpen }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap">
+                <div style="max-width:42ch">
+                  <div style="font-size:13px;font-weight:600">Close the day</div>
+                  <div style="font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.5">Actual result first. Close before 11:59 PM {{ sp.tz }} to hold the streak — a truthful zero counts.</div>
+                </div>
+                <button onClick="{{ openClose }}" class="btn btn-primary" style="min-width:200px">Enter actual result</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ sp.canCompleteEarly }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:18px;border:1px solid var(--color-accent);border-radius:16px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;background:color-mix(in srgb, var(--color-accent) 7%, transparent)">
+                <div style="font-size:13.5px;font-weight:600;max-width:40ch;line-height:1.45">{{ sp.earlyLine }}</div>
+                <button onClick="{{ completeEarly }}" class="btn btn-primary">Complete sprint</button>
+              </div>
+            </sc-if>
+            <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--color-divider);display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--muted)">
+              <span style="{{ sp.celebStyle }}">{{ sp.celebLine }}</span>
+              <button onClick="{{ endEarly }}" style="border:none;background:none;padding:0;font-size:11.5px;color:var(--muted)">{{ sp.endLabel }}</button>
+            </div>
+          </section>
+
+          <section style="margin-top:20px;background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:22px 26px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+              <span style="font-size:13px;font-weight:600">14-day plan</span>
+              <div style="display:flex;gap:6px">
+                <sc-for list="{{ plan.modes }}" as="m" hint-placeholder-count="2">
+                  <button onClick="{{ m.pick }}" style="{{ m.style }}">{{ m.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:14px" data-cols>
+              <sc-for list="{{ plan.days }}" as="d" hint-placeholder-count="14">
+                <div style="{{ d.cellStyle }}">
+                  <div style="display:flex;justify-content:space-between;align-items:baseline">
+                    <span style="font-size:9.5px;color:var(--muted)"><strong style="color:var(--color-accent);font-weight:700">{{ d.num }}</strong> {{ d.dow }}</span>
+                    <span style="{{ d.lockStyle }}">{{ d.lock }}</span>
+                  </div>
+                  <sc-if value="{{ d.editable }}" hint-placeholder-val="{{ false }}">
+                    <input value="{{ d.value }}" onChange="{{ d.set }}" inputmode="numeric" style="width:100%;margin-top:4px;border:1px solid var(--color-divider);border-radius:9px;background:var(--panel);padding:6px 7px;font-size:13px;font-weight:600" />
+                  </sc-if>
+                  <sc-if value="{{ d.locked }}" hint-placeholder-val="{{ true }}">
+                    <div style="font-size:14px;font-weight:600;margin-top:6px">{{ d.value }}</div>
+                    <div style="{{ d.actualStyle }}">{{ d.actual }}</div>
+                  </sc-if>
+                  <sc-if value="{{ d.backfillable }}" hint-placeholder-val="{{ false }}">
+                    <button onClick="{{ d.backfill }}" style="margin-top:6px;border:1px solid var(--color-divider);border-radius:9px;background:none;font-size:10.5px;padding:4px 7px;color:var(--accent-ink);width:100%">Backfill</button>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;font-size:12.5px">
+              <span style="color:var(--muted)">Planned <strong style="font-weight:600;color:var(--color-text)">{{ plan.planned }}</strong></span>
+              <span style="color:var(--muted)">Goal · locked <strong style="font-weight:600;color:var(--color-text)">{{ plan.goal }}</strong></span>
+              <span style="{{ plan.deltaStyle }}">{{ plan.delta }}</span>
+            </div>
+            <div style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5;max-width:64ch">{{ plan.note }}</div>
+          </section>
+        </div>
+      </sc-if>
+
+      <!-- ================= EMPTY / BLOCKED ================= -->
+      <sc-if value="{{ showBlocked }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:620px;background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:34px 36px">
+          <span class="tag tag-outline">{{ bl.areaName }}</span>
+          <h1 style="font-family:var(--font-heading);font-size:30px;font-weight:700;letter-spacing:-0.02em;margin:18px 0 10px;line-height:1.15">{{ bl.title }}</h1>
+          <p style="font-size:14.5px;line-height:1.6;color:var(--muted);margin:0 0 24px;max-width:46ch">{{ bl.body }}</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button onClick="{{ bl.act }}" class="btn btn-primary">{{ bl.actLabel }}</button>
+            <sc-if value="{{ bl.showSample }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ loadSample }}" class="btn btn-secondary">Load a sample sprint</button>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ================= REVIEW ================= -->
+      <sc-if value="{{ showReview }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:860px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="tag tag-accent">{{ rv.areaName }}</span>
+            <span style="font-size:11.5px;color:var(--muted)">{{ rv.status }}</span>
+          </div>
+          <h1 style="font-family:var(--font-heading);font-size:38px;font-weight:700;letter-spacing:-0.03em;margin:14px 0 6px;line-height:1.1">Sprint review</h1>
+          <p style="font-size:13.5px;color:var(--muted);margin:0 0 24px;max-width:54ch;line-height:1.55">The next {{ rv.areaName }} sprint stays locked until this is finished. One key lesson and the vision answer are the only required fields.</p>
+
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px" data-cols>
+            <sc-for list="{{ rv.stats }}" as="st" hint-placeholder-count="3">
+              <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:16px;padding:16px 18px">
+                <div style="font-size:10.5px;color:var(--muted)">{{ st.label }}</div>
+                <div style="font-family:var(--font-heading);font-size:24px;font-weight:700;margin-top:4px;color:{{ st.color }}">{{ st.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:22px 26px;margin-top:20px">
+            <div style="font-size:13px;font-weight:600;margin-bottom:12px">Daily performance</div>
+            <div style="display:flex;align-items:flex-end;gap:5px;height:120px">
+              <sc-for list="{{ rv.bars }}" as="b" hint-placeholder-count="14">
+                <div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%">
+                  <div style="{{ b.targetStyle }}"></div>
+                  <div style="{{ b.actualStyle }}"></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px" data-cols>
+            <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:22px 24px">
+              <div style="font-size:13px;font-weight:600;margin-bottom:4px">Execution cue patterns</div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Most useful: {{ rv.topCue }}</div>
+              <sc-for list="{{ rv.cues }}" as="f" hint-placeholder-count="2">
+                <div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--color-divider);font-size:13.5px">
+                  <span>{{ f.name }}</span><span style="color:var(--muted);white-space:nowrap">{{ f.count }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:22px 24px">
+              <div style="font-size:13px;font-weight:600;margin-bottom:4px">Impediment patterns</div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Most damaging: {{ rv.topImp }}</div>
+              <sc-for list="{{ rv.imps }}" as="f" hint-placeholder-count="3">
+                <div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--color-divider);font-size:13.5px">
+                  <span>{{ f.name }}</span><span style="color:var(--muted);white-space:nowrap">{{ f.count }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:22px 26px;margin-top:20px">
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px">Highest impediment · {{ rv.highestName }}</div>
+            <div style="font-size:13.5px;color:var(--muted);line-height:1.55;max-width:62ch">{{ rv.proofObs }}</div>
+          </div>
+
+          <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:24px 26px;margin-top:20px">
+            <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px">One key lesson</label>
+            <textarea value="{{ rv.lesson }}" onChange="{{ rv.setLesson }}" rows="3" placeholder="The one thing this sprint proved." style="width:100%;border:1px solid var(--color-divider);border-radius:14px;background:var(--panel);padding:13px 15px;font-size:14.5px;line-height:1.5;resize:vertical"></textarea>
+            <div style="font-size:13px;font-weight:600;margin:22px 0 10px">Did it meaningfully advance the vision?</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ rv.moveOpts }}" as="o" hint-placeholder-count="2">
+                <button onClick="{{ o.pick }}" style="{{ o.style }}">{{ o.label }}</button>
+              </sc-for>
+            </div>
+            <div style="margin-top:24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+              <button onClick="{{ rv.submit }}" disabled="{{ rv.blocked }}" style="{{ rv.submitStyle }}">Complete review</button>
+              <span style="font-size:12px;color:var(--muted)">{{ rv.hint }}</span>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ================= VISION TAB ================= -->
+      <sc-if value="{{ isVision }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:960px">
+
+          <sc-if value="{{ vw.isVisionSec }}" hint-placeholder-val="{{ true }}">
+            <span class="tag tag-accent">{{ vw.areaName }}</span>
+            <h1 style="font-family:var(--font-heading);font-size:38px;font-weight:700;letter-spacing:-0.03em;margin:16px 0 6px;line-height:1.1">1-year vision</h1>
+            <p style="font-size:13.5px;color:var(--muted);margin:0 0 22px;max-width:58ch;line-height:1.55">One active vision per area. Replacing it archives the old one and keeps every sprint, cue and impediment behind it. Sprints in this area stay blocked until a vision exists.</p>
+            <textarea value="{{ vw.visionText }}" onChange="{{ vw.setVision }}" rows="7" placeholder="Where this area stands twelve months from now." style="width:100%;border:1px solid var(--color-divider);border-radius:16px;background:var(--panel);padding:18px;font-size:15.5px;line-height:1.6;resize:vertical"></textarea>
+            <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+              <button onClick="{{ vw.saveVision }}" class="btn btn-primary">Save vision</button>
+              <button onClick="{{ vw.replaceVision }}" class="btn btn-secondary">Replace &amp; archive</button>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin-top:14px">{{ vw.visionMeta }}</p>
+            <sc-if value="{{ vw.hasArchive }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:26px;border-top:1px solid var(--color-divider);padding-top:18px">
+                <button onClick="{{ vw.toggleArchive }}" style="border:none;background:none;padding:0;font-size:12.5px;font-weight:600;color:var(--accent-ink)">{{ vw.archiveLabel }}</button>
+                <sc-if value="{{ vw.archiveOpen }}" hint-placeholder-val="{{ false }}">
+                  <sc-for list="{{ vw.archived }}" as="a" hint-placeholder-count="1">
+                    <div style="margin-top:12px;background:var(--faint);border-radius:14px;padding:14px 16px;font-size:13.5px;line-height:1.55;color:var(--muted)">{{ a.text }}</div>
+                  </sc-for>
+                </sc-if>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <sc-if value="{{ vw.isLib }}" hint-placeholder-val="{{ false }}">
+            <h1 style="font-family:var(--font-heading);font-size:38px;font-weight:700;letter-spacing:-0.03em;margin:0 0 6px;line-height:1.1">{{ lib.title }}</h1>
+            <p style="font-size:13.5px;color:var(--muted);margin:0 0 20px;max-width:62ch;line-height:1.55">{{ lib.blurb }}</p>
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+              <sc-for list="{{ lib.scopes }}" as="s" hint-placeholder-count="5">
+                <button onClick="{{ s.pick }}" style="{{ s.style }}">{{ s.label }}</button>
+              </sc-for>
+            </div>
+
+            <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:20px 22px;margin-bottom:20px">
+              <div style="font-size:13px;font-weight:600;margin-bottom:12px">{{ lib.addTitle }}</div>
+              <input value="{{ lib.draftName }}" onChange="{{ lib.setDraftName }}" placeholder="{{ lib.namePlaceholder }}" style="width:100%;border:1px solid var(--color-divider);border-radius:12px;background:var(--panel);padding:12px 14px;font-size:14.5px" />
+              <input value="{{ lib.draftNote }}" onChange="{{ lib.setDraftNote }}" placeholder="Optional explanation — why this matters" style="width:100%;margin-top:10px;border:1px solid var(--color-divider);border-radius:12px;background:var(--panel);padding:11px 14px;font-size:13.5px" />
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap">
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  <sc-for list="{{ lib.draftScopes }}" as="s" hint-placeholder-count="4">
+                    <button onClick="{{ s.pick }}" style="{{ s.style }}">{{ s.label }}</button>
+                  </sc-for>
+                </div>
+                <button onClick="{{ lib.add }}" class="btn btn-primary">Add</button>
+              </div>
+            </div>
+
+            <sc-for list="{{ lib.items }}" as="it" hint-placeholder-count="4">
+              <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:16px;padding:16px 18px;margin-bottom:10px">
+                <div style="display:flex;align-items:flex-start;gap:14px">
+                  <div style="display:flex;flex-direction:column;gap:3px">
+                    <button onClick="{{ it.up }}" style="{{ it.upStyle }}">↑</button>
+                    <button onClick="{{ it.down }}" style="{{ it.downStyle }}">↓</button>
+                  </div>
+                  <div style="width:20px;font-size:13px;font-weight:700;color:var(--muted);padding-top:3px">{{ it.rank }}</div>
+                  <div style="flex:1;min-width:0">
+                    <sc-if value="{{ it.isView }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap">
+                        <div style="min-width:0">
+                          <div style="font-size:15px;font-weight:600;line-height:1.4">{{ it.name }}</div>
+                          <div style="{{ it.noteStyle }}">{{ it.note }}</div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                          <span style="{{ it.scopeStyle }}">{{ it.scopeLabel }}</span>
+                          <span style="{{ it.usedStyle }}">{{ it.usedLabel }}</span>
+                          <button onClick="{{ it.edit }}" style="border:none;background:none;font-size:11.5px;color:var(--accent-ink);padding:0">Edit</button>
+                          <button onClick="{{ it.act }}" style="{{ it.actStyle }}">{{ it.actLabel }}</button>
+                        </div>
+                      </div>
+                      <sc-if value="{{ it.hasProof }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--color-divider);display:grid;grid-template-columns:auto 1fr;gap:6px 12px;align-items:baseline">
+                          <span style="font-size:10px;font-weight:700;color:var(--color-accent)">WHEN</span>
+                          <span style="font-size:13px;line-height:1.45">{{ it.when }}</span>
+                          <span style="font-size:10px;font-weight:700;color:var(--color-accent)">THEN</span>
+                          <span style="font-size:13px;line-height:1.45">{{ it.then }}</span>
+                        </div>
+                      </sc-if>
+                    </sc-if>
+                    <sc-if value="{{ it.isEdit }}" hint-placeholder-val="{{ false }}">
+                      <input value="{{ it.dName }}" onChange="{{ it.setName }}" style="width:100%;border:1px solid var(--color-divider);border-radius:11px;background:var(--panel);padding:10px 12px;font-size:14.5px;font-weight:600" />
+                      <input value="{{ it.dNote }}" onChange="{{ it.setNote }}" placeholder="Optional explanation" style="width:100%;margin-top:8px;border:1px solid var(--color-divider);border-radius:11px;background:var(--panel);padding:9px 12px;font-size:13.5px" />
+                      <sc-if value="{{ it.isImp }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;margin-top:10px;align-items:center">
+                          <span style="font-size:10px;font-weight:700;color:var(--color-accent)">WHEN</span>
+                          <input value="{{ it.dWhen }}" onChange="{{ it.setWhen }}" placeholder="I notice myself…" style="width:100%;border:1px solid var(--color-divider);border-radius:11px;background:var(--panel);padding:9px 12px;font-size:13.5px" />
+                          <span style="font-size:10px;font-weight:700;color:var(--color-accent)">THEN</span>
+                          <input value="{{ it.dThen }}" onChange="{{ it.setThen }}" placeholder="I immediately…" style="width:100%;border:1px solid var(--color-divider);border-radius:11px;background:var(--panel);padding:9px 12px;font-size:13.5px" />
+                        </div>
+                      </sc-if>
+                      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+                        <div style="display:flex;gap:6px;flex-wrap:wrap">
+                          <sc-for list="{{ it.scopeOpts }}" as="s" hint-placeholder-count="4">
+                            <button onClick="{{ s.pick }}" style="{{ s.style }}">{{ s.label }}</button>
+                          </sc-for>
+                        </div>
+                        <div style="display:flex;gap:8px">
+                          <button onClick="{{ it.cancel }}" class="btn btn-ghost">Cancel</button>
+                          <button onClick="{{ it.save }}" class="btn btn-primary">Save</button>
+                        </div>
+                      </div>
+                    </sc-if>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+
+            <sc-if value="{{ lib.isEmpty }}" hint-placeholder-val="{{ false }}">
+              <div style="border:1px dashed var(--color-divider);border-radius:16px;padding:26px 24px;font-size:13.5px;color:var(--muted);line-height:1.55;max-width:56ch">{{ lib.emptyLine }}</div>
+            </sc-if>
+
+            <div style="margin-top:26px;border-top:1px solid var(--color-divider);padding-top:16px">
+              <button onClick="{{ lib.toggleArchive }}" style="border:none;background:none;padding:0;font-size:12.5px;font-weight:600;color:var(--accent-ink)">{{ lib.archiveLabel }}</button>
+              <sc-if value="{{ lib.archiveOpen }}" hint-placeholder-val="{{ false }}">
+                <sc-for list="{{ lib.archived }}" as="a" hint-placeholder-count="2">
+                  <div style="margin-top:10px;background:var(--faint);border-radius:14px;padding:13px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+                    <span style="font-size:13.5px;color:var(--muted)">{{ a.name }}</span>
+                    <button onClick="{{ a.restore }}" style="border:none;background:none;font-size:11.5px;color:var(--accent-ink);padding:0">Restore</button>
+                  </div>
+                </sc-for>
+                <div style="{{ lib.archiveEmptyStyle }}">Nothing archived yet.</div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ vw.isData }}" hint-placeholder-val="{{ false }}">
+            <h1 style="font-family:var(--font-heading);font-size:38px;font-weight:700;letter-spacing:-0.03em;margin:0 0 6px;line-height:1.1">Data &amp; export</h1>
+            <p style="font-size:13.5px;color:var(--muted);margin:0 0 24px;max-width:56ch;line-height:1.55">Everything you enter stays private on this device and saves as you type. Export takes a full copy with you.</p>
+            <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:24px 26px;max-width:560px">
+              <div style="display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-bottom:1px solid var(--color-divider);font-size:13.5px"><span style="color:var(--muted)">Visions written</span><strong style="font-weight:600">{{ dw.visions }}</strong></div>
+              <div style="display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-bottom:1px solid var(--color-divider);font-size:13.5px"><span style="color:var(--muted)">Execution cues</span><strong style="font-weight:600">{{ dw.cues }}</strong></div>
+              <div style="display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-bottom:1px solid var(--color-divider);font-size:13.5px"><span style="color:var(--muted)">Impediments</span><strong style="font-weight:600">{{ dw.imps }}</strong></div>
+              <div style="display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-bottom:1px solid var(--color-divider);font-size:13.5px"><span style="color:var(--muted)">Active sprints</span><strong style="font-weight:600">{{ dw.active }}</strong></div>
+              <div style="display:flex;justify-content:space-between;gap:16px;padding:11px 0;font-size:13.5px"><span style="color:var(--muted)">Completed sprints</span><strong style="font-weight:600">{{ dw.done }}</strong></div>
+              <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
+                <button onClick="{{ dw.export }}" class="btn btn-primary">Export JSON</button>
+                <button onClick="{{ loadSample }}" class="btn btn-secondary">Load sample sprint</button>
+                <button onClick="{{ dw.reset }}" class="btn btn-ghost">{{ dw.resetLabel }}</button>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- ================= INSIGHTS TAB ================= -->
+      <sc-if value="{{ isInsights }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:920px">
+          <h1 style="font-family:var(--font-heading);font-size:38px;font-weight:700;letter-spacing:-0.03em;margin:0 0 6px;line-height:1.1">{{ iw.title }}</h1>
+          <p style="font-size:13.5px;color:var(--muted);margin:0 0 26px;max-width:58ch;line-height:1.55">{{ iw.blurb }}</p>
+
+          <sc-if value="{{ iw.isArea }}" hint-placeholder-val="{{ true }}">
+            <sc-if value="{{ iw.hasData }}" hint-placeholder-val="{{ true }}">
+              <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:24px 26px">
+                <div style="font-size:13px;font-weight:600;margin-bottom:16px">Target vs actual — closed days</div>
+                <div style="display:flex;align-items:flex-end;gap:6px;height:180px">
+                  <sc-for list="{{ iw.bars }}" as="b" hint-placeholder-count="8">
+                    <div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%">
+                      <div style="{{ b.targetStyle }}"></div>
+                      <div style="{{ b.actualStyle }}"></div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;gap:6px;margin-top:7px">
+                  <sc-for list="{{ iw.bars }}" as="b" hint-placeholder-count="8">
+                    <div style="flex:1;text-align:center;font-size:10px;color:var(--muted)">{{ b.label }}</div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;gap:18px;margin-top:14px;font-size:11px;color:var(--muted);flex-wrap:wrap">
+                  <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--color-divider);display:inline-block"></span>Target</span>
+                  <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:#2f7d52;display:inline-block"></span>Actual at or over</span>
+                  <span style="display:flex;align-items:center;gap:6px"><span style="{{ missSwatch }}"></span>Actual under</span>
+                </div>
+              </div>
+              <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:24px 26px;margin-top:20px">
+                <div style="font-size:13px;font-weight:600">What this is discovering</div>
+                <sc-for list="{{ iw.patterns }}" as="p" hint-placeholder-count="3">
+                  <div style="padding:16px 0;border-bottom:1px solid var(--color-divider)">
+                    <div style="font-size:16px;line-height:1.45;font-weight:500;max-width:56ch">{{ p.text }}</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:6px">{{ p.basis }}</div>
+                  </div>
+                </sc-for>
+                <div style="{{ iw.patternEmptyStyle }}">Patterns appear once a few days are closed. Keep closing days truthfully.</div>
+                <p style="font-size:11.5px;color:var(--muted);margin:14px 0 0;max-width:56ch;line-height:1.5">These are associations found in your own recorded days, not proven causes.</p>
+              </div>
+            </sc-if>
+            <sc-if value="{{ iw.noData }}" hint-placeholder-val="{{ false }}">
+              <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:28px 30px;max-width:540px">
+                <div style="font-size:15.5px;font-weight:600;margin-bottom:8px">Nothing recorded in this area yet</div>
+                <p style="font-size:13.5px;line-height:1.55;color:var(--muted);margin:0">Insights build from closed days. Run one sprint here and patterns start appearing within the first week.</p>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <sc-if value="{{ iw.isAll }}" hint-placeholder-val="{{ false }}">
+            <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:16px;padding:16px 18px;margin-bottom:20px;font-size:12.5px;line-height:1.55;max-width:62ch;color:var(--muted)">Money, hours and quantity are never added together. Areas are compared only as percent of their own sprint goal — the original unit stays attached to every result.</div>
+            <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:24px 26px">
+              <sc-for list="{{ iw.normalized }}" as="n" hint-placeholder-count="3">
+                <div style="padding:16px 0;border-bottom:1px solid var(--color-divider)">
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px;gap:12px">
+                    <span style="font-weight:600;font-size:14.5px">{{ n.area }}</span>
+                    <span style="font-size:12.5px;color:var(--muted)">{{ n.raw }}</span>
+                  </div>
+                  <div style="height:20px;border-radius:999px;background:var(--faint);position:relative;overflow:hidden">
+                    <div style="{{ n.barStyle }}"></div>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--muted)">
+                    <span>{{ n.pct }} of goal</span><span>100%</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ iw.isHistory }}" hint-placeholder-val="{{ false }}">
+            <sc-if value="{{ iw.hasHistory }}" hint-placeholder-val="{{ true }}">
+              <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:8px 12px 4px">
+                <table class="table" style="width:100%">
+                  <thead><tr><th>Area</th><th>Outcome</th><th>Goal</th><th>Actual</th><th>%</th><th>Streak</th><th>Status</th></tr></thead>
+                  <tbody>
+                    <sc-for list="{{ iw.history }}" as="h" hint-placeholder-count="3">
+                      <tr>
+                        <td style="font-weight:600">{{ h.area }}</td>
+                        <td style="max-width:210px">{{ h.outcome }}</td>
+                        <td>{{ h.goal }}</td>
+                        <td>{{ h.actual }}</td>
+                        <td style="font-weight:700;color:{{ h.pctColor }}">{{ h.pct }}</td>
+                        <td>{{ h.streak }}</td>
+                        <td style="font-size:11.5px;color:var(--muted)">{{ h.status }}</td>
+                      </tr>
+                    </sc-for>
+                  </tbody>
+                </table>
+              </div>
+              <p style="font-size:12px;color:var(--muted);margin-top:14px;max-width:60ch;line-height:1.5">History keeps the vision, unit, targets, mantra, celebration and review each sprint ran under. Editing master items later never rewrites these rows.</p>
+            </sc-if>
+            <sc-if value="{{ iw.noHistory }}" hint-placeholder-val="{{ false }}">
+              <div style="background:var(--panel);border:1px solid var(--color-divider);border-radius:20px;padding:28px 30px;max-width:540px;font-size:13.5px;color:var(--muted);line-height:1.55">No sprint has been reviewed yet. Completed and ended sprints land here with their full record.</div>
+            </sc-if>
+          </sc-if>
+        </div>
+      </sc-if>
+    </main>
+  </div>
+
+  <!-- ================= CLOSE DAY ================= -->
+  <sc-if value="{{ closeOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:color-mix(in srgb, #0b1620 52%, transparent);display:flex;align-items:flex-start;justify-content:center;padding:38px 18px;overflow:auto;z-index:50">
+      <div style="width:100%;max-width:620px;background:var(--panel);border-radius:22px;box-shadow:0 24px 60px rgba(11,22,32,0.28);animation:riseIn 180ms ease-out;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 22px;border-bottom:1px solid var(--color-divider)">
+          <span style="font-size:11.5px;font-weight:600;color:var(--muted)">{{ cd.stepLabel }}</span>
+          <button onClick="{{ cd.cancel }}" style="border:none;background:none;font-size:19px;line-height:1;padding:2px 6px;color:var(--muted)">×</button>
+        </div>
+        <div style="padding:28px 26px 30px">
+          <sc-if value="{{ cd.isActual }}" hint-placeholder-val="{{ true }}">
+            <div style="font-size:10.5px;font-weight:600;letter-spacing:0.03em;color:var(--color-accent)">Actual result</div>
+            <div style="font-size:13.5px;color:var(--muted);margin:6px 0 18px">Target {{ cd.dayName }}: <strong style="font-weight:600;color:var(--color-text)">{{ cd.targetLabel }}</strong></div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <input value="{{ cd.actual }}" onChange="{{ cd.setActual }}" inputmode="numeric" placeholder="0" style="flex:1;min-width:120px;border:1px solid var(--color-divider);border-radius:16px;background:var(--panel);padding:14px 18px;font-family:var(--font-heading);font-size:34px;font-weight:700;letter-spacing:-0.02em" />
+              <sc-if value="{{ cd.hasMinutes }}" hint-placeholder-val="{{ false }}">
+                <input value="{{ cd.actualMin }}" onChange="{{ cd.setActualMin }}" inputmode="numeric" placeholder="00" style="width:118px;border:1px solid var(--color-divider);border-radius:16px;background:var(--panel);padding:14px 18px;font-family:var(--font-heading);font-size:34px;font-weight:700" />
+              </sc-if>
+              <span style="font-size:14px;font-weight:600;min-width:66px;color:var(--muted)">{{ cd.unitLabel }}</span>
+            </div>
+            <div style="font-size:12.5px;color:var(--muted);margin-top:14px;line-height:1.5">{{ cd.actualNote }}</div>
+          </sc-if>
+
+          <sc-if value="{{ cd.isPick }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:17px;font-weight:600;margin-bottom:4px;letter-spacing:-0.01em">{{ cd.pickTitle }}</div>
+            <div style="font-size:12.5px;color:var(--muted);margin-bottom:16px">{{ cd.pickSub }}</div>
+            <sc-for list="{{ cd.options }}" as="o" hint-placeholder-count="4">
+              <button onClick="{{ o.pick }}" style="{{ o.style }}">
+                <span style="{{ o.boxStyle }}">{{ o.mark }}</span>
+                <span style="text-align:left;line-height:1.4">{{ o.label }}</span>
+              </button>
+            </sc-for>
+          </sc-if>
+
+          <sc-if value="{{ cd.isNotes }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:17px;font-weight:600;margin-bottom:4px">Anything worth keeping?</div>
+            <div style="font-size:12.5px;color:var(--muted);margin-bottom:16px">Optional. Skip it and the day still closes complete.</div>
+            <textarea value="{{ cd.notes }}" onChange="{{ cd.setNotes }}" rows="4" placeholder="What happened, what to change tomorrow." style="width:100%;border:1px solid var(--color-divider);border-radius:14px;background:var(--panel);padding:13px 15px;font-size:14.5px;line-height:1.5;resize:vertical"></textarea>
+          </sc-if>
+
+          <sc-if value="{{ cd.isResult }}" hint-placeholder-val="{{ false }}">
+            <div style="animation:popIn 220ms ease-out">
+              <div style="font-size:10.5px;font-weight:600;color:var(--muted)">Target {{ cd.targetLabel }}</div>
+              <div style="font-family:var(--font-heading);font-size:78px;font-weight:700;letter-spacing:-0.04em;line-height:1;margin:6px 0 2px;color:{{ cd.resultColor }}">{{ cd.resultBig }}</div>
+              <div style="font-size:15px;font-weight:600;color:{{ cd.resultColor }}">{{ cd.resultUnit }}</div>
+              <div style="display:flex;gap:4px;margin-top:26px">
+                <sc-for list="{{ cd.strip }}" as="d" hint-placeholder-count="14">
+                  <div style="{{ d.style }}"></div>
+                </sc-for>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-top:20px;padding-top:16px;border-top:1px solid var(--color-divider);font-size:13.5px"><span style="color:var(--muted)">Streak</span><strong style="font-weight:600">{{ cd.streakLabel }}</strong></div>
+              <div style="display:flex;justify-content:space-between;margin-top:9px;font-size:13.5px"><span style="color:var(--muted)">Cumulative</span><strong style="font-weight:600">{{ cd.cumLabel }}</strong></div>
+              <div style="display:flex;justify-content:space-between;margin-top:9px;font-size:13.5px"><span style="color:var(--muted)">{{ cd.nextLabelText }}</span><strong style="font-weight:600">{{ cd.tomorrowLabel }}</strong></div>
+            </div>
+          </sc-if>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 22px;border-top:1px solid var(--color-divider)">
+          <button onClick="{{ cd.back }}" style="{{ cd.backStyle }}">{{ cd.backLabel }}</button>
+          <button onClick="{{ cd.next }}" disabled="{{ cd.nextBlocked }}" style="{{ cd.nextStyle }}">{{ cd.nextLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ================= CREATE SPRINT ================= -->
+  <sc-if value="{{ createOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:color-mix(in srgb, #0b1620 52%, transparent);display:flex;align-items:flex-start;justify-content:center;padding:34px 18px;overflow:auto;z-index:50">
+      <div style="width:100%;max-width:800px;background:var(--panel);border-radius:22px;box-shadow:0 24px 60px rgba(11,22,32,0.28);animation:riseIn 180ms ease-out;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 22px;border-bottom:1px solid var(--color-divider)">
+          <span style="font-size:11.5px;font-weight:600;color:var(--muted)">New sprint · {{ cs.stepLabel }}</span>
+          <button onClick="{{ cs.cancel }}" style="border:none;background:none;font-size:19px;line-height:1;padding:2px 6px;color:var(--muted)">×</button>
+        </div>
+        <div style="display:flex;gap:5px;padding:16px 22px 0">
+          <sc-for list="{{ cs.progress }}" as="p" hint-placeholder-count="4">
+            <div style="{{ p.style }}"></div>
+          </sc-for>
+        </div>
+
+        <div style="padding:24px 24px 28px">
+          <sc-if value="{{ cs.step1 }}" hint-placeholder-val="{{ true }}">
+            <div style="font-size:13px;font-weight:600;margin-bottom:12px">Area</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px" data-cols>
+              <sc-for list="{{ cs.areas }}" as="a" hint-placeholder-count="3">
+                <button onClick="{{ a.pick }}" style="{{ a.style }}">
+                  <span style="font-weight:600;font-size:14.5px">{{ a.name }}</span>
+                  <span style="display:block;font-size:11.5px;margin-top:5px;line-height:1.4;color:var(--muted)">{{ a.note }}</span>
+                </button>
+              </sc-for>
+            </div>
+            <sc-if value="{{ cs.hasVision }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:16px;background:var(--faint);border-radius:14px;padding:14px 16px">
+                <div style="font-size:10.5px;font-weight:600;color:var(--muted);margin-bottom:5px">Active vision — confirm</div>
+                <div style="font-size:13.5px;line-height:1.55">{{ cs.visionText }}</div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ cs.areaBlocked }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:16px;border:1px solid var(--color-accent);border-radius:14px;padding:14px 16px;font-size:13.5px;line-height:1.5">This area has no active 1-year vision. Write one first — the sprint stays blocked until it exists.</div>
+            </sc-if>
+            <div style="font-size:13px;font-weight:600;margin:24px 0 8px">Sprint outcome</div>
+            <input value="{{ cs.outcome }}" onChange="{{ cs.setOutcome }}" placeholder="What this sprint produces" style="width:100%;border:1px solid var(--color-divider);border-radius:14px;background:var(--panel);padding:13px 15px;font-size:15px" />
+          </sc-if>
+
+          <sc-if value="{{ cs.step2 }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:13px;font-weight:600;margin-bottom:10px">Measure — locks at start</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ cs.measures }}" as="m" hint-placeholder-count="3">
+                <button onClick="{{ m.pick }}" style="{{ m.style }}">{{ m.label }}</button>
+              </sc-for>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px" data-cols>
+              <div>
+                <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:7px">{{ cs.goalLabel }}</label>
+                <div style="display:flex;gap:8px">
+                  <input value="{{ cs.goal }}" onChange="{{ cs.setGoal }}" inputmode="numeric" placeholder="0" style="flex:1;min-width:0;border:1px solid var(--color-divider);border-radius:14px;background:var(--panel);padding:12px 14px;font-family:var(--font-heading);font-size:21px;font-weight:700" />
+                  <sc-if value="{{ cs.isHours }}" hint-placeholder-val="{{ false }}">
+                    <input value="{{ cs.goalMin }}" onChange="{{ cs.setGoalMin }}" inputmode="numeric" placeholder="00" style="width:88px;border:1px solid var(--color-divider);border-radius:14px;background:var(--panel);padding:12px 14px;font-family:var(--font-heading);font-size:21px;font-weight:700" />
+                  </sc-if>
+                </div>
+              </div>
+              <div>
+                <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:7px">{{ cs.unitLabel }}</label>
+                <input value="{{ cs.unit }}" onChange="{{ cs.setUnit }}" placeholder="{{ cs.unitPlaceholder }}" disabled="{{ cs.unitLocked }}" style="{{ cs.unitStyle }}" />
+              </div>
+            </div>
+            <sc-if value="{{ cs.isMoney }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:24px;background:var(--faint);border-radius:16px;padding:18px 20px">
+                <div style="font-size:13px;font-weight:600">Usage of funds — required</div>
+                <div style="font-size:12.5px;color:var(--muted);margin:4px 0 14px;line-height:1.5">If I earn this money, what will I use it for? This adds meaning to the goal; it does not decide success.</div>
+                <sc-for list="{{ cs.usage }}" as="u" hint-placeholder-count="2">
+                  <div style="display:flex;gap:8px;margin-bottom:8px">
+                    <input value="{{ u.amount }}" onChange="{{ u.setAmount }}" inputmode="numeric" placeholder="0" style="width:120px;border:1px solid var(--color-divider);border-radius:12px;background:var(--panel);padding:10px 12px;font-size:14px;font-weight:600" />
+                    <input value="{{ u.label }}" onChange="{{ u.setLabel }}" placeholder="savings, debt, travel" style="flex:1;border:1px solid var(--color-divider);border-radius:12px;background:var(--panel);padding:10px 12px;font-size:14px" />
+                    <button onClick="{{ u.remove }}" style="border:none;background:none;color:var(--muted);font-size:17px;padding:0 6px">×</button>
+                  </div>
+                </sc-for>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px">
+                  <button onClick="{{ cs.addUsage }}" class="btn btn-ghost">Add line</button>
+                  <span style="font-size:11.5px;color:var(--muted)">{{ cs.usageSum }}</span>
+                </div>
+              </div>
+            </sc-if>
+            <div style="font-size:13px;font-weight:600;margin:24px 0 10px">Day 1 begins</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ cs.starts }}" as="s" hint-placeholder-count="2">
+                <button onClick="{{ s.pick }}" style="{{ s.style }}">{{ s.label }}</button>
+              </sc-for>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:10px">Days follow the calendar in {{ cs.tz }} and end at 11:59 PM. The time zone locks with the sprint.</div>
+          </sc-if>
+
+          <sc-if value="{{ cs.step3 }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:13px;font-weight:600;margin-bottom:10px">Confidence</div>
+            <div style="display:flex;gap:5px">
+              <sc-for list="{{ cs.confidence }}" as="c" hint-placeholder-count="10">
+                <button onClick="{{ c.pick }}" style="{{ c.style }}">{{ c.n }}</button>
+              </sc-for>
+            </div>
+            <div style="font-size:12.5px;color:var(--muted);margin-top:10px;line-height:1.5">6–8 is the stretch band: hard enough to matter, close enough to hit. {{ cs.confNote }}</div>
+            <div style="margin-top:22px">
+              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:7px">Why this sprint matters</label>
+              <textarea value="{{ cs.why }}" onChange="{{ cs.setWhy }}" rows="2" style="width:100%;border:1px solid var(--color-divider);border-radius:14px;background:var(--panel);padding:12px 14px;font-size:14px;line-height:1.5;resize:vertical"></textarea>
+            </div>
+            <div style="margin-top:16px">
+              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:7px">Celebration on completion</label>
+              <input value="{{ cs.celebration }}" onChange="{{ cs.setCelebration }}" placeholder="What you do the day it lands" style="width:100%;border:1px solid var(--color-divider);border-radius:14px;background:var(--panel);padding:12px 14px;font-size:14px" />
+            </div>
+            <div style="margin-top:16px">
+              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:7px">Mantra — required, shown on Today as a quote</label>
+              <input value="{{ cs.mantra }}" onChange="{{ cs.setMantra }}" placeholder="The obstacle is the way." style="width:100%;border:1px solid var(--color-divider);border-radius:14px;background:var(--panel);padding:12px 14px;font-size:14px;font-style:italic" />
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ cs.step4 }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap">
+              <span style="font-size:13px;font-weight:600">14 daily targets</span>
+              <div style="display:flex;gap:6px">
+                <sc-for list="{{ cs.modes }}" as="m" hint-placeholder-count="2">
+                  <button onClick="{{ m.pick }}" style="{{ m.style }}">{{ m.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px" data-cols>
+              <sc-for list="{{ cs.plan }}" as="d" hint-placeholder-count="14">
+                <div style="{{ d.style }}">
+                  <span style="font-size:9.5px;color:var(--muted)"><strong style="color:var(--color-accent);font-weight:700">{{ d.num }}</strong> {{ d.dow }}</span>
+                  <sc-if value="{{ d.editable }}" hint-placeholder-val="{{ false }}">
+                    <input value="{{ d.raw }}" onChange="{{ d.set }}" inputmode="numeric" placeholder="0" style="width:100%;margin-top:4px;border:1px solid var(--color-divider);border-radius:9px;background:var(--panel);padding:6px 7px;font-size:13px;font-weight:600" />
+                  </sc-if>
+                  <sc-if value="{{ d.fixed }}" hint-placeholder-val="{{ true }}">
+                    <span style="font-size:13.5px;font-weight:600;margin-top:3px">{{ d.value }}</span>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:10px;font-weight:600">{{ cs.planSum }}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:5px;line-height:1.5;max-width:64ch">{{ cs.planNote }}</div>
+
+            <div style="margin-top:24px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+                <span style="font-size:13px;font-weight:600">Impediments <span style="{{ cs.impCountStyle }}">{{ cs.impCount }}</span></span>
+                <span style="font-size:11.5px;color:var(--muted)">Global and {{ cs.areaName }}</span>
+              </div>
+              <div style="margin-top:10px">
+                <sc-for list="{{ cs.impOpts }}" as="o" hint-placeholder-count="4">
+                  <button onClick="{{ o.pick }}" style="{{ o.style }}"><span style="{{ o.boxStyle }}">{{ o.mark }}</span><span style="text-align:left;line-height:1.4">{{ o.label }}</span><span style="{{ o.tagStyle }}">{{ o.tag }}</span></button>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <input value="{{ cs.newImp }}" onChange="{{ cs.setNewImp }}" placeholder="Create a new impediment" style="flex:1;border:1px solid var(--color-divider);border-radius:12px;background:var(--panel);padding:10px 13px;font-size:13.5px" />
+                <button onClick="{{ cs.addImp }}" class="btn btn-secondary">Create</button>
+              </div>
+            </div>
+
+            <sc-if value="{{ cs.hasImps }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:22px;background:var(--faint);border-radius:16px;padding:18px 20px">
+                <div style="font-size:13px;font-weight:600">Highest impediment</div>
+                <div style="font-size:12.5px;color:var(--muted);margin:4px 0 12px;line-height:1.5">The obstacle most likely to cause this sprint to fail. It must carry a WHEN → THEN proof point.</div>
+                <sc-for list="{{ cs.highestOpts }}" as="o" hint-placeholder-count="3">
+                  <button onClick="{{ o.pick }}" style="{{ o.style }}"><span style="{{ o.boxStyle }}">{{ o.mark }}</span><span style="text-align:left;line-height:1.4">{{ o.label }}</span></button>
+                </sc-for>
+                <sc-if value="{{ cs.needProof }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:grid;grid-template-columns:auto 1fr;gap:9px 12px;margin-top:14px;align-items:center">
+                    <span style="font-size:10px;font-weight:700;color:var(--color-accent)">WHEN</span>
+                    <input value="{{ cs.pWhen }}" onChange="{{ cs.setPWhen }}" placeholder="I notice myself delaying my first work block" style="width:100%;border:1px solid var(--color-divider);border-radius:12px;background:var(--panel);padding:10px 13px;font-size:13.5px" />
+                    <span style="font-size:10px;font-weight:700;color:var(--color-accent)">THEN</span>
+                    <input value="{{ cs.pThen }}" onChange="{{ cs.setPThen }}" placeholder="I start a 10-minute timer on the smallest executable task" style="width:100%;border:1px solid var(--color-divider);border-radius:12px;background:var(--panel);padding:10px 13px;font-size:13.5px" />
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <div style="margin-top:22px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+                <span style="font-size:13px;font-weight:600">Execution cues <span style="{{ cs.cueCountStyle }}">{{ cs.cueCount }}</span></span>
+                <span style="font-size:11.5px;color:var(--muted)">What should I remember to help me succeed?</span>
+              </div>
+              <div style="margin-top:10px">
+                <sc-for list="{{ cs.cueOpts }}" as="o" hint-placeholder-count="3">
+                  <button onClick="{{ o.pick }}" style="{{ o.style }}"><span style="{{ o.boxStyle }}">{{ o.mark }}</span><span style="text-align:left;line-height:1.4">{{ o.label }}</span><span style="{{ o.tagStyle }}">{{ o.tag }}</span></button>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <input value="{{ cs.newCue }}" onChange="{{ cs.setNewCue }}" placeholder="Create a new execution cue" style="flex:1;border:1px solid var(--color-divider);border-radius:12px;background:var(--panel);padding:10px 13px;font-size:13.5px" />
+                <button onClick="{{ cs.addCue }}" class="btn btn-secondary">Create</button>
+              </div>
+            </div>
+
+            <button onClick="{{ cs.toggleAlign }}" style="{{ cs.alignStyle }}">
+              <span style="{{ cs.alignBoxStyle }}">{{ cs.alignMark }}</span>
+              <span style="text-align:left;line-height:1.45">If you complete this sprint, will it meaningfully move you toward your 1-year vision?</span>
+            </button>
+          </sc-if>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 22px;border-top:1px solid var(--color-divider)">
+          <button onClick="{{ cs.back }}" style="{{ cs.backStyle }}">{{ cs.backLabel }}</button>
+          <div style="display:flex;align-items:center;gap:14px">
+            <span style="font-size:12px;color:var(--accent-ink);text-align:right">{{ cs.hint }}</span>
+            <button onClick="{{ cs.next }}" disabled="{{ cs.nextBlocked }}" style="{{ cs.nextStyle }}">{{ cs.nextLabel }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ================= SMALL PICKER (add cue/imp, change highest, edit proof) ================= -->
+  <sc-if value="{{ addOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:color-mix(in srgb, #0b1620 52%, transparent);display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto;z-index:60">
+      <div style="width:100%;max-width:560px;background:var(--panel);border-radius:22px;box-shadow:0 24px 60px rgba(11,22,32,0.28);overflow:hidden">
+        <div style="padding:18px 22px;border-bottom:1px solid var(--color-divider);font-size:13px;font-weight:600">{{ ad.title }}</div>
+        <div style="padding:22px">
+          <div style="font-size:12.5px;color:var(--muted);margin-bottom:16px;line-height:1.5">{{ ad.blurb }}</div>
+          <sc-for list="{{ ad.options }}" as="o" hint-placeholder-count="4">
+            <button onClick="{{ o.pick }}" style="{{ o.style }}"><span style="{{ o.boxStyle }}">{{ o.mark }}</span><span style="text-align:left;line-height:1.4">{{ o.label }}</span><span style="{{ o.tagStyle }}">{{ o.tag }}</span></button>
+          </sc-for>
+          <sc-if value="{{ ad.hasProof }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:9px 12px;margin-top:8px;align-items:center">
+              <span style="font-size:10px;font-weight:700;color:var(--color-accent)">WHEN</span>
+              <input value="{{ ad.pWhen }}" onChange="{{ ad.setPWhen }}" placeholder="I notice myself…" style="width:100%;border:1px solid var(--color-divider);border-radius:12px;background:var(--panel);padding:10px 13px;font-size:13.5px" />
+              <span style="font-size:10px;font-weight:700;color:var(--color-accent)">THEN</span>
+              <input value="{{ ad.pThen }}" onChange="{{ ad.setPThen }}" placeholder="I immediately…" style="width:100%;border:1px solid var(--color-divider);border-radius:12px;background:var(--panel);padding:10px 13px;font-size:13.5px" />
+            </div>
+          </sc-if>
+          <sc-if value="{{ ad.hasCreate }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:8px;margin-top:14px">
+              <input value="{{ ad.draft }}" onChange="{{ ad.setDraft }}" placeholder="{{ ad.placeholder }}" style="flex:1;border:1px solid var(--color-divider);border-radius:12px;background:var(--panel);padding:11px 13px;font-size:14px" />
+              <button onClick="{{ ad.create }}" class="btn btn-secondary">Create</button>
+            </div>
+          </sc-if>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 22px;border-top:1px solid var(--color-divider)">
+          <span style="font-size:12px;color:var(--accent-ink)">{{ ad.hint }}</span>
+          <button onClick="{{ ad.done }}" disabled="{{ ad.blocked }}" style="{{ ad.doneStyle }}">{{ ad.doneLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ================= CELEBRATION ================= -->
+  <sc-if value="{{ celebrationOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:color-mix(in srgb, #0b1620 66%, transparent);display:flex;align-items:center;justify-content:center;padding:20px;z-index:70">
+      <div style="width:100%;max-width:580px;background:var(--color-accent);color:#fff;border-radius:24px;padding:46px 42px;animation:popIn 240ms ease-out">
+        <div style="font-size:11px;font-weight:600;letter-spacing:0.03em;opacity:0.85">{{ cb.kicker }}</div>
+        <div style="font-family:var(--font-heading);font-size:44px;font-weight:700;letter-spacing:-0.03em;line-height:1.05;margin:12px 0 14px">{{ cb.headline }}</div>
+        <div style="font-size:15px;line-height:1.55;max-width:40ch;opacity:0.95">{{ cb.body }}</div>
+        <button onClick="{{ cb.go }}" style="margin-top:28px;background:#fff;color:var(--accent-ink);border:none;border-radius:14px;padding:14px 24px;font-size:13.5px;font-weight:600">Begin sprint review</button>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1340,&quot;height&quot;:920},&quot;palette&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Lake&quot;,&quot;Meadow&quot;,&quot;Dusk&quot;,&quot;Sand&quot;],&quot;default&quot;:&quot;Lake&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Theme&quot;},&quot;underTargetColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#c0392b&quot;,&quot;options&quot;:[&quot;#c0392b&quot;,&quot;#b3261e&quot;,&quot;#8c2f22&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Feedback&quot;},&quot;showDateBar&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Shell&quot;}}">
+class Component extends DCLogic {
+  KEY = "sprintApp.v4";
+  GREEN = "#2f7d52";
+  get MISS() { return this.props.underTargetColor || "#c0392b"; }
+  PALETTES = {
+    Lake: { bg: "#f7fbfd", ink: "#16242e", accent: "#2b7ea8", ink2: "#1d6188", wash: "linear-gradient(180deg,#eff7fb 0%,#fbfdfe 46%)" },
+    Meadow: { bg: "#f7fbf8", ink: "#1a2620", accent: "#3f8560", ink2: "#2a6446", wash: "linear-gradient(180deg,#eff7f2 0%,#fbfdfc 46%)" },
+    Dusk: { bg: "#f9f9fd", ink: "#1c1b2a", accent: "#5b5bd6", ink2: "#4141ab", wash: "linear-gradient(180deg,#f2f2fb 0%,#fcfcfe 46%)" },
+    Sand: { bg: "#fdfbf8", ink: "#241f1a", accent: "#b4763c", ink2: "#8c5828", wash: "linear-gradient(180deg,#faf4ec 0%,#fefdfb 46%)" }
+  };
+  AREAS = ["health", "wealth", "relationships"];
+
+  state = (() => {
+    const empty = {
+      tab: "sprints", sel: "area:health", visionArea: "health", visionSec: "vision",
+      libScope: "all", insightScope: "health", libArchive: false, visionArchive: false,
+      areas: { health: { name: "Health", vision: "", archive: [] }, wealth: { name: "Wealth", vision: "", archive: [] }, relationships: { name: "Relationships", vision: "", archive: [] } },
+      cues: [], imps: [], sprints: [], history: [],
+      visionDraft: null, libDraft: { name: "", note: "", scope: "global" },
+      editing: null, review: { lesson: "", moved: null },
+      close: null, create: null, add: null, celebrate: null, mantraEdit: null, resetArm: false, endArm: null
+    };
+    try {
+      const raw = window.localStorage.getItem("sprintApp.v4");
+      if (raw) {
+        const d = JSON.parse(raw);
+        return Object.assign({}, empty, d, { close: null, create: null, add: null, celebrate: null, editing: null, mantraEdit: null, visionDraft: null, resetArm: false });
+      }
+    } catch (e) {}
+    return empty;
+  })();
+
+  componentDidMount() { this.sweep(); }
+  componentDidUpdate() { this.persist(); }
+
+  persist() {
+    const s = this.state;
+    try {
+      window.localStorage.setItem(this.KEY, JSON.stringify({
+        tab: s.tab, sel: s.sel, visionArea: s.visionArea, visionSec: s.visionSec,
+        libScope: s.libScope, insightScope: s.insightScope,
+        areas: s.areas, cues: s.cues, imps: s.imps, sprints: s.sprints, history: s.history
+      }));
+    } catch (e) {}
+  }
+
+  // sprints whose 14 days have elapsed move to review
+  sweep() {
+    const due = this.state.sprints.filter(sp => sp.status === "active" && this.dayIdx(sp) > 13);
+    if (due.length) this.setState(s => ({ sprints: s.sprints.map(x => due.indexOf(x) >= 0 ? Object.assign({}, x, { status: "review", endedEarly: false }) : x) }));
+  }
+
+  // ---------- date + measure helpers ----------
+  today0() { const t = new Date(); t.setHours(0, 0, 0, 0); return t; }
+  iso(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  dateOf(sp, i) { const p = sp.startISO.split("-"); const d = new Date(+p[0], +p[1] - 1, +p[2]); d.setDate(d.getDate() + i); return d; }
+  dayIdx(sp) { return Math.round((this.today0() - this.dateOf(sp, 0)) / 86400000); }
+  dow(d) { return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]; }
+  isWk(d) { return d.getDay() === 0 || d.getDay() === 6; }
+  fmt(sp, v) {
+    if (v == null) return "—";
+    if (sp.measure === "hours") { const h = Math.floor(v / 60), m = v % 60; return m ? h + " h " + m + " m" : h + " h"; }
+    return Math.round(v).toLocaleString("en-US") + (sp.unit ? " " + sp.unit : "");
+  }
+  big(sp, v) {
+    if (v == null) return "—";
+    if (sp.measure === "hours") { const h = Math.floor(v / 60), m = v % 60; return m ? h + ":" + String(m).padStart(2, "0") : String(h); }
+    return Math.round(v).toLocaleString("en-US");
+  }
+  unitOf(sp) { return sp.measure === "hours" ? "hours" : (sp.unit || "units"); }
+  cum(sp) { return sp.days.reduce((a, d) => a + (d && d.actual != null ? d.actual : 0), 0); }
+  streakOf(sp) {
+    const idx = Math.min(13, this.dayIdx(sp)); let st = 0;
+    for (let i = 0; i < idx; i++) { const d = sp.days[i]; if (d && d.actual != null && !d.late) st++; else st = 0; }
+    const t = sp.days[idx];
+    if (t && t.actual != null && !t.late) st++;
+    return st;
+  }
+  cur() { return this.state.sprints.find(s => s.id === this.state.sel) || null; }
+  areaOf(sp) { return this.state.areas[sp.area]; }
+  cueById(id) { return this.state.cues.find(x => x.id === id); }
+  impById(id) { return this.state.imps.find(x => x.id === id); }
+  eligible(list, area) { return list.filter(x => !x.arch && (x.scope === "global" || x.scope === area)); }
+  patch(id, fn) { this.setState(s => ({ sprints: s.sprints.map(x => x.id === id ? Object.assign({}, x, fn(x)) : x) })); }
+  usedIn(kind, id) { const key = kind === "cues" ? "cues" : "imps"; return this.state.sprints.some(sp => sp[key].indexOf(id) >= 0) || this.state.history.some(h => (h[key] || []).indexOf(id) >= 0); }
+  newDay() { return { actual: null, imps: [], impTop: null, cues: [], cueTop: null, notes: "", late: false, tasks: [{ text: "", done: false }] }; }
+
+  // ---------- shared styles ----------
+  optBtn(active, extra) {
+    return Object.assign({ display: "flex", alignItems: "center", gap: "11px", width: "100%", textAlign: "left",
+      border: "1px solid " + (active ? "var(--color-accent)" : "var(--color-divider)"), borderRadius: "12px",
+      background: active ? "color-mix(in srgb, var(--color-accent) 9%, var(--panel))" : "var(--panel)",
+      padding: "11px 13px", marginBottom: "7px", fontSize: "14px", fontWeight: active ? 600 : 400, color: "var(--color-text)" }, extra || {});
+  }
+  box(active, round) {
+    return { width: "18px", height: "18px", flex: "0 0 18px", border: "1.5px solid " + (active ? "var(--color-accent)" : "var(--muted)"),
+      borderRadius: round ? "999px" : "6px", display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: "11px", fontWeight: 700, background: active ? "var(--color-accent)" : "transparent", color: active ? "#fff" : "transparent" };
+  }
+  solid(disabled) {
+    return { border: "none", borderRadius: "12px", background: disabled ? "var(--faint)" : "var(--color-accent)",
+      color: disabled ? "var(--muted)" : "#fff", padding: "13px 24px", fontSize: "13.5px", fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer" };
+  }
+  ghost(hidden) { return { border: "none", background: "none", padding: "10px 2px", fontSize: "13px", fontWeight: 600, color: "var(--muted)", visibility: hidden ? "hidden" : "visible" }; }
+  chip(on) {
+    return { border: "1px solid " + (on ? "var(--color-accent)" : "var(--color-divider)"), borderRadius: "999px",
+      background: on ? "var(--color-accent)" : "var(--panel)", color: on ? "#fff" : "var(--muted)",
+      padding: "7px 15px", fontSize: "12.5px", fontWeight: 600, whiteSpace: "nowrap" };
+  }
+  seg(on) {
+    return { border: "1px solid " + (on ? "var(--color-text)" : "var(--color-divider)"), borderRadius: "12px",
+      background: on ? "var(--color-text)" : "var(--panel)", color: on ? "#fff" : "var(--color-text)",
+      padding: "12px 20px", fontSize: "13.5px", fontWeight: 600, textAlign: "left" };
+  }
+  scopeLabel(sc) { return sc === "global" ? "Global" : (this.state.areas[sc] ? this.state.areas[sc].name : sc); }
+
+  // ---------- "same daily target": spread the remaining goal evenly over future days (past + today stay locked) ----------
+  equalize(sp) {
+    const idx = this.dayIdx(sp), t = sp.targets.slice(), fut = [];
+    for (let j = 0; j < 14; j++) if (j > idx) fut.push(j);
+    let fixed = 0; for (let j = 0; j < 14; j++) if (j <= idx) fixed += t[j];
+    const rem = Math.max(0, sp.goal - fixed);
+    const per = fut.length ? Math.floor(rem / fut.length) : 0, extra = fut.length ? rem - per * fut.length : 0;
+    fut.forEach((j, k) => { t[j] = per + (k >= fut.length - extra ? 1 : 0); });
+    return t;
+  }
+  planDelta(sp, planned) {
+    const delta = planned - sp.goal;
+    return { text: delta === 0 ? "Plan matches the goal" : (delta > 0 ? this.fmt(sp, delta) + " above goal" : this.fmt(sp, -delta) + " below goal"),
+      style: { fontWeight: 600, color: delta === 0 ? this.GREEN : (delta < 0 ? this.MISS : "var(--color-text)") } };
+  }
+
+  // ---------- close-day flow ----------
+  closeSteps() {
+    const c = this.state.close; const st = ["actual", "imps"];
+    if (c && c.imps.length) st.push("impTop");
+    st.push("cues");
+    if (c && c.cues.length) st.push("cueTop");
+    st.push("notes", "result");
+    return st;
+  }
+  commitClose() {
+    const sp = this.cur(), c = this.state.close;
+    let v = parseInt(c.actual || "0", 10) || 0;
+    if (sp.measure === "hours") v = v * 60 + (parseInt(c.actualMin || "0", 10) || 0);
+    const i = c.dayIndex, late = i < this.dayIdx(sp);
+    this.patch(sp.id, s => {
+      const days = s.days.slice();
+      days[i] = Object.assign({}, days[i], { actual: v, imps: c.imps, impTop: c.impTop, cues: c.cues, cueTop: c.cueTop, notes: c.notes, late });
+      return { days };
+    });
+    this.setState({ close: Object.assign({}, c, { step: "result", committed: v, late }) });
+  }
+  advanceClose(dir) {
+    const c = this.state.close; if (!c) return;
+    const st = this.closeSteps(), i = st.indexOf(c.step);
+    if (dir < 0) { if (i > 0) this.setState({ close: Object.assign({}, c, { step: st[i - 1] }) }); else this.setState({ close: null }); return; }
+    if (c.step === "notes") { this.commitClose(); return; }
+    if (c.step === "result") { this.setState({ close: null }); return; }
+    this.setState({ close: Object.assign({}, c, { step: st[i + 1] }) });
+  }
+
+  // ---------- library mutations ----------
+  addLibItem(kind, name, note, scope) {
+    const clean = (name || "").trim(); if (!clean) return null;
+    const id = kind.slice(0, 1) + Date.now() + Math.floor(Math.random() * 99);
+    const item = kind === "cues" ? { id, name: clean, note: note || "", scope: scope || "global", arch: false }
+      : { id, name: clean, note: note || "", scope: scope || "global", when: "", then: "", arch: false };
+    this.setState(s => ({ [kind]: s[kind].concat([item]) }));
+    return id;
+  }
+  move(kind, id, dir) {
+    this.setState(s => {
+      const arr = s[kind].slice(), i = arr.findIndex(x => x.id === id), j = i + dir;
+      if (i < 0 || j < 0 || j >= arr.length) return {};
+      const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+      return { [kind]: arr };
+    });
+  }
+
+  loadSample() {
+    const start = this.today0(); start.setDate(start.getDate() - 8);
+    const cues = [
+      { id: "c1", name: "Ask “How much does this pay?” whenever I schedule something", note: "Keeps me conscious of whether my time moves the Wealth goal.", scope: "wealth", arch: false },
+      { id: "c2", name: "Do the highest-value task before checking messages", note: "", scope: "global", arch: false },
+      { id: "c3", name: "Spend prime energy on prime work", note: "", scope: "global", arch: false }
+    ];
+    const imps = [
+      { id: "i1", name: "Starting late", note: "", scope: "global", when: "I notice myself delaying my first work block", then: "I start a 10-minute timer on the smallest executable task", arch: false },
+      { id: "i2", name: "Phone distraction", note: "", scope: "global", when: "I instinctively pick up my phone during a work block", then: "I put it outside the room and restart the task", arch: false },
+      { id: "i3", name: "Avoiding sales calls", note: "", scope: "wealth", when: "", then: "", arch: false },
+      { id: "i4", name: "Poor sleep", note: "Affects every area.", scope: "global", when: "", then: "", arch: false }
+    ];
+    const targets = [714, 714, 714, 714, 714, 714, 714, 714, 714, 714, 714, 714, 714, 718];
+    const acts = [620, 900, 0, 1100, 540, 780, 950, 610];
+    const days = targets.map((t, i) => {
+      if (i >= acts.length) return this.newDay();
+      const low = acts[i] < t;
+      return { actual: acts[i], imps: low ? [i % 2 ? "i2" : "i1"] : [], impTop: low ? (i % 2 ? "i2" : "i1") : null,
+        cues: low ? [] : ["c1", "c2"], cueTop: low ? null : "c1", notes: "", late: i === 2,
+        tasks: [{ text: i === 0 ? "Two dials before email" : "", done: i === 0 }] };
+    });
+    this.setState(s => ({
+      areas: Object.assign({}, s.areas, { wealth: Object.assign({}, s.areas.wealth, { vision: "Advisory practice runs on retainer income, not one-off projects: 12 retained clients, six-figure recurring revenue, and a week that has room in it." }) }),
+      cues, imps,
+      sprints: [{ id: "sample1", area: "wealth", outcome: "10,000 USD of signed retainer revenue", measure: "money", unit: "USD",
+        goal: 10000, startISO: this.iso(start), tz: Intl.DateTimeFormat().resolvedOptions().timeZone, status: "active",
+        targetMode: "same", confidence: 7, why: "Retainers are the only path to a week with room in it.", celebration: "Two nights away, booked before Day 14",
+        mantra: "The obstacle is the way.", usage: [{ amount: 5000, label: "savings" }, { amount: 3000, label: "debt" }, { amount: 2000, label: "travel" }],
+        targets, days, cues: ["c1", "c2"], imps: ["i1", "i2", "i3"], highest: "i1" }],
+      tab: "sprints", sel: "sample1"
+    }));
+  }
+
+  patternsFor(sp) {
+    const closed = sp.days.map((d, i) => ({ d, i, t: sp.targets[i] })).filter(x => x.d && x.d.actual != null);
+    if (closed.length < 4) return [];
+    const sorted = closed.slice().sort((a, b) => (a.d.actual / (a.t || 1)) - (b.d.actual / (b.t || 1)));
+    const n = Math.max(2, Math.floor(closed.length / 2));
+    const low = sorted.slice(0, n), high = sorted.slice(-n), out = [];
+    sp.imps.forEach(id => {
+      const it = this.impById(id); if (!it) return;
+      const c = low.filter(x => x.d.imps.indexOf(id) >= 0).length;
+      if (c >= 2) out.push({ text: it.name + " appeared on " + c + " of your " + n + " lowest-result days.", basis: closed.length + " closed days · this sprint" });
+    });
+    sp.cues.forEach(id => {
+      const it = this.cueById(id); if (!it) return;
+      const c = high.filter(x => x.d.cues.indexOf(id) >= 0).length;
+      if (c >= 2) out.push({ text: "“" + it.name + "” was selected on " + c + " of your " + n + " strongest days.", basis: closed.length + " closed days · this sprint" });
+    });
+    return out.slice(0, 4);
+  }
+
+  renderVals() {
+    const S = this.state, sp = this.cur(), MISS = this.MISS, P = this.PALETTES[this.props.palette] || this.PALETTES.Lake;
+
+    const tabs = [["sprints", "Sprints"], ["vision", "Vision"], ["insights", "Insights"]].map(([id, label]) => ({
+      label, go: () => this.setState({ tab: id }),
+      style: { border: "none", background: "transparent", boxShadow: S.tab === id ? "inset 0 -2px 0 var(--color-accent)" : "none",
+        color: S.tab === id ? "var(--color-text)" : "var(--muted)", padding: "0 22px", fontSize: "13.5px", fontWeight: 600, minHeight: "58px" }
+    }));
+
+    const sideBtn = (active) => ({ display: "block", width: "calc(100% - 20px)", textAlign: "left", border: "none", borderRadius: "12px",
+      marginLeft: "10px", marginBottom: "2px", background: active ? "color-mix(in srgb, var(--color-accent) 10%, transparent)" : "transparent",
+      paddingTop: "11px", paddingRight: "14px", paddingBottom: "12px", paddingLeft: "14px", cursor: "pointer" });
+    const metaS = (accent) => ({ fontSize: "10.5px", color: accent ? "var(--color-accent)" : "var(--muted)", whiteSpace: "nowrap", fontWeight: 600 });
+    const subS = (show) => ({ display: show ? "block" : "none", fontSize: "11.5px", color: "var(--muted)", marginTop: "3px", lineHeight: 1.4 });
+
+    let sideTitle = "", sideItems = [];
+    if (S.tab === "sprints") {
+      sideTitle = "Sprints";
+      sideItems = this.AREAS.map(k => {
+        const a = S.areas[k], s = S.sprints.find(x => x.area === k);
+        const active = s ? S.sel === s.id : S.sel === "area:" + k;
+        const idx = s ? this.dayIdx(s) : 0;
+        return { label: a.name,
+          meta: s ? (s.status === "review" ? "Review" : "Day " + Math.min(14, Math.max(1, idx + 1)) + "/14") : (a.vision ? "Ready" : "Locked"),
+          metaStyle: metaS(!!s && s.status === "review"),
+          sub: s ? (s.status === "review" ? "Review required before the next one" : s.outcome) : (a.vision ? "No active sprint" : "No 1-year vision yet"),
+          subStyle: subS(true), style: sideBtn(active),
+          go: () => this.setState({ sel: s ? s.id : "area:" + k }) };
+      });
+    } else if (S.tab === "vision") {
+      sideTitle = "Vision";
+      this.AREAS.forEach(k => sideItems.push({ label: S.areas[k].name + " vision", meta: S.areas[k].vision ? "Set" : "Empty",
+        metaStyle: metaS(false), sub: "", subStyle: subS(false),
+        style: sideBtn(S.visionSec === "vision" && S.visionArea === k),
+        go: () => this.setState({ visionSec: "vision", visionArea: k, visionDraft: null }) }));
+      sideItems.push({ label: "Execution cues", meta: String(S.cues.filter(x => !x.arch).length), metaStyle: metaS(false), sub: "", subStyle: subS(false),
+        style: sideBtn(S.visionSec === "cues"), go: () => this.setState({ visionSec: "cues", libArchive: false }) });
+      sideItems.push({ label: "Impediments", meta: String(S.imps.filter(x => !x.arch).length), metaStyle: metaS(false), sub: "", subStyle: subS(false),
+        style: sideBtn(S.visionSec === "imps"), go: () => this.setState({ visionSec: "imps", libArchive: false }) });
+      sideItems.push({ label: "Data & export", meta: "", metaStyle: metaS(false), sub: "", subStyle: subS(false),
+        style: sideBtn(S.visionSec === "data"), go: () => this.setState({ visionSec: "data" }) });
+    } else {
+      sideTitle = "Insights";
+      [["health", "Health"], ["wealth", "Wealth"], ["relationships", "Relationships"], ["all", "All areas"], ["history", "Sprint history"]].forEach(([k, label]) =>
+        sideItems.push({ label, meta: "", metaStyle: metaS(false), sub: "", subStyle: subS(false),
+          style: sideBtn(S.insightScope === k), go: () => this.setState({ insightScope: k }) }));
+    }
+
+    const vals = {
+      themeVars: { "--page": P.wash, "--panel": "#ffffff", "--color-bg": P.bg, "--color-surface": "#ffffff",
+        "--color-text": P.ink, "--color-accent": P.accent, "--accent-ink": P.ink2,
+        "--color-accent-100": "color-mix(in srgb, " + P.accent + " 12%, #fff)", "--color-accent-200": "color-mix(in srgb, " + P.accent + " 22%, #fff)",
+        "--color-accent-600": P.ink2, "--color-accent-700": P.ink2, "--color-accent-800": P.ink2, "--color-accent-900": P.ink,
+        "--color-divider": "color-mix(in srgb, " + P.ink + " 13%, transparent)",
+        "--muted": "color-mix(in srgb, " + P.ink + " 62%, transparent)",
+        "--faint": "color-mix(in srgb, " + P.ink + " 6%, transparent)",
+        "--font-heading": "'Plus Jakarta Sans', system-ui, sans-serif", "--font-body": "'Plus Jakarta Sans', system-ui, sans-serif" },
+      tabs, sideTitle, sideItems,
+      isSprints: S.tab === "sprints", isVision: S.tab === "vision", isInsights: S.tab === "insights",
+      todayLabel: new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
+      dateBarStyle: { display: this.props.showDateBar ? "flex" : "none", alignItems: "center", padding: "0 24px", fontSize: "11.5px", color: "var(--muted)" },
+      missSwatch: { width: "11px", height: "11px", borderRadius: "3px", background: MISS, display: "inline-block" },
+      loadSample: () => this.loadSample(),
+      openCreate: () => this.setState({ create: { step: 1, area: null, outcome: "", measure: "money", goal: "", goalMin: "", unit: "USD",
+        start: "today", confidence: 7, why: "", celebration: "", mantra: "", usage: [{ amount: "", label: "" }], mode: "same", custom: Array(14).fill(""),
+        cues: [], imps: [], highest: null, pWhen: "", pThen: "", newCue: "", newImp: "", align: false } }),
+      showToday: S.tab === "sprints" && !!sp && sp.status === "active",
+      showReview: S.tab === "sprints" && !!sp && sp.status === "review",
+      showBlocked: S.tab === "sprints" && !sp,
+      closeOpen: !!S.close, createOpen: !!S.create, addOpen: !!S.add, celebrationOpen: !!S.celebrate,
+      strip: [], tasks: [], sprintCues: [], sprintImps: [], sp: {}, plan: {},
+      cd: {}, cs: {}, ad: {}, cb: {}, rv: {}, vw: {}, lib: {}, iw: {}, bl: {}, dw: {}
+    };
+
+    // ---------------- blocked / empty ----------------
+    if (vals.showBlocked) {
+      const k = String(S.sel).startsWith("area:") ? String(S.sel).slice(5) : "health";
+      const a = S.areas[k], hasV = !!a.vision, anything = S.cues.length || S.imps.length || S.sprints.length;
+      vals.bl = { areaName: a.name,
+        title: hasV ? "No sprint running in " + a.name : "No sprint can start here yet",
+        body: hasV ? "The vision is set. Create a 14-day sprint with a locked numeric goal, 1–5 impediments and 1–3 execution cues."
+          : "A sprint must move a 1-year vision. Write the " + a.name + " vision and the sprint unlocks — the other two areas stay untouched.",
+        actLabel: hasV ? "Create a " + a.name + " sprint" : "Write the " + a.name + " vision",
+        act: () => hasV ? vals.openCreate() : this.setState({ tab: "vision", visionSec: "vision", visionArea: k, visionDraft: null }),
+        showSample: !anything };
+    }
+
+    // ---------------- today ----------------
+    if (sp && sp.status === "active") {
+      const area = this.areaOf(sp), idx = Math.max(0, Math.min(13, this.dayIdx(sp)));
+      const day = sp.days[idx] || this.newDay(), cum = this.cum(sp), streak = this.streakOf(sp);
+      const target = sp.targets[idx], done = day.actual != null;
+      const remain = Math.max(0, sp.goal - cum), left = 14 - idx - (done ? 1 : 0);
+      const highest = this.impById(sp.highest);
+
+      vals.strip = sp.targets.map((t, i) => {
+        const dt = this.dateOf(sp, i), d = sp.days[i], closed = d && d.actual != null, hit = closed && d.actual >= t;
+        return { num: "D" + (i + 1), dow: this.dow(dt).slice(0, 2), dom: dt.getDate(),
+          title: "Day " + (i + 1) + " · " + this.dow(dt) + " " + dt.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " · target " + this.fmt(sp, t) + (closed ? " · actual " + this.fmt(sp, d.actual) : ""),
+          style: { flex: 1, minWidth: "34px", display: "flex", flexDirection: "column", alignItems: "center", padding: "9px 2px 8px",
+            border: i === idx ? "1.5px solid var(--color-accent)" : "1px solid var(--color-divider)", borderRadius: "10px",
+            background: closed ? "var(--faint)" : (this.isWk(dt) ? "var(--faint)" : "var(--panel)") },
+          markStyle: { display: "block", width: "16px", height: "3px", borderRadius: "2px", marginTop: "7px",
+            background: closed ? (hit ? this.GREEN : MISS) : "transparent" } };
+      });
+
+      vals.tasks = (day.tasks || []).map((t, i) => ({
+        text: t.text, mark: t.done ? "✓" : "", boxStyle: this.box(t.done),
+        inputStyle: { flex: 1, minWidth: 0, border: "none", background: "transparent", fontSize: "14.5px", padding: "5px 0",
+          textDecoration: t.done ? "line-through" : "none", color: t.done ? "var(--muted)" : "var(--color-text)" },
+        toggle: () => this.patch(sp.id, s => { const days = s.days.slice(); const tasks = days[idx].tasks.map((x, j) => j === i ? { text: x.text, done: !x.done } : x); days[idx] = Object.assign({}, days[idx], { tasks }); return { days }; }),
+        edit: (e) => { const v = e.target.value; this.patch(sp.id, s => { const days = s.days.slice(); const tasks = days[idx].tasks.map((x, j) => j === i ? { text: v, done: x.done } : x); days[idx] = Object.assign({}, days[idx], { tasks }); return { days }; }); },
+        remove: () => this.patch(sp.id, s => { const days = s.days.slice(); days[idx] = Object.assign({}, days[idx], { tasks: days[idx].tasks.filter((x, j) => j !== i) }); return { days }; })
+      }));
+      vals.addTask = () => this.patch(sp.id, s => { const days = s.days.slice(); days[idx] = Object.assign({}, days[idx], { tasks: (days[idx].tasks || []).concat([{ text: "", done: false }]) }); return { days }; });
+
+      vals.sprintCues = sp.cues.map(id => {
+        const c = this.cueById(id) || { name: "", note: "" };
+        return { name: c.name, note: c.note, noteStyle: { display: c.note ? "block" : "none", fontSize: "12px", color: "var(--muted)", marginTop: "4px", lineHeight: 1.45 },
+          remove: () => { if (sp.cues.length > 1) this.patch(sp.id, s => ({ cues: s.cues.filter(x => x !== id) })); } };
+      });
+      vals.sprintImps = sp.imps.filter(id => id !== sp.highest).map(id => {
+        const c = this.impById(id) || { name: "", when: "", then: "" };
+        const proof = c.when && c.then ? "WHEN " + c.when + " → THEN " + c.then : "";
+        return { name: c.name, proof, proofStyle: { display: proof ? "block" : "none", fontSize: "12px", color: "var(--muted)", marginTop: "4px", lineHeight: 1.45 },
+          remove: () => { if (sp.imps.length > 1) this.patch(sp.id, s => ({ imps: s.imps.filter(x => x !== id) })); } };
+      });
+      vals.openAddCue = () => this.setState({ add: { mode: "cues" } });
+      vals.openAddImp = () => this.setState({ add: { mode: "imps" } });
+
+      vals.sp = {
+        areaName: area.name, outcome: sp.outcome,
+        dateLabel: this.dateOf(sp, idx).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }),
+        dayLabel: "Day " + (idx + 1) + " / 14", streakLabel: streak === 1 ? "1-day streak" : streak + "-day streak",
+        startLabel: "Starts " + this.dateOf(sp, 0).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+        endLabel: "Ends " + this.dateOf(sp, 13).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) + " · days close 11:59 PM " + (sp.tz ? sp.tz.split("/").pop().replace("_", " ") : "local time"),
+        targetBig: this.big(sp, target), targetUnit: this.unitOf(sp),
+        stats: [
+          { label: "Cumulative actual", value: this.fmt(sp, cum), sub: Math.round(cum / sp.goal * 100) + "% of goal" },
+          { label: "Sprint goal · locked", value: this.fmt(sp, sp.goal), sub: sp.measure === "money" ? sp.unit : sp.measure },
+          { label: "Remaining", value: this.fmt(sp, remain), sub: left > 0 ? left + " days left · " + this.fmt(sp, Math.ceil(remain / left)) + " a day" : "Final day" }
+        ],
+        hasUsage: sp.measure === "money" && (sp.usage || []).length > 0,
+        usage: (sp.usage || []).map(u => ({ amount: (Number(u.amount) || 0).toLocaleString("en-US") + " " + sp.unit, label: u.label })),
+        hasMantra: true,
+        mantra: sp.mantra ? "“" + sp.mantra + "”" : "Add a mantra", mantraView: S.mantraEdit !== sp.id, mantraEdit: S.mantraEdit === sp.id,
+        tasksHint: done ? "Locked with the closed day" : "How do I intend to produce today's target?",
+        mantraDraft: S.mantraDraft != null ? S.mantraDraft : sp.mantra,
+        editMantra: () => this.setState({ mantraEdit: sp.id, mantraDraft: sp.mantra }),
+        setMantraDraft: (e) => this.setState({ mantraDraft: e.target.value }),
+        saveMantra: () => { const v = S.mantraDraft != null ? S.mantraDraft : sp.mantra; this.patch(sp.id, () => ({ mantra: v })); this.setState({ mantraEdit: null, mantraDraft: null }); },
+        highestName: highest ? highest.name : "Not set",
+        pWhen: highest && highest.when ? highest.when : "Not set yet",
+        pThen: highest && highest.then ? highest.then : "Not set yet",
+        openHighest: () => this.setState({ add: { mode: "highest", pick: sp.highest, pWhen: highest ? highest.when : "", pThen: highest ? highest.then : "" } }),
+        editProof: () => this.setState({ add: { mode: "proof", pick: sp.highest, pWhen: highest ? highest.when : "", pThen: highest ? highest.then : "" } }),
+        cueCount: sp.cues.length + " of 3", impCount: sp.imps.length + " of 5",
+        dayClosed: done, dayOpen: !done,
+        closedColor: done && day.actual >= target ? this.GREEN : MISS,
+        closedLabel: done ? this.fmt(sp, day.actual) + " against " + this.fmt(sp, target) : "",
+        canCompleteEarly: cum >= sp.goal,
+        earlyLine: "Goal reached — " + this.fmt(sp, cum) + " of " + this.fmt(sp, sp.goal) + ". Remaining days are cancelled, not missed.",
+        celebration: sp.celebration || "Not set", tz: sp.tz ? sp.tz.split("/").pop().replace("_", " ") : "local time",
+        celebLine: (cum >= sp.goal ? "Goal reached · " : (cum / sp.goal >= 0.8 ? Math.round(cum / sp.goal * 100) + "% there · " : "")) + "Celebration: " + (sp.celebration || "not set"),
+        celebStyle: cum >= sp.goal ? { fontSize: "14.5px", fontWeight: 600, color: this.GREEN } : (cum / sp.goal >= 0.8 ? { fontSize: "12.5px", fontWeight: 600, color: "var(--color-text)" } : { fontSize: "11.5px", color: "var(--muted)" }),
+        endLabel: S.endArm === sp.id ? "Tap again to end this sprint now" : "End sprint early"
+      };
+
+      const mode = sp.targetMode || "same", planned = sp.targets.reduce((a, b) => a + b, 0), pd = this.planDelta(sp, planned);
+      vals.plan = {
+        modes: [["same", "Same daily target"], ["custom", "Custom"]].map(([k, l]) => ({ label: l, style: this.chip(mode === k),
+          pick: () => this.patch(sp.id, s => k === "same" ? { targetMode: "same", targets: this.equalize(s) } : { targetMode: "custom" }) })),
+        planned: this.fmt(sp, planned), goal: this.fmt(sp, sp.goal), delta: pd.text, deltaStyle: pd.style,
+        note: mode === "custom"
+          ? "Custom: every future day stands alone — editing one never changes another, zero is fine for a day off, and the plan may differ from the locked goal. The goal is still what counts as success. Past days and today are locked."
+          : "Same: the remaining goal is spread evenly over the future days, with any remainder on the last days. Switch to Custom to set individual days. Past days and today are locked.",
+        days: sp.targets.map((t, i) => {
+          const dt = this.dateOf(sp, i), d = sp.days[i], closed = d && d.actual != null;
+          const editable = i > this.dayIdx(sp) && mode === "custom", missed = !closed && i < this.dayIdx(sp);
+          return { num: "D" + (i + 1), dow: this.dow(dt).slice(0, 2) + " " + dt.getDate(),
+            lock: closed ? "closed" : (i === idx ? "today" : (missed ? "missed" : "")),
+            lockStyle: { fontSize: "9px", color: missed ? MISS : "var(--muted)", fontWeight: 600 },
+            value: this.big(sp, t), editable, locked: !editable,
+            actual: closed ? this.big(sp, d.actual) : "", 
+            actualStyle: { display: closed ? "block" : "none", fontSize: "11px", fontWeight: 600, marginTop: "2px", color: closed && d.actual >= t ? this.GREEN : MISS },
+            backfillable: missed,
+            backfill: () => this.setState({ close: { step: "actual", dayIndex: i, actual: "", actualMin: "", imps: [], impTop: null, cues: [], cueTop: null, notes: "" } }),
+            set: (e) => { const raw = e.target.value.replace(/[^0-9]/g, ""); const v = parseInt(raw || "0", 10) || 0; const nv = sp.measure === "hours" ? v * 60 : v; this.patch(sp.id, s => { const t = s.targets.slice(); t[i] = Math.max(0, nv); return { targets: t, targetMode: "custom" }; }); },
+            cellStyle: { border: "1px solid " + (i === idx ? "var(--color-accent)" : "var(--color-divider)"), borderRadius: "12px",
+              padding: "10px 10px 11px", background: this.isWk(dt) ? "var(--faint)" : "var(--panel)", opacity: missed ? 0.85 : 1 } };
+        })
+      };
+
+      vals.openClose = () => this.setState({ close: { step: "actual", dayIndex: idx, actual: "", actualMin: "", imps: [], impTop: null, cues: [], cueTop: null, notes: "" } });
+      vals.completeEarly = () => this.setState({ celebrate: { id: sp.id } });
+      vals.endEarly = () => { if (S.endArm !== sp.id) { this.setState({ endArm: sp.id }); return; } this.patch(sp.id, () => ({ status: "review", endedEarly: true })); this.setState({ endArm: null }); };
+    }
+
+    // ---------------- close overlay ----------------
+    if (S.close && sp) {
+      const c = S.close, i = c.dayIndex, steps = this.closeSteps(), si = steps.indexOf(c.step);
+      const labels = { actual: "Actual result", imps: "Which impediments hurt?", impTop: "Which hurt most?",
+        cues: "Which execution cues helped?", cueTop: "Which helped most?", notes: "Optional notes", result: "Day closed" };
+      const mk = (ids, list, sel, multi, onPick) => ids.map(id => {
+        const o = list.find(x => x.id === id) || { name: "" };
+        const on = multi ? sel.indexOf(id) >= 0 : sel === id;
+        return { label: o.name, mark: on ? (multi ? "✓" : "●") : "", style: this.optBtn(on), boxStyle: this.box(on, !multi), pick: () => onPick(id) };
+      });
+      let options = [], pickTitle = "", pickSub = "";
+      if (c.step === "imps") {
+        pickTitle = "Which impediments meaningfully hurt today?"; pickSub = "None is a truthful answer.";
+        options = mk(sp.imps, S.imps, c.imps, true, id => this.setState({ close: Object.assign({}, c, { imps: c.imps.indexOf(id) >= 0 ? c.imps.filter(x => x !== id) : c.imps.concat([id]), impTop: null }) }))
+          .concat([{ label: "None today", mark: c.imps.length === 0 ? "✓" : "", style: this.optBtn(c.imps.length === 0), boxStyle: this.box(c.imps.length === 0), pick: () => this.setState({ close: Object.assign({}, c, { imps: [], impTop: null }) }) }]);
+      } else if (c.step === "impTop") {
+        pickTitle = "Which impediment hurt most?"; pickSub = "One only — required when at least one is selected.";
+        options = mk(c.imps, S.imps, c.impTop, false, id => this.setState({ close: Object.assign({}, c, { impTop: id }) }));
+      } else if (c.step === "cues") {
+        pickTitle = "Which execution cues helped today?"; pickSub = "None is a truthful answer.";
+        options = mk(sp.cues, S.cues, c.cues, true, id => this.setState({ close: Object.assign({}, c, { cues: c.cues.indexOf(id) >= 0 ? c.cues.filter(x => x !== id) : c.cues.concat([id]), cueTop: null }) }))
+          .concat([{ label: "None today", mark: c.cues.length === 0 ? "✓" : "", style: this.optBtn(c.cues.length === 0), boxStyle: this.box(c.cues.length === 0), pick: () => this.setState({ close: Object.assign({}, c, { cues: [], cueTop: null }) }) }]);
+      } else if (c.step === "cueTop") {
+        pickTitle = "Which cue helped most?"; pickSub = "One only — required when at least one is selected.";
+        options = mk(c.cues, S.cues, c.cueTop, false, id => this.setState({ close: Object.assign({}, c, { cueTop: id }) }));
+      }
+      const committed = c.committed != null ? c.committed : 0, hit = committed >= sp.targets[i];
+      const blocked = (c.step === "actual" && String(c.actual).trim() === "") || (c.step === "impTop" && !c.impTop) || (c.step === "cueTop" && !c.cueTop);
+      const isBackfill = i < this.dayIdx(sp);
+      vals.cd = {
+        stepLabel: labels[c.step] + (isBackfill ? " · backfill Day " + (i + 1) : ""),
+        isActual: c.step === "actual", isPick: !!pickTitle, isNotes: c.step === "notes", isResult: c.step === "result",
+        dayName: "Day " + (i + 1), targetLabel: this.fmt(sp, sp.targets[i]), unitLabel: this.unitOf(sp), hasMinutes: sp.measure === "hours",
+        actual: c.actual, actualMin: c.actualMin,
+        actualNote: isBackfill ? "Backfill counts toward the sprint goal and insights, but never repairs the streak." : "Zero is a truthful answer and keeps the streak when the day is closed on time.",
+        setActual: (e) => this.setState({ close: Object.assign({}, c, { actual: e.target.value.replace(/[^0-9]/g, "") }) }),
+        setActualMin: (e) => this.setState({ close: Object.assign({}, c, { actualMin: e.target.value.replace(/[^0-9]/g, "") }) }),
+        pickTitle, pickSub, options,
+        notes: c.notes, setNotes: (e) => this.setState({ close: Object.assign({}, c, { notes: e.target.value }) }),
+        resultBig: this.big(sp, committed), resultUnit: this.unitOf(sp), resultColor: hit ? this.GREEN : MISS,
+        strip: sp.targets.map((t, j) => { const d = sp.days[j]; return { style: { flex: 1, height: "8px", borderRadius: "3px",
+          background: d && d.actual != null ? (d.actual >= t ? this.GREEN : MISS) : "var(--faint)" } }; }),
+        streakLabel: this.streakOf(sp) + " days" + (c.late ? " · streak broken by the missed close" : ""),
+        cumLabel: this.fmt(sp, this.cum(sp)),
+        nextLabelText: i + 1 < 14 ? "Day " + (i + 2) + " target" : "Sprint",
+        tomorrowLabel: i + 1 < 14 ? this.fmt(sp, sp.targets[i + 1]) : "Complete — review next",
+        cancel: () => this.setState({ close: null }),
+        back: () => this.advanceClose(-1), backLabel: c.step === "result" ? "" : (si === 0 ? "Cancel" : "Back"), backStyle: this.ghost(c.step === "result"),
+        next: () => this.advanceClose(1),
+        nextLabel: c.step === "notes" ? "Close the day" : (c.step === "result" ? "Back to today" : "Continue"),
+        nextBlocked: blocked, nextStyle: this.solid(blocked)
+      };
+    }
+
+    // ---------------- create overlay ----------------
+    if (S.create) {
+      const c = S.create, area = c.area ? S.areas[c.area] : null, hasV = area ? !!area.vision : false;
+      const set = (o) => this.setState({ create: Object.assign({}, c, o) });
+      const goalN = c.measure === "hours" ? (parseInt(c.goal || "0", 10) || 0) * 60 + (parseInt(c.goalMin || "0", 10) || 0) : (parseInt(c.goal || "0", 10) || 0);
+      const per = Math.floor(goalN / 14), rem = goalN - per * 14;
+      const startD = this.today0(); if (c.start === "tomorrow") startD.setDate(startD.getDate() + 1);
+      const fakeSp = { measure: c.measure, unit: c.measure === "hours" ? "h" : c.unit };
+      const usageSum = (c.usage || []).reduce((a, u) => a + (parseInt(u.amount || "0", 10) || 0), 0);
+      const usageOk = c.measure !== "money" || ((c.usage || []).some(u => String(u.amount).trim() && u.label.trim()));
+      const highestImp = c.highest ? this.impById(c.highest) : null;
+      const needProof = !!c.highest && !(highestImp && highestImp.when && highestImp.then);
+      const proofOk = !needProof || (c.pWhen.trim() && c.pThen.trim());
+      const sameT = Array.from({ length: 14 }, (_, i) => per + (i >= 14 - rem ? 1 : 0));
+      const customT = (c.custom || []).map(v => { const n = parseInt(v || "0", 10) || 0; return c.measure === "hours" ? n * 60 : n; });
+      const targets = c.mode === "custom" ? customT : sameT, planned = targets.reduce((a, b) => a + b, 0);
+      const pd = this.planDelta(Object.assign({ goal: goalN }, fakeSp), planned);
+      const step3ok = !!c.confidence && c.why.trim() && c.celebration.trim() && c.mantra.trim();
+      const blocked = { 1: !(c.area && hasV && c.outcome.trim()), 2: !(goalN > 0 && String(c.unit).trim() && usageOk), 3: !step3ok,
+        4: !(c.cues.length >= 1 && c.cues.length <= 3 && c.imps.length >= 1 && c.imps.length <= 5 && c.highest && proofOk && c.align) }[c.step];
+      const hint = { 1: c.area && !hasV ? "Vision required" : "", 2: c.measure === "money" && !usageOk ? "Usage of funds required" : "",
+        3: !c.why.trim() ? "Why this matters is required" : (!c.celebration.trim() ? "Celebration is required" : (!c.mantra.trim() ? "Mantra is required" : "")),
+        4: !c.imps.length ? "Select 1–5 impediments" : (!c.highest ? "Designate the highest impediment" : (!proofOk ? "The highest impediment needs a WHEN → THEN" : (!c.cues.length ? "Select 1–3 execution cues" : (!c.align ? "Confirm vision alignment" : "")))) }[c.step];
+
+      vals.cs = {
+        stepLabel: "Step " + c.step + " of 4",
+        progress: [1, 2, 3, 4].map(n => ({ style: { flex: 1, height: "4px", borderRadius: "2px", background: n <= c.step ? "var(--color-accent)" : "var(--faint)" } })),
+        step1: c.step === 1, step2: c.step === 2, step3: c.step === 3, step4: c.step === 4,
+        areaName: area ? area.name : "",
+        areas: this.AREAS.map(k => {
+          const taken = S.sprints.some(x => x.area === k);
+          return { name: S.areas[k].name,
+            note: !S.areas[k].vision ? "No vision — blocked" : (taken ? "Sprint already running" : "Vision set"),
+            pick: () => { if (!taken) set({ area: k, cues: [], imps: [], highest: null }); },
+            style: { border: "1px solid " + (c.area === k ? "var(--color-accent)" : "var(--color-divider)"), borderRadius: "14px",
+              background: c.area === k ? "color-mix(in srgb, var(--color-accent) 9%, var(--panel))" : "var(--panel)",
+              padding: "18px 16px", textAlign: "left", opacity: taken ? 0.5 : 1, cursor: taken ? "not-allowed" : "pointer" } };
+        }),
+        hasVision: !!(c.area && hasV), visionText: area ? area.vision : "", areaBlocked: !!(c.area && !hasV),
+        outcome: c.outcome, setOutcome: (e) => set({ outcome: e.target.value }),
+        measures: [["money", "Money"], ["hours", "Hours"], ["quantity", "Quantity"]].map(([k, l]) => ({
+          label: l, pick: () => set({ measure: k, goal: "", goalMin: "", unit: k === "money" ? "USD" : (k === "hours" ? "h" : "") }), style: this.seg(c.measure === k) })),
+        isHours: c.measure === "hours", isMoney: c.measure === "money",
+        goalLabel: c.measure === "hours" ? "Sprint goal — hours + minutes" : "Sprint goal",
+        goal: c.goal, setGoal: (e) => set({ goal: e.target.value.replace(/[^0-9]/g, "") }),
+        goalMin: c.goalMin, setGoalMin: (e) => set({ goalMin: e.target.value.replace(/[^0-9]/g, "") }),
+        unit: c.unit, setUnit: (e) => set({ unit: e.target.value }),
+        unitLabel: c.measure === "money" ? "Currency" : (c.measure === "hours" ? "Unit" : "What the quantity counts"),
+        unitPlaceholder: c.measure === "money" ? "USD" : (c.measure === "hours" ? "hours" : "calls, pages, workouts"),
+        unitLocked: c.measure === "hours",
+        unitStyle: { width: "100%", border: "1px solid var(--color-divider)", borderRadius: "14px",
+          background: c.measure === "hours" ? "var(--faint)" : "var(--panel)", padding: "12px 14px", fontFamily: "var(--font-heading)", fontSize: "21px", fontWeight: 700 },
+        usage: (c.usage || []).map((u, i) => ({ amount: u.amount, label: u.label,
+          setAmount: (e) => { const v = e.target.value.replace(/[^0-9]/g, ""); set({ usage: c.usage.map((x, j) => j === i ? { amount: v, label: x.label } : x) }); },
+          setLabel: (e) => { const v = e.target.value; set({ usage: c.usage.map((x, j) => j === i ? { amount: x.amount, label: v } : x) }); },
+          remove: () => set({ usage: c.usage.length > 1 ? c.usage.filter((x, j) => j !== i) : c.usage }) })),
+        addUsage: () => set({ usage: (c.usage || []).concat([{ amount: "", label: "" }]) }),
+        usageSum: goalN ? "Allocated " + usageSum.toLocaleString("en-US") + " of " + goalN.toLocaleString("en-US") + " " + c.unit : "",
+        starts: [["today", "Today"], ["tomorrow", "Tomorrow"]].map(([k, l]) => ({ label: l, pick: () => set({ start: k }), style: this.seg(c.start === k) })),
+        tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        confidence: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => ({ n, pick: () => set({ confidence: n }),
+          style: { flex: 1, border: "1px solid " + (n >= 6 && n <= 8 ? "var(--color-accent)" : "var(--color-divider)"), borderRadius: "10px",
+            background: c.confidence === n ? "var(--color-text)" : "var(--panel)", color: c.confidence === n ? "#fff" : "var(--color-text)",
+            padding: "12px 0", fontSize: "13px", fontWeight: 600 } })),
+        confNote: c.confidence >= 6 && c.confidence <= 8 ? "You are in the band." : (c.confidence > 8 ? "Too safe — consider a bigger goal." : "Low confidence — cut the goal or add a cue."),
+        why: c.why, setWhy: (e) => set({ why: e.target.value }),
+        celebration: c.celebration, setCelebration: (e) => set({ celebration: e.target.value }),
+        mantra: c.mantra, setMantra: (e) => set({ mantra: e.target.value }),
+        modes: [["same", "Same daily target"], ["custom", "Custom"]].map(([k, l]) => ({ label: l, style: this.chip(c.mode === k),
+          pick: () => set({ mode: k, custom: k === "custom" && !(c.custom || []).some(x => String(x).trim()) ? sameT.map(v => String(c.measure === "hours" ? Math.round(v / 60) : v)) : c.custom }) })),
+        plan: Array.from({ length: 14 }, (_, i) => {
+          const dt = new Date(startD); dt.setDate(dt.getDate() + i);
+          const editable = c.mode === "custom";
+          return { num: "D" + (i + 1), dow: this.dow(dt).slice(0, 2) + " " + dt.getDate(), value: goalN ? this.big(fakeSp, sameT[i]) : "—",
+            editable, fixed: !editable, raw: (c.custom || [])[i] || "",
+            set: (e) => { const v = e.target.value.replace(/[^0-9]/g, ""); const arr = (c.custom || Array(14).fill("")).slice(); arr[i] = v; set({ custom: arr }); },
+            style: { border: "1px solid var(--color-divider)", borderRadius: "12px", padding: "11px 10px",
+              background: this.isWk(dt) ? "var(--faint)" : "var(--panel)", display: "flex", flexDirection: "column", alignItems: "flex-start" } };
+        }),
+        planSum: goalN ? "Planned " + this.fmt(fakeSp, planned) + " · Goal " + this.fmt(fakeSp, goalN) + " · " + pd.text : "Enter a goal first",
+        planNote: c.mode === "custom"
+          ? "Each day stands alone — zero is fine for nonworking days. The plan may differ from the goal; that is informational and does not block starting. The goal remains the success threshold." + (c.measure === "hours" ? " Custom targets are entered in whole hours." : "")
+          : (rem ? "Goal ÷ 14 leaves a remainder of " + this.fmt(fakeSp, rem) + ", added one unit at a time to the last " + rem + " day" + (rem === 1 ? "" : "s") + " so the plan totals the goal." : "Goal ÷ 14, the same every day. Choose Custom to set days individually."),
+        impOpts: this.eligible(S.imps, c.area).map(o => {
+          const on = c.imps.indexOf(o.id) >= 0;
+          return { label: o.name, mark: on ? "✓" : "", style: this.optBtn(on), boxStyle: this.box(on),
+            tag: this.scopeLabel(o.scope), tagStyle: { marginLeft: "auto", fontSize: "10.5px", color: "var(--muted)", whiteSpace: "nowrap" },
+            pick: () => { const next = on ? c.imps.filter(x => x !== o.id) : (c.imps.length < 5 ? c.imps.concat([o.id]) : c.imps);
+              set({ imps: next, highest: next.indexOf(c.highest) >= 0 ? c.highest : null }); } };
+        }),
+        newImp: c.newImp, setNewImp: (e) => set({ newImp: e.target.value }),
+        addImp: () => { const id = this.addLibItem("imps", c.newImp, "", c.area || "global"); if (id) set({ newImp: "", imps: c.imps.length < 5 ? c.imps.concat([id]) : c.imps }); },
+        hasImps: c.imps.length > 0,
+        highestOpts: c.imps.map(id => {
+          const o = this.impById(id) || { name: "" }, on = c.highest === id;
+          return { label: o.name, mark: on ? "●" : "", style: this.optBtn(on), boxStyle: this.box(on, true),
+            pick: () => set({ highest: id, pWhen: o.when || "", pThen: o.then || "" }) };
+        }),
+        needProof, pWhen: c.pWhen, setPWhen: (e) => set({ pWhen: e.target.value }), pThen: c.pThen, setPThen: (e) => set({ pThen: e.target.value }),
+        cueOpts: this.eligible(S.cues, c.area).map(o => {
+          const on = c.cues.indexOf(o.id) >= 0;
+          return { label: o.name, mark: on ? "✓" : "", style: this.optBtn(on), boxStyle: this.box(on),
+            tag: this.scopeLabel(o.scope), tagStyle: { marginLeft: "auto", fontSize: "10.5px", color: "var(--muted)", whiteSpace: "nowrap" },
+            pick: () => set({ cues: on ? c.cues.filter(x => x !== o.id) : (c.cues.length < 3 ? c.cues.concat([o.id]) : c.cues) }) };
+        }),
+        newCue: c.newCue, setNewCue: (e) => set({ newCue: e.target.value }),
+        addCue: () => { const id = this.addLibItem("cues", c.newCue, "", c.area || "global"); if (id) set({ newCue: "", cues: c.cues.length < 3 ? c.cues.concat([id]) : c.cues }); },
+        cueCount: c.cues.length + " / 1–3", impCount: c.imps.length + " / 1–5",
+        cueCountStyle: { fontSize: "11px", fontWeight: 600, color: c.cues.length ? "var(--muted)" : "var(--color-accent)", marginLeft: "6px" },
+        impCountStyle: { fontSize: "11px", fontWeight: 600, color: c.imps.length ? "var(--muted)" : "var(--color-accent)", marginLeft: "6px" },
+        align: c.align, toggleAlign: () => set({ align: !c.align }), alignMark: c.align ? "✓" : "", alignBoxStyle: this.box(c.align),
+        alignStyle: { display: "flex", gap: "12px", alignItems: "flex-start", width: "100%", marginTop: "22px",
+          border: "1px solid " + (c.align ? "var(--color-accent)" : "var(--color-divider)"), borderRadius: "16px",
+          background: c.align ? "color-mix(in srgb, var(--color-accent) 9%, var(--panel))" : "var(--panel)", padding: "16px 18px", fontSize: "13.5px", fontWeight: 600 },
+        hint: hint || "",
+        cancel: () => this.setState({ create: null }),
+        back: () => (c.step === 1 ? this.setState({ create: null }) : set({ step: c.step - 1 })),
+        backLabel: c.step === 1 ? "Cancel" : "Back", backStyle: this.ghost(false),
+        nextLabel: c.step === 4 ? "Start sprint" : "Continue", nextBlocked: blocked, nextStyle: this.solid(blocked),
+        next: () => {
+          if (c.step < 4) { set({ step: c.step + 1 }); return; }
+          if (needProof) this.setState(s => ({ imps: s.imps.map(x => x.id === c.highest ? Object.assign({}, x, { when: c.pWhen.trim(), then: c.pThen.trim() }) : x) }));
+          const id = "sp" + Date.now();
+          const nsp = { id, area: c.area, outcome: c.outcome.trim(), measure: c.measure, unit: c.measure === "hours" ? "h" : c.unit.trim(),
+            goal: goalN, startISO: this.iso(startD), tz: Intl.DateTimeFormat().resolvedOptions().timeZone, status: "active", targetMode: c.mode,
+            confidence: c.confidence, why: c.why, celebration: c.celebration, mantra: c.mantra.trim(),
+            usage: c.measure === "money" ? (c.usage || []).filter(u => String(u.amount).trim() && u.label.trim()).map(u => ({ amount: parseInt(u.amount, 10) || 0, label: u.label.trim() })) : [],
+            targets, days: Array.from({ length: 14 }, () => this.newDay()), cues: c.cues, imps: c.imps, highest: c.highest };
+          this.setState(s => ({ sprints: s.sprints.concat([nsp]), create: null, sel: id, tab: "sprints" }));
+        }
+      };
+    }
+
+    // ---------------- small picker overlay ----------------
+    if (S.add && sp) {
+      const a = S.add, mode = a.mode;
+      const setA = (o) => this.setState({ add: Object.assign({}, a, o) });
+      if (mode === "cues" || mode === "imps") {
+        const isCue = mode === "cues", max = isCue ? 3 : 5;
+        const selIds = isCue ? sp.cues : sp.imps;
+        vals.ad = {
+          title: isCue ? "Execution cues for this sprint" : "Impediments for this sprint",
+          blurb: isCue ? "Global and " + this.areaOf(sp).name + " cues are eligible. A sprint holds 1–3."
+            : "Global and " + this.areaOf(sp).name + " impediments are eligible. A sprint holds 1–5.",
+          options: this.eligible(isCue ? S.cues : S.imps, sp.area).map(o => {
+            const on = selIds.indexOf(o.id) >= 0;
+            return { label: o.name, mark: on ? "✓" : "", style: this.optBtn(on), boxStyle: this.box(on),
+              tag: this.scopeLabel(o.scope), tagStyle: { marginLeft: "auto", fontSize: "10.5px", color: "var(--muted)", whiteSpace: "nowrap" },
+              pick: () => this.patch(sp.id, s => {
+                const arr = isCue ? s.cues : s.imps;
+                const next = on ? (arr.length > 1 ? arr.filter(x => x !== o.id) : arr) : (arr.length < max ? arr.concat([o.id]) : arr);
+                if (isCue) return { cues: next };
+                return { imps: next, highest: next.indexOf(s.highest) >= 0 ? s.highest : next[0] };
+              }) };
+          }),
+          hasCreate: true, hasProof: false,
+          placeholder: isCue ? "New execution cue" : "New impediment",
+          draft: a.draft || "", setDraft: (e) => setA({ draft: e.target.value }),
+          create: () => { const id = this.addLibItem(mode, a.draft, "", sp.area); if (!id) return;
+            this.patch(sp.id, s => { const arr = isCue ? s.cues : s.imps; if (arr.length >= max) return {};
+              return isCue ? { cues: arr.concat([id]) } : { imps: arr.concat([id]) }; });
+            setA({ draft: "" }); },
+          hint: selIds.length >= max ? "At the maximum — remove one first" : "",
+          blocked: false, doneLabel: "Done", doneStyle: this.solid(false), done: () => this.setState({ add: null })
+        };
+      } else {
+        const isHighest = mode === "highest";
+        const pickImp = a.pick ? this.impById(a.pick) : null;
+        const ok = !!a.pick && String(a.pWhen).trim() && String(a.pThen).trim();
+        vals.ad = {
+          title: isHighest ? "Change the highest impediment" : "Edit the proof point",
+          blurb: isHighest ? "The obstacle most likely to cause this sprint to fail. It must carry a WHEN → THEN proof point before it can be set."
+            : "The proof point belongs to the impediment and travels with it into every future sprint.",
+          options: isHighest ? sp.imps.map(id => {
+            const o = this.impById(id) || { name: "" }, on = a.pick === id;
+            return { label: o.name, mark: on ? "●" : "", style: this.optBtn(on), boxStyle: this.box(on, true), tag: "", tagStyle: { display: "none" },
+              pick: () => setA({ pick: id, pWhen: o.when || "", pThen: o.then || "" }) };
+          }) : [],
+          hasProof: true, hasCreate: false,
+          pWhen: a.pWhen || "", setPWhen: (e) => setA({ pWhen: e.target.value }),
+          pThen: a.pThen || "", setPThen: (e) => setA({ pThen: e.target.value }),
+          hint: ok ? "" : "WHEN and THEN are both required",
+          blocked: !ok, doneLabel: isHighest ? "Set as highest" : "Save proof point", doneStyle: this.solid(!ok),
+          done: () => { if (!ok) return;
+            this.setState(s => ({ imps: s.imps.map(x => x.id === a.pick ? Object.assign({}, x, { when: String(a.pWhen).trim(), then: String(a.pThen).trim() }) : x) }));
+            if (isHighest) this.patch(sp.id, () => ({ highest: a.pick }));
+            this.setState({ add: null }); }
+        };
+      }
+    }
+
+    // ---------------- celebration ----------------
+    if (S.celebrate) {
+      const csp = S.sprints.find(x => x.id === S.celebrate.id);
+      vals.cb = {
+        kicker: csp ? "Goal reached · Day " + Math.min(14, this.dayIdx(csp) + 1) + " of 14" : "",
+        headline: csp ? this.fmt(csp, this.cum(csp)) + " of " + this.fmt(csp, csp.goal) : "",
+        body: csp ? "Remaining days are cancelled, not missed. Your celebration: " + (csp.celebration || "not set") + "." : "",
+        go: () => { this.patch(S.celebrate.id, () => ({ status: "review", endedEarly: false, completedEarly: true }));
+          this.setState({ celebrate: null, sel: S.celebrate.id }); }
+      };
+    }
+
+    // ---------------- review ----------------
+    if (sp && sp.status === "review") {
+      const area = this.areaOf(sp), total = this.cum(sp), pct = Math.round(total / sp.goal * 100), r = S.review;
+      const closed = sp.days.filter(d => d && d.actual != null);
+      const countBy = (ids, list, key, topKey) => ids.map(id => {
+        const o = list.find(x => x.id === id) || { name: "" };
+        const n = closed.filter(d => (d[key] || []).indexOf(id) >= 0).length;
+        const t = closed.filter(d => d[topKey] === id).length;
+        return { name: o.name, count: n + (n === 1 ? " day" : " days") + (t ? " · top on " + t : ""), n, t };
+      }).sort((x, y) => y.n - x.n);
+      const cueRows = countBy(sp.cues, S.cues, "cues", "cueTop"), impRows = countBy(sp.imps, S.imps, "imps", "impTop");
+      const highest = this.impById(sp.highest);
+      const hurtDays = closed.filter(d => (d.imps || []).indexOf(sp.highest) >= 0).length;
+      const maxV = Math.max(1, Math.max.apply(null, sp.targets.concat(closed.map(d => d.actual))));
+      vals.rv = {
+        areaName: area.name, status: sp.endedEarly ? "Ended early" : (sp.completedEarly ? "Completed early" : "Completed"),
+        stats: [{ label: "Sprint goal", value: this.fmt(sp, sp.goal), color: "var(--color-text)" },
+          { label: "Total actual", value: this.fmt(sp, total), color: "var(--color-text)" },
+          { label: "Goal achieved", value: pct + "%", color: pct >= 100 ? this.GREEN : MISS }],
+        bars: sp.targets.map((t, i) => { const d = sp.days[i], a2 = d && d.actual != null ? d.actual : null;
+          return { targetStyle: { flex: 1, height: Math.max(2, t / maxV * 100) + "%", borderRadius: "3px 3px 0 0", background: "var(--faint)" },
+            actualStyle: { flex: 1, height: a2 == null ? "2px" : Math.max(2, a2 / maxV * 100) + "%", borderRadius: "3px 3px 0 0",
+              background: a2 == null ? "var(--color-divider)" : (a2 >= t ? this.GREEN : MISS) } }; }),
+        cues: cueRows, imps: impRows,
+        topCue: cueRows.length && cueRows[0].n ? cueRows[0].name : "none recorded",
+        topImp: impRows.length && impRows[0].n ? impRows[0].name : "none recorded",
+        highestName: highest ? highest.name : "not set",
+        proofObs: highest ? (highest.when ? "WHEN " + highest.when + " → THEN " + highest.then + ". Recorded as hurting on " + hurtDays + " of " + closed.length + " closed days." : "No proof point was recorded.") : "",
+        lesson: r.lesson, setLesson: (e) => this.setState({ review: Object.assign({}, r, { lesson: e.target.value }) }),
+        moveOpts: [["yes", "Yes, it advanced the vision"], ["no", "No, it did not"]].map(([k, l]) => ({
+          label: l, pick: () => this.setState({ review: Object.assign({}, r, { moved: k }) }), style: this.seg(r.moved === k) })),
+        blocked: !(r.lesson.trim() && r.moved), submitStyle: this.solid(!(r.lesson.trim() && r.moved)),
+        hint: r.lesson.trim() && r.moved ? "Unlocks the next " + area.name + " sprint." : "One key lesson and the vision answer are required.",
+        submit: () => this.setState(s => ({
+          sprints: s.sprints.filter(x => x.id !== sp.id),
+          history: [{ area: area.name, areaKey: sp.area, vision: area.vision, outcome: sp.outcome, measure: sp.measure, unit: sp.unit,
+            goalRaw: sp.goal, actualRaw: total, goal: this.fmt(sp, sp.goal), actual: this.fmt(sp, total), pct,
+            streak: this.streakOf(sp), status: sp.endedEarly ? "Ended early" : (sp.completedEarly ? "Completed early" : "Completed"),
+            targets: sp.targets, days: sp.days, cues: sp.cues, imps: sp.imps, highest: sp.highest,
+            highestWhen: highest ? highest.when : "", highestThen: highest ? highest.then : "",
+            cueScopes: sp.cues.map(id => (this.cueById(id) || {}).scope), impScopes: sp.imps.map(id => (this.impById(id) || {}).scope),
+            startISO: sp.startISO, tz: sp.tz, targetMode: sp.targetMode || "same", confidence: sp.confidence, why: sp.why,
+            mantra: sp.mantra, celebration: sp.celebration, usage: sp.usage, lesson: s.review.lesson.trim(), moved: s.review.moved, closedISO: this.iso(new Date()) }].concat(s.history),
+          sel: "area:" + sp.area, review: { lesson: "", moved: null }
+        }))
+      };
+    }
+
+    // ---------------- vision tab ----------------
+    if (S.tab === "vision") {
+      const k = S.visionArea, area = S.areas[k], sec = S.visionSec;
+      vals.vw = {
+        areaName: area.name, isVisionSec: sec === "vision", isLib: sec === "cues" || sec === "imps", isData: sec === "data",
+        visionText: S.visionDraft != null ? S.visionDraft : area.vision,
+        setVision: (e) => this.setState({ visionDraft: e.target.value }),
+        saveVision: () => this.setState(s => {
+          const v = s.visionDraft != null ? s.visionDraft : s.areas[k].vision;
+          const areas = Object.assign({}, s.areas); areas[k] = Object.assign({}, areas[k], { vision: v });
+          return { areas, visionDraft: null };
+        }),
+        replaceVision: () => this.setState(s => {
+          const old = s.areas[k].vision, v = s.visionDraft != null ? s.visionDraft : "";
+          if (!old) return { visionDraft: v };
+          const areas = Object.assign({}, s.areas);
+          areas[k] = Object.assign({}, areas[k], { vision: v.trim(), archive: [old].concat(areas[k].archive || []) });
+          return { areas, visionDraft: null };
+        }),
+        visionMeta: area.vision ? "Active vision — edits save in place. Replacing archives this one and keeps every sprint, cue and impediment behind it."
+          : "No active vision. Sprints in this area stay blocked until one exists.",
+        hasArchive: (area.archive || []).length > 0, archiveOpen: S.visionArchive,
+        archiveLabel: (S.visionArchive ? "Hide" : "Show") + " archived visions (" + (area.archive || []).length + ")",
+        toggleArchive: () => this.setState({ visionArchive: !S.visionArchive }),
+        archived: (area.archive || []).map(t => ({ text: t }))
+      };
+
+      if (vals.vw.isLib) {
+        const kind = sec, isCue = kind === "cues", list = S[kind];
+        const scope = S.libScope, d = S.libDraft;
+        const visible = list.filter(x => !x.arch && (scope === "all" || x.scope === scope));
+        const setD = (o) => this.setState({ libDraft: Object.assign({}, d, o) });
+        vals.lib = {
+          title: isCue ? "Execution cues" : "Impediments",
+          blurb: isCue ? "A practical mindset, reminder, question or principle you keep top-of-mind to improve execution. Unlimited, reusable across sprints, ranked by importance."
+            : "Something likely to interfere with achieving a sprint. Unlimited and reusable, each able to carry a WHEN → THEN proof point that precommits your response.",
+          scopes: [["all", "All"], ["global", "Global"], ["health", "Health"], ["wealth", "Wealth"], ["relationships", "Relationships"]].map(([sk, label]) => ({
+            label, pick: () => this.setState({ libScope: sk }), style: this.chip(scope === sk) })),
+          addTitle: isCue ? "Add an execution cue" : "Add an impediment",
+          namePlaceholder: isCue ? "Ask “How much does this pay?” whenever I schedule something" : "Starting late",
+          draftName: d.name, setDraftName: (e) => setD({ name: e.target.value }),
+          draftNote: d.note, setDraftNote: (e) => setD({ note: e.target.value }),
+          draftScopes: [["global", "Global"], ["health", "Health"], ["wealth", "Wealth"], ["relationships", "Relationships"]].map(([sk, label]) => ({
+            label, pick: () => setD({ scope: sk }), style: this.chip(d.scope === sk) })),
+          add: () => { const id = this.addLibItem(kind, d.name, d.note, d.scope); if (id) this.setState({ libDraft: { name: "", note: "", scope: d.scope } }); },
+          isEmpty: visible.length === 0,
+          emptyLine: scope === "all" ? (isCue ? "No execution cues yet. Add the first reminder you want in front of you every day." : "No impediments yet. Name what is most likely to stop you.")
+            : "Nothing in this scope yet. Switch to All, or add one scoped to " + this.scopeLabel(scope) + ".",
+          items: visible.map((it, i) => {
+            const ed = S.editing && S.editing.kind === kind && S.editing.id === it.id;
+            const used = this.usedIn(kind, it.id);
+            const inSprint = S.sprints.filter(x => x[kind].indexOf(it.id) >= 0);
+            const wouldBreak = inSprint.some(x => x[kind].length <= 1) || inSprint.some(x => !isCue && x.highest === it.id);
+            const setE = (o) => this.setState({ editing: Object.assign({}, S.editing, o) });
+            return {
+              rank: i + 1,
+              up: () => this.move(kind, it.id, -1), down: () => this.move(kind, it.id, 1),
+              upStyle: { border: "1px solid var(--color-divider)", borderRadius: "7px", background: "var(--panel)", color: "var(--muted)", fontSize: "10px", padding: "3px 6px", lineHeight: 1 },
+              downStyle: { border: "1px solid var(--color-divider)", borderRadius: "7px", background: "var(--panel)", color: "var(--muted)", fontSize: "10px", padding: "3px 6px", lineHeight: 1 },
+              isView: !ed, isEdit: !!ed, isImp: !isCue,
+              name: it.name, note: it.note,
+              noteStyle: { display: it.note ? "block" : "none", fontSize: "12.5px", color: "var(--muted)", marginTop: "4px", lineHeight: 1.45, maxWidth: "52ch" },
+              scopeLabel: this.scopeLabel(it.scope),
+              scopeStyle: { fontSize: "10.5px", fontWeight: 600, color: it.scope === "global" ? "var(--accent-ink)" : "var(--muted)",
+                border: "1px solid var(--color-divider)", borderRadius: "999px", padding: "3px 9px", whiteSpace: "nowrap" },
+              usedLabel: used ? "In sprint history" : "Unused",
+              usedStyle: { fontSize: "10.5px", color: "var(--muted)", whiteSpace: "nowrap" },
+              hasProof: !isCue && !!(it.when && it.then), when: it.when, then: it.then,
+              edit: () => this.setState({ editing: { kind, id: it.id, name: it.name, note: it.note, scope: it.scope, when: it.when || "", then: it.then || "" } }),
+              actLabel: used ? "Archive" : "Delete",
+              actStyle: { border: "none", background: "none", fontSize: "11.5px", padding: 0, color: wouldBreak ? "var(--muted)" : MISS, cursor: wouldBreak ? "not-allowed" : "pointer" },
+              act: () => {
+                if (wouldBreak) return;
+                if (!used) { this.setState(s => ({ [kind]: s[kind].filter(x => x.id !== it.id) })); return; }
+                this.setState(s => ({
+                  [kind]: s[kind].map(x => x.id === it.id ? Object.assign({}, x, { arch: true }) : x),
+                  sprints: s.sprints.map(x => Object.assign({}, x, isCue ? { cues: x.cues.filter(y => y !== it.id) } : { imps: x.imps.filter(y => y !== it.id) }))
+                }));
+              },
+              dName: ed ? S.editing.name : "", setName: (e) => setE({ name: e.target.value }),
+              dNote: ed ? S.editing.note : "", setNote: (e) => setE({ note: e.target.value }),
+              dWhen: ed ? S.editing.when : "", setWhen: (e) => setE({ when: e.target.value }),
+              dThen: ed ? S.editing.then : "", setThen: (e) => setE({ then: e.target.value }),
+              scopeOpts: [["global", "Global"], ["health", "Health"], ["wealth", "Wealth"], ["relationships", "Relationships"]].map(([sk, label]) => ({
+                label, pick: () => setE({ scope: sk }), style: this.chip(ed && S.editing.scope === sk) })),
+              cancel: () => this.setState({ editing: null }),
+              save: () => { const e2 = S.editing; if (!e2 || !e2.name.trim()) return;
+                this.setState(s => ({ [kind]: s[kind].map(x => x.id === e2.id ? Object.assign({}, x, { name: e2.name.trim(), note: e2.note, scope: e2.scope, when: e2.when, then: e2.then }) : x), editing: null })); }
+            };
+          }),
+          archiveOpen: S.libArchive,
+          archiveLabel: (S.libArchive ? "Hide" : "Show") + " archived (" + list.filter(x => x.arch).length + ")",
+          toggleArchive: () => this.setState({ libArchive: !S.libArchive }),
+          archived: list.filter(x => x.arch).map(it => ({ name: it.name,
+            restore: () => this.setState(s => ({ [kind]: s[kind].map(x => x.id === it.id ? Object.assign({}, x, { arch: false }) : x) })) })),
+          archiveEmptyStyle: { display: list.some(x => x.arch) ? "none" : "block", marginTop: "10px", fontSize: "12.5px", color: "var(--muted)" }
+        };
+      }
+
+      if (vals.vw.isData) {
+        vals.dw = {
+          visions: String(this.AREAS.filter(a => S.areas[a].vision).length) + " of 3",
+          cues: String(S.cues.filter(x => !x.arch).length), imps: String(S.imps.filter(x => !x.arch).length),
+          active: String(S.sprints.filter(x => x.status === "active").length), done: String(S.history.length),
+          export: () => {
+            const data = { areas: S.areas, cues: S.cues, imps: S.imps, sprints: S.sprints, history: S.history, exported: new Date().toISOString() };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+            const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "sprint-data.json"; a.click();
+          },
+          resetLabel: S.resetArm ? "Tap again to erase everything" : "Reset all data",
+          reset: () => { if (!S.resetArm) { this.setState({ resetArm: true }); return; }
+            try { window.localStorage.removeItem(this.KEY); } catch (e) {}
+            this.setState({ areas: { health: { name: "Health", vision: "", archive: [] }, wealth: { name: "Wealth", vision: "", archive: [] }, relationships: { name: "Relationships", vision: "", archive: [] } },
+              cues: [], imps: [], sprints: [], history: [], sel: "area:health", tab: "sprints", resetArm: false }); }
+        };
+      }
+    }
+
+    // ---------------- insights tab ----------------
+    if (S.tab === "insights") {
+      const k = S.insightScope;
+      const titles = { all: "All areas", history: "Sprint history", health: "Health", wealth: "Wealth", relationships: "Relationships" };
+      const isArea = k !== "all" && k !== "history";
+      const areaHist = isArea ? S.history.filter(h => h.areaKey === k) : [];
+      const areaSp = isArea ? (S.sprints.find(x => x.area === k) || areaHist[0] || null) : null;
+      const closed = areaSp ? areaSp.days.map((d, i) => ({ d, i, t: areaSp.targets[i] })).filter(x => x.d && x.d.actual != null) : [];
+      const maxV = closed.length ? Math.max.apply(null, closed.map(x => Math.max(x.d.actual, x.t))) : 1;
+      const recs = (isArea ? S.sprints.filter(x => x.area === k) : []).concat(areaHist);
+      const patterns = recs.flatMap(r => this.patternsFor(r).map(p => ({ text: p.text, basis: p.basis.replace("this sprint", r.outcome) }))).slice(0, 6);
+      const norm = this.AREAS.map(a => {
+        const s2 = S.sprints.find(x => x.area === a);
+        if (s2) { const c2 = this.cum(s2); return { area: S.areas[a].name, raw: this.fmt(s2, c2) + " of " + this.fmt(s2, s2.goal), v: Math.round(c2 / s2.goal * 100) }; }
+        const h = S.history.find(x => x.areaKey === a);
+        if (h) return { area: S.areas[a].name, raw: h.actual + " of " + h.goal, v: h.pct };
+        return { area: S.areas[a].name, raw: "No sprint run yet", v: 0 };
+      });
+      vals.iw = {
+        title: titles[k],
+        blurb: isArea ? "Patterns from closed days in this area — what the system is discovering about how you execute."
+          : (k === "all" ? "Cross-area comparison as percent of each sprint's own goal." : "Every reviewed sprint, kept exactly as it ran."),
+        isArea, isAll: k === "all", isHistory: k === "history",
+        hasData: closed.length > 0, noData: isArea && closed.length === 0,
+        bars: closed.map(x => ({ label: areaSp.startISO ? "D" + (x.i + 1) + " " + this.dateOf(areaSp, x.i).getDate() : "D" + (x.i + 1),
+          targetStyle: { flex: 1, height: Math.max(2, x.t / maxV * 100) + "%", borderRadius: "3px 3px 0 0", background: "var(--color-divider)" },
+          actualStyle: { flex: 1, height: Math.max(2, x.d.actual / maxV * 100) + "%", borderRadius: "3px 3px 0 0", background: x.d.actual >= x.t ? this.GREEN : MISS } })),
+        patterns, patternEmptyStyle: { display: patterns.length ? "none" : "block", marginTop: "14px", fontSize: "13.5px", color: "var(--muted)", lineHeight: 1.55, maxWidth: "52ch" },
+        normalized: norm.map(n => ({ area: n.area, raw: n.raw, pct: n.v ? n.v + "%" : "—",
+          barStyle: { position: "absolute", left: 0, top: 0, bottom: 0, width: Math.min(100, n.v) + "%", borderRadius: "999px", background: n.v >= 100 ? this.GREEN : "var(--color-accent)" } })),
+        hasHistory: S.history.length > 0, noHistory: S.history.length === 0,
+        history: S.history.map(h => ({ area: h.area, outcome: h.outcome, goal: h.goal, actual: h.actual, pct: h.pct + "%",
+          pctColor: h.pct >= 100 ? this.GREEN : "var(--color-text)", streak: String(h.streak), status: h.status }))
+      };
+    }
+
+    return vals;
+  }
+}
+</script>
+</body>
+</html>

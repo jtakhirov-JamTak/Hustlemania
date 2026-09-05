@@ -29,3 +29,19 @@ __pycache__/
 # archive directory: archiving was removed as ceremony (~/.claude/DECISIONS.md,
 # 2026-08-25), so nothing produces one to ignore.
 session-context.md
+
+# Next.js
+/.next/
+/out/
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+
+# Local Supabase stack
+supabase/.temp/
+supabase/.branches/
+
+# Test output
+/test-results/
+/playwright-report/
