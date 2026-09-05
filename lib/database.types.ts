@@ -432,6 +432,47 @@ export type Database = {
           },
         ]
       }
+      tasks: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          done: boolean
+          id: string
+          sprint_day_id: string
+          text: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          done?: boolean
+          id?: string
+          sprint_day_id: string
+          text: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          done?: boolean
+          id?: string
+          sprint_day_id?: string
+          text?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_sprint_day_id_fkey"
+            columns: ["sprint_day_id"]
+            isOneToOne: false
+            referencedRelation: "sprint_days"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       visions: {
         Row: {
           archived_at: string | null

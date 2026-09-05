@@ -22,6 +22,7 @@ measures nothing but memory.
 | F1 — Walking skeleton: sign in → Vision → start Sprint → Today → Close Day | 2026-09-05T04:15Z | 2026-09-05T17:27Z | 13h12m | 2 (Docker Desktop not running before `supabase start`; commit-scope approval for the `mockup/today` branch and the fast-forward to main) | 0 | 0 |
 | F2 — Cue and Impediment libraries; Highest Impediment; Day Close selections | 2026-09-05T18:05Z | 2026-09-05T19:16Z | 1h11m | 0 | 0 | 0 |
 | F3 — Custom daily targets; reconciliation; target locking; intention pre-planning | 2026-09-05T19:25Z | 2026-09-05T19:55Z | 0h30m | 0 | 0 | 0 |
+| F4 — Tasks: per-day optional task list, locks with the day, no roll-over | 2026-09-05T20:08Z | 2026-09-05T20:46Z | 0h38m | 0 | 0 | 0 |
 
 ### Who opens the row
 
@@ -71,6 +72,11 @@ and the metric cannot be read.
 
 (Newest first. One line per shipped milestone, dated.)
 
+- 2026-09-05 — **F4 tasks green** (eval-03: 5/5 criteria PASS, 0 P0/P1, 3 P2 → BACKLOG;
+  eight DB mutations each turned their tests red; visual check in Chrome; `npm run verify`
+  green: unit 43, DB 147, Playwright 6). Migration `0006_tasks.sql` — `tasks` table with
+  RLS, column grants, archive-not-delete, `tasks_lock_with_day` trigger — and the Tasks
+  card on Today with autosave rows, blank row offered, locked with the closed day.
 - 2026-09-05 — **F3 custom targets green** (no evaluator trigger; six DB mutations and one UI
   mutation each turned their test red; visual check in Chrome; `npm run verify` green:
   unit 43, DB 120, Playwright 6). Migration `0005_targets.sql`, `save_targets`, the

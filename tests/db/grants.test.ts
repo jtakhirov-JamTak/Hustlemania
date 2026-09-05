@@ -26,7 +26,7 @@ describe("public schema access model", () => {
     expect(rows).toEqual([]);
   });
 
-  it("authenticated may INSERT only library items and DELETE only library items (rule 19 via RLS)", async () => {
+  it("authenticated may INSERT only library items, visions and tasks, and DELETE only library items (rule 19 via RLS)", async () => {
     const rows = await sql<{ table_name: string; privilege_type: string }[]>`
       select table_name, privilege_type from information_schema.role_table_grants
       where table_schema = 'public' and grantee = 'authenticated' and privilege_type in ('INSERT', 'DELETE')
@@ -52,6 +52,9 @@ describe("public schema access model", () => {
       { table_name: "impediments", column_name: "proof_when" },
       { table_name: "impediments", column_name: "scope" },
       { table_name: "impediments", column_name: "user_id" },
+      { table_name: "tasks", column_name: "sprint_day_id" },
+      { table_name: "tasks", column_name: "text" },
+      { table_name: "tasks", column_name: "user_id" },
       { table_name: "visions", column_name: "area" },
       { table_name: "visions", column_name: "body" },
       { table_name: "visions", column_name: "user_id" },
@@ -72,6 +75,9 @@ describe("public schema access model", () => {
       { table_name: "impediments", column_name: "proof_when" },
       { table_name: "sprint_days", column_name: "intention" },
       { table_name: "sprints", column_name: "mantra" },
+      { table_name: "tasks", column_name: "archived_at" },
+      { table_name: "tasks", column_name: "done" },
+      { table_name: "tasks", column_name: "text" },
       { table_name: "visions", column_name: "body" },
     ]);
   });
@@ -116,10 +122,11 @@ describe("public schema access model", () => {
     expect(row).toEqual({ start: false, close: false });
   });
 
-  it("the plan validator and the lock trigger function are not callable by the API roles", async () => {
-    const [row] = await sql<{ validate: boolean; lock: boolean }[]>`
+  it("the plan validator and the lock trigger functions are not callable by the API roles", async () => {
+    const [row] = await sql<{ validate: boolean; lock: boolean; tasks: boolean }[]>`
       select has_function_privilege('authenticated', 'public.validate_targets(text,bigint,bigint[])', 'execute') as validate,
-             has_function_privilege('authenticated', 'public.sprint_days_target_locked()', 'execute') as lock`;
-    expect(row).toEqual({ validate: false, lock: false });
+             has_function_privilege('authenticated', 'public.sprint_days_target_locked()', 'execute') as lock,
+             has_function_privilege('authenticated', 'public.tasks_lock_with_day()', 'execute') as tasks`;
+    expect(row).toEqual({ validate: false, lock: false, tasks: false });
   });
 });

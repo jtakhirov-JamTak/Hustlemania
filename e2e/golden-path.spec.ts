@@ -190,6 +190,40 @@ test.describe("golden path", () => {
     await page.reload();
     await expect(page.getByLabel("Daily intention")).toHaveValue("Today I will move the $600 before lunch.");
 
+    // F4: tasks. Enter adds and re-offers a blank row; blur adds too; done toggles;
+    // remove archives; everything survives a reload; the target hero never moves.
+    const tasks = page.getByTestId("tasks-card");
+    await expect(tasks.getByTestId("task-row")).toHaveCount(0);
+    await tasks.getByLabel("New task").fill("Call the bank about the fee");
+    await tasks.getByLabel("New task").press("Enter");
+    await expect(tasks.getByTestId("task-row")).toHaveCount(1);
+    await expect(tasks.getByLabel("New task")).toHaveValue("");
+    await expect(tasks.getByLabel("New task")).toBeFocused();
+    await tasks.getByLabel("New task").fill("Move the $600");
+    await tasks.getByLabel("New task").blur();
+    await expect(tasks.getByTestId("task-row")).toHaveCount(2);
+    await expect(tasks.getByTestId("tasks-hint")).toHaveText("Saved");
+    const bankDone = tasks.getByRole("checkbox", { name: "Done: Call the bank about the fee" });
+    await bankDone.click();
+    await expect(bankDone).toHaveAttribute("aria-checked", "true");
+    await tasks.getByRole("button", { name: "Remove task: Move the $600" }).click();
+    await expect(tasks.getByTestId("task-row")).toHaveCount(1);
+    // The rows update optimistically; wait for both writes to land (the remove is an
+    // archive, not a delete — History keeps the row) before the reload aborts them.
+    await expect
+      .poll(async () => {
+        const r = await admin.from("tasks").select("text, done, archived_at").eq("user_id", user.id).order("created_at");
+        return r.data?.map((t) => `${t.text} | done=${t.done} | archived=${t.archived_at !== null}`);
+      })
+      .toEqual(["Call the bank about the fee | done=true | archived=false", "Move the $600 | done=false | archived=true"]);
+    await page.reload();
+    await expect(page.getByTestId("tasks-card").getByTestId("task-row")).toHaveCount(1);
+    await expect(page.getByTestId("tasks-card").getByLabel("Task 1")).toHaveValue("Call the bank about the fee");
+    await expect(page.getByTestId("tasks-card").getByRole("checkbox", { name: "Done: Call the bank about the fee" })).toHaveAttribute("aria-checked", "true");
+    // Rule 15: a completed task changed no total.
+    await expect(hero).toHaveText("572");
+    await expect(page.getByTestId("target-hero")).toContainText("0% of goal");
+
     // Close Day 1 with an actual above target → two-step dialog → green result, then locked.
     await page.getByRole("button", { name: "Enter actual result" }).click();
     const dialog = page.getByRole("dialog");
@@ -221,11 +255,18 @@ test.describe("golden path", () => {
     await expect(page.getByTestId("closed-actual")).toHaveAttribute("data-state", "at-or-above");
     await expect(page.getByTestId("day-strip").locator('[data-day="1"]')).toHaveAttribute("data-state", "at-or-above");
 
-    // Reload: still locked; intention read-only; the close button is gone.
+    // Reload: still locked; intention and tasks read-only; the close button is gone.
     await page.reload();
     await expect(page.getByText("Day closed · locked")).toBeVisible();
     await expect(page.getByLabel("Daily intention")).toBeDisabled();
     await expect(page.getByRole("button", { name: "Enter actual result" })).toHaveCount(0);
+    const lockedTasks = page.getByTestId("tasks-card");
+    await expect(lockedTasks.getByTestId("tasks-hint")).toHaveText("Locked with the closed day");
+    await expect(lockedTasks.getByLabel("Task 1")).toBeDisabled();
+    await expect(lockedTasks.getByRole("checkbox", { name: "Done: Call the bank about the fee" })).toBeDisabled();
+    await expect(lockedTasks.getByLabel("New task")).toHaveCount(0);
+    await expect(lockedTasks.getByRole("button", { name: "Add task" })).toHaveCount(0);
+    await expect(lockedTasks.getByRole("button", { name: /Remove task/ })).toHaveCount(0);
 
     // Sidebar reflects the sprint.
     await expect(page.locator("[data-sidebar]").getByText("Day 1/14")).toBeVisible();

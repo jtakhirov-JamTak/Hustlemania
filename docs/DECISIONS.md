@@ -6,6 +6,38 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-05 — F4 tasks: direct table writes under a row trigger; "remove" is archive
+
+**Decision.** `tasks` is written directly by the authenticated role (insert
+`user_id, sprint_day_id, text`; update `text, done, archived_at`), not through an RPC.
+Every invariant the PRD attaches to a task is row-local — it belongs to one day (rule
+16), it is frozen once that day is closed (rule 17), and it may not change owner or day
+— so one BEFORE INSERT OR UPDATE trigger, `tasks_lock_with_day`, enforces all of them for
+every role. Removing a task sets `archived_at`; there is no DELETE grant.
+
+**Why.** The F1/F2 pattern puts writes that carry invariants in SECURITY DEFINER
+functions because those invariants span rows (1–3 cues, one highest impediment, a
+balanced 14-day plan). A task carries none of that: nothing else in the schema depends
+on it and rule 15 says completion must not influence any total, which is best guaranteed
+by having no function read it at all. The DB suite asserts exactly that — no function
+body in `public` names `public.tasks`, and no trigger on `sprints` / `sprint_days`
+mentions tasks — so a future "roll unfinished tasks forward" job turns a test red the
+moment it is created (verified: adding one failed two tests). Archive instead of delete
+because PRD §11 lists "Tasks and completion" among what History preserves and §12 keeps
+permanent deletion a deliberate action; the global rule says the same.
+
+**Noted for future triggers.** A BEFORE trigger runs before the RLS `WITH CHECK`, so a
+forged insert (`user_id` = someone else) is refused by the trigger's ownership lookup
+(`day_not_found`, since the caller cannot see the other user's day) rather than by the
+policy (`42501`). Both outcomes leave no row; the test asserts the message and the
+count, not the error code.
+
+**Rejected.** Hard delete of an empty or unwanted task (History value, and the delete
+grant would be the only one outside the libraries); a task-count or task-completion
+column on `sprint_days` (rule 15 — derive it in Insights instead).
+
+---
+
 ## 2026-09-05 — F3 plans: the DB owns balance and locking; the mockup's "informational mismatch" is rejected
 
 **Decision.** A plan is written by exactly two SECURITY DEFINER functions, both explicit

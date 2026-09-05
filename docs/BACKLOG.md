@@ -14,6 +14,35 @@
 - **Duplicate ids in `p_cue_ids` / `p_hurt` are silently de-duplicated** rather than
   rejected. Observation only. `supabase/migrations/0004_libraries.sql`.
 
+## Hustlemania — from eval-03 (F4, 2026-09-05), all P2
+
+- **SPEC.md carries "As built" narratives** (F1–F4) inside the file the evaluator must
+  read, so build choices reach an evaluation meant to be independent of them. Process
+  point: move the as-built sections to a separate doc, or have the evaluator read only
+  the criteria lines. `docs/SPEC.md`.
+- **No upper bound on task text**: a 5,000-character task is accepted and rendered in
+  full into the done-mark and remove `aria-label`s. Informational (the SPEC's
+  "unlimited" is about row count); a `length(text) <= N` check would need a new
+  migration. `supabase/migrations/0006_tasks.sql`, `components/today/TasksCard.tsx`.
+- **Archived tasks remain writable on an open day** — a bulk update by `sprint_day_id`
+  also flips archived rows. No UI path does this; decide the semantics with History /
+  Insights (F7 / F9).
+
+## Found during F4 (2026-09-05), not fixed there
+
+- **Optimistic task writes are lost if the user leaves the page before the request
+  lands.** Seen in the Playwright trace: a remove issued 0.2 s before `page.reload()`
+  ended with status −1 and the row came back. Same trait as the intention and mantra
+  cards. A `beforeunload` guard while a save is pending, or a non-optimistic remove,
+  would close it. `components/today/TasksCard.tsx`.
+- **`sprint_invalid_reason` null-default bug is still open** — 0006 does not touch that
+  function either.
+- **Tasks have no reader yet beyond Today**: Insights (task completion vs result) and
+  History arrive with F7 / F9; `archived_at` rows are kept for them and filtered out of
+  `loadTasks`.
+- **Emptying a task's text and blurring restores the saved text silently** (the × is the
+  remove). Intended, but there is no hint saying so.
+
 ## Found during F3 (2026-09-05), not fixed there
 
 - **`sprint_invalid_reason` null-default bug is still open** — 0005 did not touch that

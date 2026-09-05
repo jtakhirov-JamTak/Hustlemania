@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { TodayView } from "@/components/today/TodayView";
 import { areaName, isAreaKey } from "@/lib/areas";
-import { loadActiveLibrary, loadActiveSprint, loadActiveVision, loadDayOfferedItems, loadSprintItems } from "@/lib/data";
+import { loadActiveLibrary, loadActiveSprint, loadActiveVision, loadDayOfferedItems, loadSprintItems, loadTasks } from "@/lib/data";
 import { sprintDayFor } from "@/lib/sprintDay";
 import { createClient } from "@/lib/supabase/server";
 
@@ -42,14 +42,15 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
   const focusIndex = position.kind === "during" ? position.dayIndex : position.kind === "before" ? 1 : 14;
   const focusDay = active.days.find((d) => d.day_index === focusIndex) ?? active.days[0];
 
-  const [items, fullLibrary, offered] = await Promise.all([
+  const [items, fullLibrary, offered, tasks] = await Promise.all([
     loadSprintItems(supabase, active.sprint.id),
     loadActiveLibrary(supabase),
     loadDayOfferedItems(supabase, focusDay.id),
+    loadTasks(supabase, focusDay.id),
   ]);
   // Pickers offer only what this area's sprint may carry (global or same-area scope).
   const eligible = (l: { scope: string }) => l.scope === "global" || l.scope === area;
   const library = { cues: fullLibrary.cues.filter(eligible), impediments: fullLibrary.impediments.filter(eligible) };
 
-  return <TodayView sprint={active.sprint} days={active.days} position={position} items={items} library={library} offered={offered} />;
+  return <TodayView sprint={active.sprint} days={active.days} position={position} items={items} library={library} offered={offered} tasks={tasks} />;
 }

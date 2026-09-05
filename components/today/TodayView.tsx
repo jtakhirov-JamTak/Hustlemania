@@ -5,8 +5,9 @@ import { IntentionCard } from "@/components/today/IntentionCard";
 import { MantraCard } from "@/components/today/MantraCard";
 import { PlanCard } from "@/components/today/PlanCard";
 import { SprintItemsRow } from "@/components/today/SprintItemsRow";
+import { TasksCard } from "@/components/today/TasksCard";
 import { areaName, type AreaKey } from "@/lib/areas";
-import type { LibraryItem, OfferedItems, Sprint, SprintDay, SprintItems } from "@/lib/data";
+import type { LibraryItem, OfferedItems, Sprint, SprintDay, SprintItems, Task } from "@/lib/data";
 import { formatIsoDate } from "@/lib/dates";
 import { formatAmount, formatNumber, unitLabel, type Measured } from "@/lib/format";
 import { hasRoundingDifference, measurementStep } from "@/lib/targets";
@@ -21,6 +22,7 @@ export function TodayView({
   items,
   library,
   offered,
+  tasks,
 }: {
   sprint: Sprint;
   days: SprintDay[];
@@ -28,6 +30,7 @@ export function TodayView({
   items: SprintItems;
   library: { cues: LibraryItem[]; impediments: LibraryItem[] };
   offered: OfferedItems;
+  tasks: Task[];
 }) {
   const measured: Measured = { measurement: sprint.measurement as Measured["measurement"], currency: sprint.currency, unit: sprint.unit };
   const goal = Number(sprint.amount);
@@ -113,6 +116,14 @@ export function TodayView({
       </section>
 
       <IntentionCard key={day.id} dayId={day.id} initial={day.intention ?? ""} locked={day.closed_at !== null} />
+
+      <TasksCard
+        key={`tasks-${day.id}`}
+        dayId={day.id}
+        initial={tasks}
+        locked={day.closed_at !== null || sprintOver}
+        lockedReason={day.closed_at !== null ? "Locked with the closed day" : "The sprint window has ended"}
+      />
 
       <HighestImpedimentCard sprintId={sprint.id} impediments={items.impediments} locked={sprintOver} />
 

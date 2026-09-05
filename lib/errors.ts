@@ -46,6 +46,8 @@ const MESSAGES: Record<string, string> = {
   target_precision: "Daily targets are whole units: whole currency, minutes, or whole items.",
   targets_sum_mismatch: "The 14 targets must add up to the sprint goal before saving.",
   target_locked: "Past days and today are locked. Only future days can change.",
+  tasks_text_check: "Write the task before saving.",
+  task_locked: "A task stays on the day it was written for.",
   "violates foreign key": "That item has sprint history, so it can only be archived.",
   "Signups not allowed": "This email is not on the invite list.",
   otp_disabled: "This email is not on the invite list.",

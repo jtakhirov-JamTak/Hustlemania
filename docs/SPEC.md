@@ -362,6 +362,46 @@ per PRD), hours → minutes, quantity → whole units.
 - **Non-goals.** Ordering, due times, Eisenhower quadrants.
 - **Risks.** none material.
 - **Evaluator.** migration creating a user-data table.
+- **As built (2026-09-05, eval-03: 5/5 criteria PASS, 0 P0/P1, 3 P2).**
+  - Migration `0006_tasks.sql`: table `tasks` (`sprint_day_id` → `sprint_days` cascade,
+    `user_id` → `auth.users` cascade, `text` non-blank, `done` default false,
+    `created_at` / `updated_at` trigger, `archived_at`), indexes on both FKs, RLS in the
+    same migration (`select` / `insert` / `update` on `auth.uid() = user_id`), grants
+    `insert (user_id, sprint_day_id, text)` and `update (text, done, archived_at)` to
+    `authenticated`, no `delete`. "Remove" is `archived_at` — History keeps every task
+    (PRD §11) — and every list filters on it.
+  - Trigger `tasks_lock_with_day` (BEFORE INSERT OR UPDATE, every role): refuses a change
+    to `sprint_day_id` / `user_id` / `created_at` (`task_locked`), a day the task's owner
+    does not own or that does not exist (`day_not_found`, never a leak), and any write
+    once the parent day has `closed_at` (`day_closed`, rule 17). The trigger runs before
+    RLS `WITH CHECK`, so a forged insert reports `day_not_found` rather than a policy
+    violation; either way no row lands (tested).
+  - Rule 15: completing every task leaves the `sprints` row and all 14 `sprint_days`
+    rows byte-identical (DB test). Rule 16: DB tests scan `pg_proc` for any function
+    body naming `public.tasks` (none), list the triggers on `tasks` (exactly
+    `tasks_lock_with_day`, `tasks_set_updated_at`), find no `sprints` / `sprint_days`
+    trigger naming tasks, and check `cron.job` when pg_cron exists; closing day 1 with
+    open tasks leaves day 2's list unchanged.
+  - UI: `TasksCard` between Daily Intention and Highest Impediment (SPEC order). Rows =
+    square done-mark (`role="checkbox"`), inline text (saves on blur / Enter; emptying
+    the text restores it, the × removes), quiet ×. One blank "Add a task" row is always
+    offered on an open day; Enter adds and refocuses it, blur adds too; "Add task"
+    focuses it. Writes are optimistic with a Saving… / Saved hint and an error bar with
+    Retry that reverts the row. Closed day: "Locked with the closed day", inputs and
+    marks disabled, no draft row, no × , no Add task; sprint over: "The sprint window
+    has ended". Direct table writes through three server actions (`createTask`,
+    `updateTask`, `removeTask`), no RPC — the invariants are all row-level.
+  - Verification: DB suite 120 → 147 (`tests/db/tasks.test.ts` 27, grants updated for
+    the new column grants and trigger function); e2e adds Enter/blur add, toggle,
+    remove-as-archive, reload persistence, hero unchanged, and the locked state after
+    close on desktop and phone. Falsifiability: eight live mutations (RLS off, trigger
+    dropped, anchor check removed, ownership check removed, closed-day check removed, a
+    roll-over function added, DELETE granted, anon SELECT granted) each turned their
+    targeted tests red — 2, 12, 1, 2, 6, 2, 2, 1 failures respectively — and the
+    restored suite was green; then `supabase db reset` reapplied 0001–0006 from disk.
+    The one e2e red on the way was the test, not the app: the optimistic remove was
+    aborted by a `page.reload()` issued before the request landed (Playwright trace,
+    status −1); the test now waits for the DB rows before reloading.
 
 ### F5 — Day boundaries, streaks, missed days, backfill
 - **Behavior.** Days advance at midnight in the sprint's zone whether or not the app

@@ -5,6 +5,7 @@ import type { Database, Tables } from "@/lib/database.types";
 export type Vision = Tables<"visions">;
 export type Sprint = Tables<"sprints">;
 export type SprintDay = Tables<"sprint_days">;
+export type Task = Tables<"tasks">;
 export type Cue = Tables<"cues">;
 export type Impediment = Tables<"impediments">;
 export type Client = SupabaseClient<Database>;
@@ -73,6 +74,13 @@ export async function loadActiveSprint(
   const days = await supabase.from("sprint_days").select("*").eq("sprint_id", sprint.data.id).order("day_index");
   if (days.error) throw new Error(`sprint_days: ${days.error.message}`);
   return { sprint: sprint.data, days: days.data };
+}
+
+/** One day's live task list (F4): removed tasks are archived and never listed here. */
+export async function loadTasks(supabase: Client, dayId: string): Promise<Task[]> {
+  const res = await supabase.from("tasks").select("*").eq("sprint_day_id", dayId).is("archived_at", null).order("created_at").order("id");
+  if (res.error) throw new Error(`tasks: ${res.error.message}`);
+  return res.data;
 }
 
 export async function loadDays(supabase: Client, sprintId: string): Promise<SprintDay[]> {
