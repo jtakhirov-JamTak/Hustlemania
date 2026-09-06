@@ -1,7 +1,9 @@
 "use client";
 
+import { ProofInputs } from "@/components/ProofInputs";
+import { ErrorBar } from "@/components/ErrorBar";
 import Link from "next/link";
-import { Fragment, useMemo, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createItem } from "@/app/(app)/actions/library";
 import { startSprintAction, type StartSprintInput } from "@/app/(app)/actions/sprint";
 import { OptionRow } from "@/components/OptionRow";
@@ -12,7 +14,7 @@ import { eligibleFor, type LibraryItem } from "@/lib/data";
 import { formatIsoDate } from "@/lib/dates";
 import { toBaseUnits, unitLabel, type Measurement, type Measured } from "@/lib/format";
 import { addDays, localDateIn } from "@/lib/sprintDay";
-import { formatTargetInput, hasRoundingDifference, measurementStep, parseTargetInput, sameDailyTargets } from "@/lib/targets";
+import { formatTargetInput, hasRoundingDifference, measurementStep, parseTargetInput, planDelta, sameDailyTargets } from "@/lib/targets";
 
 type AreaOption = { key: AreaKey; name: string; hasVision: boolean; hasSprint: boolean };
 
@@ -82,6 +84,12 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
     aligned: false,
   });
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
+  const heading = useRef<HTMLHeadingElement>(null);
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (mounted.current) heading.current?.focus();
+    mounted.current = true;
+  }, [step]);
 
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
   const today = useMemo(() => localDateIn(tz, new Date()), [tz]);
@@ -111,7 +119,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
   const customParsed = d.custom.map((raw) => parseTargetInput(d.measurement, raw));
   const customPlan = d.mode === "custom" ? effectivePlan(planCells, true, customParsed) : null;
   const targets = d.mode === "custom" ? customPlan : sameTargets;
-  const planDeltaValue = targets && amount !== null ? targets.reduce((a, b) => a + b, 0) - amount : null;
+  const planDeltaValue = targets && amount !== null ? planDelta(targets, amount) : null;
   const planHint =
     d.mode !== "custom"
       ? null
@@ -170,7 +178,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
   const canNext = stepHint[step] === null;
 
   function submit() {
-    if (!d.area || !amountValid || amount === null || !targets) return;
+    if (!canNext || pending || !d.area || !amountValid || amount === null || !targets) return;
     const input: StartSprintInput = {
       area: d.area,
       outcome: d.outcome,
@@ -232,7 +240,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
   return (
     <div>
       <span className="tag tag-accent">New sprint</span>
-      <h1 className="heading" style={{ fontSize: 38, margin: "12px 0 0", letterSpacing: "-0.03em" }}>
+      <h1 ref={heading} tabIndex={-1} className="heading" style={{ fontSize: 38, margin: "12px 0 0", letterSpacing: "-0.03em", outline: "none" }}>
         {STEPS[step]}
       </h1>
       <div style={{ display: "flex", gap: 4, marginTop: 16, maxWidth: 420 }} aria-label={`Step ${step + 1} of 4`}>
@@ -244,8 +252,10 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
       <div className="card" style={{ marginTop: 22, padding: "24px 26px" }}>
         {step === 0 ? (
           <>
-            <div className="label-accent">Area</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            <div className="label-accent" id="area-label">
+              Area
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }} role="group" aria-labelledby="area-label">
               {areas.map((a) => {
                 const disabled = !a.hasVision || a.hasSprint;
                 return (
@@ -253,6 +263,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
                     key={a.key}
                     type="button"
                     className={`chip ${d.area === a.key ? "chip-on" : ""}`}
+                    aria-pressed={d.area === a.key}
                     disabled={disabled}
                     onClick={() => setD((p) => ({ ...p, area: a.key, impedimentIds: [], highestId: null, cueIds: [] }))}
                     title={!a.hasVision ? "No 1-year vision yet" : a.hasSprint ? "A sprint is already active here" : undefined}
@@ -281,10 +292,12 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
 
         {step === 1 ? (
           <>
-            <div className="label-accent">Measurement</div>
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <div className="label-accent" id="measurement-label">
+              Measurement
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }} role="group" aria-labelledby="measurement-label">
               {(["money", "hours", "quantity"] as Measurement[]).map((m) => (
-                <button key={m} type="button" className={`chip ${d.measurement === m ? "chip-on" : ""}`} onClick={() => set("measurement", m)}>
+                <button key={m} type="button" className={`chip ${d.measurement === m ? "chip-on" : ""}`} aria-pressed={d.measurement === m} onClick={() => set("measurement", m)}>
                   {m[0].toUpperCase() + m.slice(1)}
                 </button>
               ))}
@@ -326,11 +339,20 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
             {d.measurement === "money" ? (
               <div style={{ marginTop: 22 }}>
                 <div className="label-accent">Usage of funds · if I earn this, what is it for?</div>
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }} aria-hidden="true">
+                  <span className="label-muted" style={{ flex: 2 }}>
+                    Label
+                  </span>
+                  <span className="label-muted" style={{ flex: 1 }}>
+                    Amount
+                  </span>
+                  <span style={{ width: 36 }} />
+                </div>
                 {d.usage.map((u, i) => (
                   <div key={i} style={{ display: "flex", gap: 8, marginTop: 8 }}>
                     <input className="input" placeholder="Rent" aria-label={`Usage ${i + 1} label`} value={u.label} onChange={(e) => set("usage", d.usage.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} style={{ flex: 2 }} />
                     <input className="input" type="number" min={1} step={1} inputMode="numeric" placeholder="2800" aria-label={`Usage ${i + 1} amount`} value={u.amount} onChange={(e) => set("usage", d.usage.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))} style={{ flex: 1 }} />
-                    <button type="button" className="btn btn-ghost" aria-label="Remove row" onClick={() => set("usage", d.usage.filter((_, j) => j !== i))}>
+                    <button type="button" className="btn btn-ghost" aria-label={`Remove usage ${i + 1}`} onClick={() => set("usage", d.usage.filter((_, j) => j !== i))}>
                       ×
                     </button>
                   </div>
@@ -342,12 +364,14 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
             ) : null}
 
             <div style={{ marginTop: 22 }}>
-              <div className="label-accent">Start</div>
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                <button type="button" className={`chip ${!d.startsTomorrow ? "chip-on" : ""}`} onClick={() => set("startsTomorrow", false)}>
+              <div className="label-accent" id="start-label">
+                Start
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }} role="group" aria-labelledby="start-label">
+                <button type="button" className={`chip ${!d.startsTomorrow ? "chip-on" : ""}`} aria-pressed={!d.startsTomorrow} onClick={() => set("startsTomorrow", false)}>
                   Today · {formatIsoDate(today, { weekday: "short", month: "short", day: "numeric" })}
                 </button>
-                <button type="button" className={`chip ${d.startsTomorrow ? "chip-on" : ""}`} onClick={() => set("startsTomorrow", true)}>
+                <button type="button" className={`chip ${d.startsTomorrow ? "chip-on" : ""}`} aria-pressed={d.startsTomorrow} onClick={() => set("startsTomorrow", true)}>
                   Tomorrow · {formatIsoDate(addDays(today, 1), { weekday: "short", month: "short", day: "numeric" })}
                 </button>
               </div>
@@ -360,14 +384,17 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
 
         {step === 2 ? (
           <>
-            <div className="label-accent">Confidence · 6–8 is the ideal stretch</div>
-            <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+            <div className="label-accent" id="confidence-label">
+              Confidence · 6–8 is the ideal stretch
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }} role="group" aria-labelledby="confidence-label">
               {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
                 <button
                   key={n}
                   type="button"
                   className={`chip ${d.confidence === n ? "chip-on" : ""}`}
                   aria-label={`Confidence ${n}`}
+                  aria-pressed={d.confidence === n}
                   onClick={() => set("confidence", n)}
                   style={{ minWidth: 40, justifyContent: "center", borderColor: n >= 6 && n <= 8 && d.confidence !== n ? "var(--accent)" : undefined }}
                 >
@@ -442,8 +469,11 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
                   />
                 ))}
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                <input className="input" aria-label="Create a new impediment" placeholder="Create a new impediment" value={newImp} onChange={(e) => setNewImp(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInline("impediment"); } }} style={{ flex: 1, fontSize: 13.5 }} />
+              <label htmlFor="new-impediment" className="label-accent" style={{ display: "block", marginTop: 12 }}>
+                Create a new impediment
+              </label>
+              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                <input id="new-impediment" className="input" value={newImp} onChange={(e) => setNewImp(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInline("impediment"); } }} style={{ flex: 1 }} />
                 <button type="button" className="btn btn-ghost" style={{ color: "var(--accent-ink)", padding: "6px 12px" }} disabled={!newImp.trim() || creating !== null} onClick={() => createInline("impediment")}>
                   {creating === "impediment" ? "Creating…" : "Create"}
                 </button>
@@ -464,16 +494,16 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
                     ))}
                 </div>
                 {highestNeedsProof ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "9px 12px", marginTop: 14, alignItems: "center" }}>
-                    <label htmlFor="proof-when" className="label-accent" style={{ fontWeight: 700 }}>
-                      WHEN
-                    </label>
-                    <input id="proof-when" className="input" value={d.proofWhen} onChange={(e) => set("proofWhen", e.target.value)} placeholder="I notice myself delaying my first work block" style={{ fontSize: 13.5, padding: "10px 13px" }} />
-                    <label htmlFor="proof-then" className="label-accent" style={{ fontWeight: 700 }}>
-                      THEN
-                    </label>
-                    <input id="proof-then" className="input" value={d.proofThen} onChange={(e) => set("proofThen", e.target.value)} placeholder="I start a 10-minute timer on the smallest executable task" style={{ fontSize: 13.5, padding: "10px 13px" }} />
-                  </div>
+                  <ProofInputs
+                    idPrefix="proof"
+                    when={d.proofWhen}
+                    then={d.proofThen}
+                    onWhen={(v) => set("proofWhen", v)}
+                    onThen={(v) => set("proofThen", v)}
+                    placeholderWhen="I notice myself delaying my first work block"
+                    placeholderThen="I start a 10-minute timer on the smallest executable task"
+                    style={{ marginTop: 14 }}
+                  />
                 ) : null}
               </div>
             ) : null}
@@ -498,8 +528,11 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
                   />
                 ))}
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                <input className="input" aria-label="Create a new execution cue" placeholder="Create a new execution cue" value={newCue} onChange={(e) => setNewCue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInline("cue"); } }} style={{ flex: 1, fontSize: 13.5 }} />
+              <label htmlFor="new-cue" className="label-accent" style={{ display: "block", marginTop: 12 }}>
+                Create a new execution cue
+              </label>
+              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                <input id="new-cue" className="input" value={newCue} onChange={(e) => setNewCue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInline("cue"); } }} style={{ flex: 1 }} />
                 <button type="button" className="btn btn-ghost" style={{ color: "var(--accent-ink)", padding: "6px 12px" }} disabled={!newCue.trim() || creating !== null} onClick={() => createInline("cue")}>
                   {creating === "cue" ? "Creating…" : "Create"}
                 </button>
@@ -511,7 +544,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
             </label>
             <textarea id="intention-1" className="input" rows={2} value={d.intentions[0]} onChange={(e) => set("intentions", d.intentions.map((x, j) => (j === 0 ? e.target.value : x)))} placeholder="Today I will…" style={{ marginTop: 6 }} />
             <button type="button" className="disclosure" style={{ marginTop: 10 }} aria-expanded={showIntentions} onClick={() => setShowIntentions((v) => !v)} data-testid="intentions-toggle">
-              {showIntentions ? "▾" : "▸"} Pre-plan intentions for days 2–14
+              <span aria-hidden="true">{showIntentions ? "▾" : "▸"}</span> Pre-plan intentions for days 2–14
             </button>
             {showIntentions ? (
               <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "8px 12px", marginTop: 10, alignItems: "center" }} data-testid="intentions">
@@ -520,48 +553,21 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
                     <label htmlFor={`intention-${c.dayIndex}`} style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap" }}>
                       <strong style={{ color: "var(--accent)", fontWeight: 700 }}>D{c.dayIndex}</strong> {formatIsoDate(c.date, { weekday: "short", day: "numeric" })}
                     </label>
-                    <input id={`intention-${c.dayIndex}`} className="input" value={d.intentions[c.dayIndex - 1]} onChange={(e) => set("intentions", d.intentions.map((x, j) => (j === c.dayIndex - 1 ? e.target.value : x)))} placeholder="On this day I will…" style={{ fontSize: 13.5, padding: "8px 12px" }} />
+                    <input id={`intention-${c.dayIndex}`} className="input" value={d.intentions[c.dayIndex - 1]} onChange={(e) => set("intentions", d.intentions.map((x, j) => (j === c.dayIndex - 1 ? e.target.value : x)))} placeholder="On this day I will…" style={{ padding: "8px 12px" }} />
                   </Fragment>
                 ))}
               </div>
             ) : null}
 
             <label style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 22, cursor: "pointer" }}>
-              <span
-                role="checkbox"
-                aria-checked={d.aligned}
-                aria-label="Vision alignment"
-                tabIndex={0}
-                onKeyDown={(e) => (e.key === " " || e.key === "Enter") && set("aligned", !d.aligned)}
-                onClick={() => set("aligned", !d.aligned)}
-                style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: 6,
-                  border: `1.5px solid ${d.aligned ? "var(--accent)" : "var(--divider)"}`,
-                  background: d.aligned ? "var(--accent)" : "var(--panel)",
-                  color: "#fff",
-                  fontSize: 12,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flex: "none",
-                }}
-              >
-                {d.aligned ? "✓" : ""}
-              </span>
+              <input type="checkbox" className="check" aria-label="Vision alignment" checked={d.aligned} onChange={(e) => set("aligned", e.target.checked)} />
               <span style={{ fontSize: 14 }}>This outcome meaningfully advances my {areas.find((a) => a.key === d.area)?.name} vision.</span>
             </label>
           </>
         ) : null}
 
         {error ? (
-          <div role="alert" className="error-bar" style={{ marginTop: 18 }}>
-            <span>{error}</span>
-            <button type="button" className="link-quiet" style={{ color: "inherit", fontWeight: 600 }} onClick={submit}>
-              Retry
-            </button>
-          </div>
+          <ErrorBar style={{ marginTop: 18 }} action={{ label: "Retry", onClick: submit }}>{error}</ErrorBar>
         ) : null}
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 26, flexWrap: "wrap" }}>
@@ -575,13 +581,23 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
             </Link>
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {!canNext ? <span className="hint">{stepHint[step]}</span> : null}
+            <span className="hint" id="wizard-hint" aria-live="polite">
+              {stepHint[step] ?? ""}
+            </span>
             {step < 3 ? (
-              <button type="button" className="btn btn-primary" disabled={!canNext} onClick={() => setStep(step + 1)}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                aria-disabled={!canNext}
+                aria-describedby={canNext ? undefined : "wizard-hint"}
+                onClick={() => {
+                  if (canNext) setStep(step + 1);
+                }}
+              >
                 Continue
               </button>
             ) : (
-              <button type="button" className="btn btn-primary" disabled={!canNext || pending} onClick={submit}>
+              <button type="button" className="btn btn-primary" aria-disabled={!canNext || pending} aria-describedby={canNext ? undefined : "wizard-hint"} onClick={submit}>
                 {pending ? "Starting…" : "Start sprint"}
               </button>
             )}

@@ -1,5 +1,6 @@
 "use client";
 
+import { ErrorBar } from "@/components/ErrorBar";
 import { useState } from "react";
 import { saveIntention } from "@/app/(app)/actions/day";
 import { callAction } from "@/lib/callAction";
@@ -27,7 +28,7 @@ export function IntentionCard({ dayId, initial, locked }: { dayId: string; initi
         <label className="label-accent" htmlFor="intention">
           Daily intention
         </label>
-        <span style={{ fontSize: 11, color: status.kind === "error" ? "var(--under)" : "var(--muted)" }}>
+        <span style={{ fontSize: 11, color: status.kind === "error" ? "var(--under)" : "var(--muted)" }} aria-live="polite">
           {locked ? "Locked with the closed day" : status.kind === "saving" ? "Saving…" : status.kind === "saved" ? "Saved" : ""}
         </span>
       </div>
@@ -40,15 +41,10 @@ export function IntentionCard({ dayId, initial, locked }: { dayId: string; initi
         onChange={(e) => setText(e.target.value)}
         onBlur={persist}
         placeholder="Today I will…"
-        style={{ borderRadius: 14, fontSize: 15, lineHeight: 1.5, resize: "vertical" }}
+        style={{ borderRadius: 14, lineHeight: 1.5, resize: "vertical" }}
       />
       {status.kind === "error" ? (
-        <div role="alert" className="error-bar" style={{ marginTop: 10 }}>
-          <span>{status.text}</span>
-          <button type="button" className="link-quiet" style={{ color: "inherit", fontWeight: 600 }} onClick={persist}>
-            Retry
-          </button>
-        </div>
+        <ErrorBar style={{ marginTop: 10 }} action={{ label: "Retry", onClick: persist }}>{status.text}</ErrorBar>
       ) : null}
     </section>
   );

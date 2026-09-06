@@ -2,6 +2,7 @@
 
 import { dayOfMonth, dayOfWeek, SHORT_DOW } from "@/lib/dates";
 import { formatAmount, formatNumber, type Measured } from "@/lib/format";
+import { planDelta } from "@/lib/targets";
 
 export type PlanCell = {
   dayIndex: number;
@@ -46,14 +47,13 @@ export function PlanGrid({
   /** A backfill is being opened: the buttons stay put, disabled. */
   backfillBusy?: boolean;
 }) {
-  const effective = cells.map((c, i) => (editing && !c.locked ? parsed[i] : c.target));
-  const allValid = effective.every((t) => t !== null);
-  const planned = allValid ? effective.reduce((a, b) => (a ?? 0) + (b ?? 0), 0)! : null;
-  const delta = planned === null ? null : planned - goal;
+  const effective = effectivePlan(cells, editing, parsed);
+  const planned = effective === null ? null : effective.reduce((a, b) => a + b, 0);
+  const delta = effective === null ? null : planDelta(effective, goal);
 
   return (
     <>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 6 }} data-strip data-testid="plan-grid">
+      <div className="plan-grid" data-strip data-testid="plan-grid">
         {cells.map((c, i) => {
           const edit = editing && !c.locked;
           const invalid = edit && parsed[i] === null;
@@ -67,9 +67,9 @@ export function PlanGrid({
                   ? { text: "locked", color: "var(--muted)", bold: false }
                   : null;
           const header = (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 4 }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: "var(--accent)" }}>D{c.dayIndex}</span>
-              <span style={{ fontSize: 9.5, color: "var(--muted)" }}>
+            <div className="plan-cell-head">
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--accent-ink)" }}>D{c.dayIndex}</span>
+              <span style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap" }}>
                 {SHORT_DOW[dayOfWeek(c.date)]} {dayOfMonth(c.date)}
               </span>
             </div>
@@ -79,7 +79,6 @@ export function PlanGrid({
             borderRadius: 10,
             padding: "8px 6px",
             textAlign: "center" as const,
-            minWidth: 56,
             background: c.locked ? "var(--faint)" : "var(--panel)",
           };
           if (backfillable) {
@@ -87,6 +86,7 @@ export function PlanGrid({
             return (
               <button
                 key={c.dayIndex}
+                className="plan-cell"
                 type="button"
                 data-day={c.dayIndex}
                 data-locked="true"
@@ -101,31 +101,30 @@ export function PlanGrid({
                 <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 4 }} data-testid={`plan-target-${c.dayIndex}`}>
                   {formatNumber(measured, c.target)}
                 </div>
-                <div style={{ fontSize: 9.5, fontWeight: 600, color: "var(--under)", marginTop: 2 }}>missed</div>
-                <div style={{ fontSize: 10.5, fontWeight: 600, color: "var(--accent-ink)", marginTop: 4 }}>Backfill</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--under)", marginTop: 2 }}>missed</div>
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--accent-ink)", marginTop: 4 }}>Backfill</div>
               </button>
             );
           }
           return (
-            <div key={c.dayIndex} data-day={c.dayIndex} data-locked={c.locked ? "true" : "false"} data-missed={c.missed ? "true" : undefined} style={cellStyle}>
+            <div key={c.dayIndex} className="plan-cell" data-day={c.dayIndex} data-locked={c.locked ? "true" : "false"} data-missed={c.missed ? "true" : undefined} style={cellStyle}>
               {header}
               {edit ? (
                 <input
                   id={`${inputIdPrefix}-${c.dayIndex}`}
-                  className="input"
+                  className="input plan-input"
                   aria-label={`Day ${c.dayIndex} target`}
                   aria-invalid={invalid || undefined}
                   inputMode={measured.measurement === "hours" ? "text" : "numeric"}
                   value={values[i]}
                   onChange={(e) => onChange(i, e.target.value)}
-                  style={{ marginTop: 4, padding: "5px 6px", fontSize: 13, fontWeight: 600, textAlign: "center", borderRadius: 8 }}
                 />
               ) : (
                 <>
                   <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 4 }} data-testid={`plan-target-${c.dayIndex}`}>
                     {formatNumber(measured, c.target)}
                   </div>
-                  <div style={{ fontSize: 9.5, fontWeight: status?.bold ? 600 : undefined, color: status?.color ?? "var(--muted)", marginTop: 2, minHeight: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: status?.bold ? 600 : undefined, color: status?.color ?? "var(--muted)", marginTop: 2, minHeight: 12 }}>
                     {status?.text ?? ""}
                   </div>
                 </>

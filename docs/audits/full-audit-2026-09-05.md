@@ -171,8 +171,20 @@ hook suites in `verify` (paths in FIX_LOG not yet corrected) · LOW: duplicate i
 `eligibleFor`, template SVGs and `.gitkeep`s, orphan-membership and missing-streak
 signals, signout error, `engines.node`, unvalidated OTP `type`.
 
-Still open from A + B: #1–#3, #10–#17 (privacy/legal are C), #19–#26, #33, #35–#45,
-#47. Details in DECISIONS 2026-09-06 and PROGRESS.
+Phases 4–6 (2026-09-06, after the user's "continue"; `npm run verify` green: hooks 115,
+unit 54, DB 178, e2e 8; DECISIONS 2026-09-06 phases 4–6): #1 16px inputs · #2 plan grid
+· #3 phone sidebar · #12 native `<dialog>` · #13 chip groups · #14 validation model ·
+#15 visible labels + control border · #16 `--muted` 0.70, accent-ink labels · #17/#40
+44px targets and label floor · #19 0007 backfill test · #20 cross-user UPDATE · #21
+off-UTC zones · #22 under state, derived totals, `remainingPlan()` · #33 cascade from
+`pg_constraint` · #35 titles, h2s, step focus · #36 real checkbox, arrow keys · #37 live
+status, focus return · #38 scroll lock, sticky footer, pointer dismissal, strip
+scroll-into-view · #39 manifest + icons · #41 `tests/support/` · #42 `ProofInputs`,
+`ErrorBar`, `planDelta` · #44 dead entries.
+
+Still open from A + B: #43 (wizard split; Tailwind is bucket D), #45 (eslint 10 blocked
+by `eslint-config-next`), #46's FIX_LOG paths, #47 (F10). Bucket C and D untouched.
+
 
 ## Counts
 

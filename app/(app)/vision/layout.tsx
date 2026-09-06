@@ -19,7 +19,7 @@ export default async function VisionLayout({ children }: { children: React.React
   return (
     <>
       <SideNav title="1-year visions" items={items}>
-        <div className="label-muted" style={{ padding: "18px 24px 10px" }}>
+        <div className="label-muted side-title side-title-more">
           Libraries
         </div>
         <SideNavList items={libraries} />

@@ -10,7 +10,7 @@ import { areaName, type AreaKey } from "@/lib/areas";
 import type { LibraryItem, OfferedItems, Sprint, SprintDay, SprintItems, Task } from "@/lib/data";
 import { formatIsoDate } from "@/lib/dates";
 import { formatAmount, formatNumber, unitLabel, type Measured } from "@/lib/format";
-import { hasRoundingDifference, measurementStep } from "@/lib/targets";
+import { hasRoundingDifference, measurementStep, remainingPlan } from "@/lib/targets";
 import { localDateIn, streakLabel, type SprintDayPosition } from "@/lib/sprintDay";
 
 type UsageRow = { label: string; amount: number };
@@ -41,12 +41,7 @@ export function TodayView({
   const focusIndex = position.kind === "during" ? position.dayIndex : position.kind === "before" ? 1 : 14;
   const day = days.find((d) => d.day_index === focusIndex) ?? days[0];
 
-  const closedDays = days.filter((d) => d.closed_at !== null);
-  const cumulative = closedDays.reduce((acc, d) => acc + Number(d.actual ?? 0), 0);
-  const remaining = Math.max(0, goal - cumulative);
-  const daysLeft = days.filter((d) => d.closed_at === null && d.day_index >= focusIndex).length;
-  const step = measurementStep(measured.measurement);
-  const perDay = daysLeft > 0 ? Math.ceil(remaining / daysLeft / step) * step : 0;
+  const { cumulative, remaining, daysLeft, perDay } = remainingPlan(days, goal, focusIndex, measurementStep(measured.measurement));
   const usage = Array.isArray(sprint.usage_of_funds) ? (sprint.usage_of_funds as UsageRow[]) : [];
   const rounding = hasRoundingDifference(days.map((d) => Number(d.target)));
 
@@ -85,7 +80,9 @@ export function TodayView({
       <DayStrip days={days} focusIndex={focusIndex} startDate={sprint.start_date} endDate={sprint.end_date} />
 
       <section className="card" style={{ marginTop: 34, padding: "26px 28px" }} data-testid="target-hero">
-        <div className="label-accent">{position.kind === "before" ? "Day 1 target" : "Today's target"}</div>
+        <h2 className="label-accent" style={{ margin: 0 }}>
+          {position.kind === "before" ? "Day 1 target" : "Today's target"}
+        </h2>
         <div data-hero style={{ fontSize: 92, fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 1, margin: "4px 0 0" }}>
           {formatNumber(measured, Number(day.target))}
         </div>

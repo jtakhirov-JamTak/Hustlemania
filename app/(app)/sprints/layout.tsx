@@ -23,7 +23,7 @@ export default async function SprintsLayout({ children }: { children: React.Reac
   return (
     <>
       <SideNav title="Sprints" items={items}>
-        <div style={{ padding: "14px 20px 0" }}>
+        <div className="side-cta">
           <Link href="/sprints/new" className="btn btn-primary btn-block" style={{ display: "block", textDecoration: "none" }}>
             New Sprint
           </Link>

@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { ProofInputs } from "@/components/ProofInputs";
+import { ErrorBar } from "@/components/ErrorBar";
+import { useRef, useState } from "react";
+import { Modal } from "@/components/Modal";
 import { OptionRow } from "@/components/OptionRow";
 
 export type PickerOption = { id: string; label: string; sub?: string | null; tag?: string | null; disabled?: boolean };
@@ -45,11 +48,11 @@ export function ItemPicker({
   const [draft, setDraft] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const first = useRef<HTMLButtonElement>(null);
-  useEffect(() => first.current?.focus(), []);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const blocked = Boolean(hint) || pending;
 
   async function submitCreate() {
-    if (!create || !draft.trim()) return;
+    if (!create || !draft.trim() || creating) return;
     setCreating(true);
     setCreateError(null);
     const err = await create.onCreate(draft.trim());
@@ -59,66 +62,68 @@ export function ItemPicker({
   }
 
   return (
-    <div className="dialog-scrim" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="picker-title" style={{ maxWidth: 560, padding: 0 }}>
-        <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--divider)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span id="picker-title" style={{ fontSize: 13, fontWeight: 600 }}>
-            {title}
-          </span>
-          <button ref={first} type="button" className="link-quiet" aria-label="Cancel" onClick={onCancel} style={{ fontSize: 18, lineHeight: 1 }}>
-            ×
-          </button>
-        </div>
-        <div style={{ padding: 22 }}>
-          {blurb ? <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5 }}>{blurb}</div> : null}
-          {options.length === 0 && emptyLine ? <div style={{ fontSize: 13, color: "var(--muted)" }}>{emptyLine}</div> : null}
+    <Modal labelledBy="picker-title" onDismiss={onCancel} initialFocus={heading} maxWidth={560}>
+      <div className="dialog-head" style={{ paddingBottom: 18, borderBottom: "1px solid var(--divider)" }}>
+        <h2 id="picker-title" className="card-title" ref={heading} tabIndex={-1} style={{ outline: "none" }}>
+          {title}
+        </h2>
+        <button type="button" className="link-quiet" aria-label="Cancel" onClick={onCancel} style={{ fontSize: 18, lineHeight: 1 }}>
+          ×
+        </button>
+      </div>
+      <div className="dialog-body" style={{ paddingTop: 18 }}>
+        {blurb ? <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5 }}>{blurb}</div> : null}
+        {options.length === 0 && emptyLine ? <div style={{ fontSize: 13, color: "var(--muted)" }}>{emptyLine}</div> : null}
+        <div role={single ? "radiogroup" : "group"} aria-label={title}>
           {options.map((o) => (
             <OptionRow key={o.id} on={selected.includes(o.id)} single={single} disabled={o.disabled} onPick={() => onToggle(o.id)} label={o.label} sub={o.sub} tag={o.tag} />
           ))}
-          {proof ? (
-            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "9px 12px", marginTop: 14, alignItems: "center" }}>
-              <label htmlFor="picker-when" className="label-accent" style={{ fontWeight: 700 }}>
-                WHEN
-              </label>
-              <input id="picker-when" className="input" value={proof.when} onChange={(e) => proof.onWhen(e.target.value)} placeholder="I notice myself…" style={{ fontSize: 13.5, padding: "10px 13px" }} />
-              <label htmlFor="picker-then" className="label-accent" style={{ fontWeight: 700 }}>
-                THEN
-              </label>
-              <input id="picker-then" className="input" value={proof.then} onChange={(e) => proof.onThen(e.target.value)} placeholder="I immediately…" style={{ fontSize: 13.5, padding: "10px 13px" }} />
-            </div>
-          ) : null}
-          {create ? (
-            <form
-              style={{ display: "flex", gap: 8, marginTop: 14 }}
-              onSubmit={(e) => {
-                e.preventDefault();
-                submitCreate();
-              }}
-            >
-              <input className="input" aria-label={create.placeholder} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={create.placeholder} style={{ flex: 1, fontSize: 14 }} />
-              <button type="submit" className="btn btn-ghost" disabled={creating || !draft.trim()} style={{ padding: "6px 12px", color: "var(--accent-ink)" }}>
+        </div>
+        {proof ? <ProofInputs idPrefix="picker" when={proof.when} then={proof.then} onWhen={proof.onWhen} onThen={proof.onThen} style={{ marginTop: 14 }} /> : null}
+        {create ? (
+          <form
+            style={{ marginTop: 14 }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitCreate();
+            }}
+          >
+            <label htmlFor="picker-create" className="label-accent" style={{ display: "block", marginBottom: 6 }}>
+              {create.placeholder}
+            </label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input id="picker-create" className="input" value={draft} onChange={(e) => setDraft(e.target.value)} style={{ flex: 1 }} />
+              <button type="submit" className="btn btn-ghost" aria-disabled={creating || !draft.trim()} style={{ padding: "6px 12px", color: "var(--accent-ink)" }}>
                 {creating ? "Creating…" : "Create"}
               </button>
-            </form>
-          ) : null}
-          {createError || error ? (
-            <div role="alert" className="error-bar" style={{ marginTop: 12 }}>
-              <span>{createError ?? error}</span>
             </div>
-          ) : null}
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "16px 22px", borderTop: "1px solid var(--divider)" }}>
-          <button type="button" className="btn btn-ghost" onClick={onCancel}>
-            Cancel
+          </form>
+        ) : null}
+        {createError || error ? (
+          <ErrorBar style={{ marginTop: 12 }}>{createError ?? error}</ErrorBar>
+        ) : null}
+      </div>
+      <div className="dialog-foot" style={{ borderTop: "1px solid var(--divider)" }}>
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+          Cancel
+        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span className="hint" id="picker-hint" aria-live="polite">
+            {hint ?? ""}
+          </span>
+          <button
+            type="button"
+            className="btn btn-primary"
+            aria-disabled={blocked}
+            aria-describedby={hint ? "picker-hint" : undefined}
+            onClick={() => {
+              if (!blocked) onDone();
+            }}
+          >
+            {pending ? "Saving…" : doneLabel}
           </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {hint ? <span className="hint">{hint}</span> : null}
-            <button type="button" className="btn btn-primary" disabled={Boolean(hint) || pending} onClick={onDone}>
-              {pending ? "Saving…" : doneLabel}
-            </button>
-          </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

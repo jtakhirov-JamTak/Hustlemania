@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { zoneOffUtcDate } from "../support/zones";
 import { sameDailyTargets } from "@/lib/targets";
 import {
   createTestUser,
@@ -16,7 +17,7 @@ import {
 
 // A zone 14 hours ahead of UTC, so "today" here differs from UTC for most of the day
 // and the today/tomorrow check is exercised against the sprint zone, not the server's.
-const TZ = "Pacific/Kiritimati";
+const TZ = zoneOffUtcDate();
 
 describe("start_sprint", () => {
   let u: TestUser;

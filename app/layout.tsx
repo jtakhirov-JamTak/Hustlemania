@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -9,8 +9,13 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Hustlemania",
+  title: { default: "Hustlemania", template: "%s · Hustlemania" },
   description: "14-day goal sprints",
+  appleWebApp: { capable: true, title: "Hustlemania", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#f7fbfd",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

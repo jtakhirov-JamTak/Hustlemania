@@ -1,5 +1,6 @@
 "use client";
 
+import { ErrorBar } from "@/components/ErrorBar";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { dayOfferedItemsAction } from "@/app/(app)/actions/day";
@@ -9,7 +10,7 @@ import { CloseFlow } from "@/components/today/CloseFlow";
 import { callAction } from "@/lib/callAction";
 import type { OfferedItems, SprintDay } from "@/lib/data";
 import type { Measured } from "@/lib/format";
-import { formatTargetInput, isLockedDay, isMissedDay, parseTargetInput } from "@/lib/targets";
+import { formatTargetInput, isLockedDay, isMissedDay, parseTargetInput, planDelta } from "@/lib/targets";
 
 /**
  * The 14-day plan on Today (PRD §6). "Same" is the plan the sprint started with;
@@ -70,7 +71,7 @@ export function PlanCard({
 
   const parsed = cells.map((c, i) => (editing && !c.locked ? parseTargetInput(measured.measurement, values[i] ?? "") : c.target));
   const plan = effectivePlan(cells, editing, parsed);
-  const delta = plan === null ? null : plan.reduce((a, b) => a + b, 0) - goal;
+  const delta = plan === null ? null : planDelta(plan, goal);
   const changed = plan !== null && plan.some((t, i) => t !== cells[i].target);
   const canSave = editing && delta === 0 && changed && status.kind !== "saving";
   const openDays = cells.filter((c) => !c.locked).length;
@@ -89,7 +90,7 @@ export function PlanCard({
   }
 
   async function save() {
-    if (!plan) return;
+    if (!plan || !canSave) return;
     setStatus({ kind: "saving" });
     const res = await callAction(() => saveTargetsAction(sprintId, plan));
     if (res.error) {
@@ -116,7 +117,7 @@ export function PlanCard({
   return (
     <section className="card" style={{ marginTop: 20, padding: "22px 26px" }} data-testid="plan-card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 13, fontWeight: 600 }}>14-day plan</span>
+        <h2 className="card-title">14-day plan</h2>
         <div style={{ display: "flex", gap: 6 }} role="group" aria-label="Target mode">
           <span className={`chip ${mode === "same" ? "chip-on" : ""}`} aria-current={mode === "same" ? "true" : undefined}>
             Same daily target
@@ -149,9 +150,7 @@ export function PlanCard({
       </div>
 
       {backfillError ? (
-        <div role="alert" className="error-bar" style={{ marginTop: 12 }}>
-          <span>{backfillError}</span>
-        </div>
+        <ErrorBar style={{ marginTop: 12 }}>{backfillError}</ErrorBar>
       ) : null}
 
       {backfill?.kind === "open" ? (
@@ -179,27 +178,26 @@ export function PlanCard({
       </div>
 
       {status.kind === "error" ? (
-        <div role="alert" className="error-bar" style={{ marginTop: 12 }}>
-          <span>{status.text}</span>
-          <button type="button" className="link-quiet" style={{ color: "inherit", fontWeight: 600 }} onClick={save}>
-            Retry
-          </button>
-        </div>
+        <ErrorBar style={{ marginTop: 12 }} action={{ label: "Retry", onClick: save }}>{status.text}</ErrorBar>
       ) : null}
 
       {editing ? (
         <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
-          {hint ? <span className="hint">{hint}</span> : null}
+          <span className="hint" id="plan-hint" aria-live="polite">
+            {hint ?? ""}
+          </span>
           <button type="button" className="btn btn-ghost" onClick={cancel} disabled={status.kind === "saving"}>
             Cancel
           </button>
-          <button type="button" className="btn btn-primary" disabled={!canSave} onClick={save}>
+          <button type="button" className="btn btn-primary" aria-disabled={!canSave} aria-describedby={hint ? "plan-hint" : undefined} onClick={save}>
             {status.kind === "saving" ? "Saving…" : "Save plan"}
           </button>
         </div>
-      ) : status.kind === "saved" ? (
-        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 10, textAlign: "right" }}>Saved</div>
-      ) : null}
+      ) : (
+        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 10, textAlign: "right", minHeight: 14 }} aria-live="polite">
+          {status.kind === "saved" ? "Saved" : ""}
+        </div>
+      )}
     </section>
   );
 }

@@ -51,14 +51,25 @@ export function CloseCard(props: Props) {
       ) : (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
           <div style={{ maxWidth: "42ch" }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Close the day</div>
+            <h2 className="card-title">Close the day</h2>
             <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>
               Actual result first, then what hurt and what helped. Close before 11:59 PM {props.tz.replace("_", " ")} — a truthful zero counts.
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            {!props.canClose && props.cannotCloseReason ? <span className="hint">{props.cannotCloseReason}</span> : null}
-            <button type="button" className="btn btn-primary" style={{ minWidth: 200 }} disabled={!props.canClose} onClick={() => setOpen(true)}>
+            <span className="hint" id="close-reason">
+              {!props.canClose && props.cannotCloseReason ? props.cannotCloseReason : ""}
+            </span>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ minWidth: 200 }}
+              aria-disabled={!props.canClose}
+              aria-describedby={props.canClose ? undefined : "close-reason"}
+              onClick={() => {
+                if (props.canClose) setOpen(true);
+              }}
+            >
               Enter actual result
             </button>
           </div>

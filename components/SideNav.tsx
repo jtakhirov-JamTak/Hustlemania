@@ -20,42 +20,14 @@ export function SideNavList({ items }: { items: SideItem[] }) {
       {items.map((it) => {
         const active = pathname === it.href || pathname.startsWith(it.href + "/");
         return (
-          <Link
-            key={it.href}
-            href={it.href}
-            aria-current={active ? "page" : undefined}
-            style={{
-              display: "block",
-              width: "calc(100% - 20px)",
-              textDecoration: "none",
-              color: "inherit",
-              borderRadius: 12,
-              marginLeft: 10,
-              marginBottom: 2,
-              background: active ? "color-mix(in srgb, var(--accent) 10%, transparent)" : "transparent",
-              padding: "11px 14px 12px",
-            }}
-          >
-            <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
-              <span style={{ fontWeight: 600, fontSize: 13.5 }}>{it.label}</span>
-              {it.meta ? (
-                <span
-                  style={{
-                    fontSize: 10.5,
-                    color: it.metaAccent ? "var(--accent)" : "var(--muted)",
-                    whiteSpace: "nowrap",
-                    fontWeight: 600,
-                  }}
-                >
-                  {it.meta}
-                </span>
-              ) : null}
+          <Link key={it.href} href={it.href} aria-current={active ? "page" : undefined} className={`side-link ${active ? "side-link-on" : ""}`}>
+            <span className="side-link-head">
+              <span className="side-label">{it.label}</span>
+              {it.meta ? <span className={`side-meta ${it.metaAccent ? "side-meta-accent" : ""}`}>{it.meta}</span> : null}
             </span>
-            {it.sub ? (
-              <span style={{ display: "block", fontSize: 11.5, color: "var(--muted)", marginTop: 3, lineHeight: 1.4 }}>{it.sub}</span>
-            ) : null}
+            {it.sub ? <span className="side-sub">{it.sub}</span> : null}
             {it.note ? (
-              <span style={{ display: "block", fontSize: 10.5, color: "var(--muted)", marginTop: 4, fontWeight: 600 }} data-testid="side-note">
+              <span className="side-note" data-testid="side-note">
                 {it.note}
               </span>
             ) : null}
@@ -66,6 +38,11 @@ export function SideNavList({ items }: { items: SideItem[] }) {
   );
 }
 
+/**
+ * The section sidebar: a list beside the page on desktop, one scrolling row of chips
+ * above it at ≤940px (see `[data-sidebar]` in globals.css). Section titles go with the
+ * list layout; on the row the chips speak for themselves.
+ */
 export function SideNav({ title, items, children }: { title: string; items: SideItem[]; children?: React.ReactNode }) {
   return (
     <aside
@@ -78,9 +55,7 @@ export function SideNav({ title, items, children }: { title: string; items: Side
         background: "var(--panel)",
       }}
     >
-      <div className="label-muted" style={{ padding: "0 24px 10px" }}>
-        {title}
-      </div>
+      <div className="label-muted side-title">{title}</div>
       <SideNavList items={items} />
       {children}
     </aside>

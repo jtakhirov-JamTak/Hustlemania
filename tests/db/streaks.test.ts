@@ -1,13 +1,19 @@
+import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { zoneOffUtcDate } from "../support/zones";
 import { createTestUser, deleteTestUser, expectRpcError, insertSprintRows, rpc, sql, type TestUser } from "./helpers";
 
 const TZ = "America/Los_Angeles";
+// The live sprint's zone is on a different date from UTC for the whole run, so a
+// close_day or streak read that used the UTC date would put "today" on the wrong day.
+const LIVE_TZ = zoneOffUtcDate();
 
 /**
  * F5 — day boundaries, streaks, missed days, backfill (PRD §9, rule 18).
  *
- * Two sprints. The live one has day 5 = today in Los Angeles, so days 1–4 are already
- * missed and close_day runs against the real clock. The fixed-clock one spans the US
+ * Two sprints. The live one has day 5 = today in a zone whose date differs from UTC
+ * (tests/support/zones), so days 1–4 are already missed and close_day runs against the
+ * real clock. The fixed-clock one spans the US
  * DST end (2026-11-01) and feeds the streak table test through sprint_streak_at, each
  * scenario inside a transaction that is rolled back.
  */
@@ -20,8 +26,8 @@ describe("streaks", () => {
   beforeAll(async () => {
     a = await createTestUser("streaks-a");
     b = await createTestUser("streaks-b");
-    const [r] = await sql<{ d: string }[]>`select to_char((now() at time zone ${TZ})::date - 4, 'YYYY-MM-DD') as d`;
-    live = await insertSprintRows(a, { startDate: r.d, tz: TZ });
+    const [r] = await sql<{ d: string }[]>`select to_char((now() at time zone ${LIVE_TZ})::date - 4, 'YYYY-MM-DD') as d`;
+    live = await insertSprintRows(a, { startDate: r.d, tz: LIVE_TZ });
     dst = await insertSprintRows(a, { startDate: "2026-10-25", tz: TZ, area: "health" });
   });
 
@@ -81,6 +87,39 @@ describe("streaks", () => {
     it("an unknown sprint reads as 0", async () => {
       const [row] = await sql<{ streak: number }[]>`select public.sprint_streak_at(gen_random_uuid(), now()) as streak`;
       expect(row.streak).toBe(0);
+    });
+  });
+
+  describe("0007's backfill of closed_on_time (the statement from the migration file, rolled back)", () => {
+    it("reads closed_at in the sprint's zone: 23:30 local is on time, 00:30 the next day is not — a UTC read calls both late", async () => {
+      const migration = readFileSync("supabase/migrations/0007_streaks.sql", "utf8");
+      const statement = /update public\.sprint_days d\s+set closed_on_time[^;]+;/.exec(migration)?.[0];
+      expect(statement).toBeDefined();
+      const ROLLBACK = new Error("rollback");
+      await sql
+        .begin(async (tx) => {
+          // The migration ran before the CHECK and the widened immutability trigger existed.
+          await tx`set local session_replication_role = replica`;
+          await tx`alter table public.sprint_days drop constraint sprint_days_on_time_iff_closed_check`;
+          // DST-sprint day 1 is 2026-10-25 (PDT, UTC−7): 23:30 local is 06:30Z on the 26th.
+          // Day 2 is 10-26: 00:30 local on the 27th is 07:30Z on the 27th.
+          await tx`update public.sprint_days set actual = 100, closed_at = '2026-10-26T06:30:00Z' where id = ${dst.dayIds[0]}`;
+          await tx`update public.sprint_days set actual = 100, closed_at = '2026-10-27T07:30:00Z' where id = ${dst.dayIds[1]}`;
+          await tx.unsafe(statement!);
+          const rows = await tx<{ day_index: number; closed_on_time: boolean; utc_read: boolean }[]>`
+            select day_index, closed_on_time, (closed_at at time zone 'UTC')::date <= date as utc_read
+            from public.sprint_days where sprint_id = ${dst.sprintId} and closed_at is not null order by day_index`;
+          expect(rows).toEqual([
+            { day_index: 1, closed_on_time: true, utc_read: false },
+            { day_index: 2, closed_on_time: false, utc_read: false },
+          ]);
+          throw ROLLBACK;
+        })
+        .catch((e) => {
+          if (e !== ROLLBACK) throw e;
+        });
+      const [after] = await sql<{ n: number }[]>`select count(*)::int as n from public.sprint_days where sprint_id = ${dst.sprintId} and closed_at is not null`;
+      expect(after.n).toBe(0);
     });
   });
 

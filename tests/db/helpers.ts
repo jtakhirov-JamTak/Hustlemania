@@ -1,31 +1,23 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import postgres from "postgres";
+import { adminClient, createUser, deleteUserById, localSupabaseUrl, requireLocal } from "../support/local";
+import { insertSprintRows as seedSprintRows } from "../support/sprints";
 
 /**
- * DB integration tests run only against the local Supabase stack. Every connection
- * string is checked for a loopback host before use so a misconfigured environment can
- * never point these tests, which drop and recreate policies, at the hosted project.
+ * DB integration tests run only against the local Supabase stack: tests/support/local
+ * checks every connection string for a loopback host before use, so a misconfigured
+ * environment can never point these tests, which drop and recreate policies, at the
+ * hosted project.
  */
-function requireLocal(name: string, value: string | undefined): string {
-  if (!value) throw new Error(`${name} is not set; run \`npm run test:db\` so scripts/local-env.mjs writes .env.local`);
-  const host = new URL(value).hostname;
-  if (host !== "127.0.0.1" && host !== "localhost") {
-    throw new Error(`${name} points at ${host}; DB tests only run against the local stack`);
-  }
-  return value;
-}
-
-export const DATABASE_URL = requireLocal("LOCAL_DATABASE_URL", process.env.LOCAL_DATABASE_URL);
-export const SUPABASE_URL = requireLocal("NEXT_PUBLIC_SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL);
+const RUNNER = "npm run test:db";
+export const DATABASE_URL = requireLocal("LOCAL_DATABASE_URL", process.env.LOCAL_DATABASE_URL, RUNNER);
+export const SUPABASE_URL = localSupabaseUrl(RUNNER);
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 /** Superuser-ish connection (postgres role, bypasses RLS) for setup and assertions. */
 export const sql = postgres(DATABASE_URL, { max: 2, onnotice: () => {} });
 
-export const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
+export const admin = adminClient(SUPABASE_URL);
 
 export type TestUser = {
   id: string;
@@ -37,22 +29,17 @@ export type TestUser = {
 const PASSWORD = "test-password-1234";
 
 export async function createTestUser(label: string): Promise<TestUser> {
-  const email = `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@test.local`;
-  const created = await admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true });
-  if (created.error || !created.data.user) throw created.error ?? new Error("createUser returned no user");
-
+  const { id, email } = await createUser(admin, label, PASSWORD);
   const client = createClient(SUPABASE_URL, ANON_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
   const signed = await client.auth.signInWithPassword({ email, password: PASSWORD });
   if (signed.error) throw signed.error;
-  return { id: created.data.user.id, email, client };
+  return { id, email, client };
 }
 
 export async function deleteTestUser(user: TestUser | undefined) {
-  if (!user) return;
-  const res = await admin.auth.admin.deleteUser(user.id);
-  if (res.error) throw res.error;
+  await deleteUserById(admin, user?.id);
 }
 
 /** Today's calendar date in `tz` as the database sees it. */
@@ -159,27 +146,12 @@ export async function startSprint(user: TestUser, args: StartSprintArgs): Promis
 
 /**
  * A sprint whose day 1 is `startDate` (any date, past included) with 14 open days,
- * inserted straight into the tables as the superuser. start_sprint only accepts today
- * or tomorrow, so this is how the suite gets days that are already missed.
+ * written straight into the tables with the service role (tests/support/sprints, shared
+ * with the e2e suite). start_sprint only accepts today or tomorrow, so this is how the
+ * suite gets days that are already missed.
  */
-export async function insertSprintRows(
-  user: TestUser,
-  opts: { startDate: string; tz: string; area?: string; target?: number },
-): Promise<{ sprintId: string; dayIds: string[] }> {
-  const area = opts.area ?? "wealth";
-  const target = opts.target ?? 100;
-  const visionId = await insertVision(user, area);
-  const [s] = await sql<{ id: string }[]>`
-    insert into public.sprints (user_id, vision_id, area, outcome, measurement, currency, amount, confidence, why, celebration, mantra, tz, start_date, end_date)
-    values (${user.id}, ${visionId}, ${area}, 'Past-dated sprint', 'money', 'USD', ${target * 14}, 7, 'why', 'celebration', 'mantra', ${opts.tz},
-            ${opts.startDate}::date, ${opts.startDate}::date + 13)
-    returning id`;
-  await sql`
-    insert into public.sprint_days (sprint_id, user_id, day_index, date, target)
-    select ${s.id}, ${user.id}, i, ${opts.startDate}::date + (i - 1), ${target}
-    from generate_series(1, 14) as i`;
-  const days = await sql<{ id: string }[]>`select id from public.sprint_days where sprint_id = ${s.id} order by day_index`;
-  return { sprintId: s.id, dayIds: days.map((d) => d.id) };
+export async function insertSprintRows(user: TestUser, opts: { startDate: string; tz: string; area?: string; target?: number }): Promise<{ sprintId: string; dayIds: string[] }> {
+  return seedSprintRows(admin, user.id, opts);
 }
 
 export async function expectRpcError(user: TestUser, fn: string, args: Record<string, unknown>, message: string) {

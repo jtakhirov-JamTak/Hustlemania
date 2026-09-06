@@ -10,7 +10,8 @@
   --success: #2f7d52;
   --under: #c0392b;
   --divider: rgba(22, 36, 46, 0.13);
-  --muted: rgba(22, 36, 46, 0.62);
+  --muted: rgba(22, 36, 46, 0.7);
+  --control-border: rgba(22, 36, 46, 0.45);
   --faint: rgba(22, 36, 46, 0.06);
   --accent-tint: color-mix(in srgb, var(--accent) 8%, var(--panel));
   --accent-tint-border: color-mix(in srgb, var(--accent) 22%, transparent);
@@ -54,7 +55,7 @@ select {
 
 input::placeholder,
 textarea::placeholder {
-  color: color-mix(in srgb, currentColor 40%, transparent);
+  color: color-mix(in srgb, currentColor 55%, transparent);
 }
 
 a {
@@ -89,7 +90,7 @@ a {
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.03em;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .label-muted {
@@ -133,8 +134,15 @@ a {
   background: var(--accent-ink);
 }
 
-.btn-primary:disabled {
+.btn-primary:disabled,
+.btn-primary[aria-disabled="true"] {
   opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* A primary that waits on a validation hint stays in the Tab order and names the hint
+   (aria-describedby); the click is a no-op until the hint clears. */
+.btn[aria-disabled="true"] {
   cursor: not-allowed;
 }
 
@@ -166,14 +174,32 @@ a {
   letter-spacing: -0.02em;
 }
 
+.card-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .input {
   display: block;
   width: 100%;
-  border: 1px solid var(--divider);
+  border: 1px solid var(--control-border);
   border-radius: 12px;
   background: var(--panel);
   padding: 11px 13px;
-  font-size: 14.5px;
+  font-size: 16px;
   line-height: 1.45;
   color: var(--ink);
 }
@@ -267,7 +293,7 @@ a {
   height: 18px;
   margin-top: 1px;
   border-radius: 6px;
-  border: 1.5px solid var(--divider);
+  border: 1.5px solid var(--control-border);
   background: var(--panel);
   color: #fff;
   font-size: 11px;
@@ -328,14 +354,41 @@ a {
   border: none;
   background: transparent;
   padding: 6px 0;
-  font-size: 14.5px;
+  font-size: 16px;
   line-height: 1.4;
   color: var(--ink);
 }
 
-.task-text:focus {
+.task-text:focus-visible {
   outline: none;
-  box-shadow: 0 1px 0 var(--accent);
+  box-shadow: 0 2px 0 var(--accent);
+}
+
+/* A native checkbox drawn as the option mark: the label toggles it, Space works. */
+.check {
+  appearance: none;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border-radius: 6px;
+  border: 1.5px solid var(--control-border);
+  background: var(--panel);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+}
+
+.check:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.check:checked::after {
+  content: "\2713";
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
 }
 
 .task-text[data-done="true"] {
@@ -370,25 +423,159 @@ a {
   color: var(--accent-ink);
 }
 
-.dialog-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: rgba(11, 22, 32, 0.52);
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 8vh 16px 16px;
-  overflow: auto;
+/* The 14-day plan: seven columns on wide screens, five on a phone (min 56px a cell). */
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
 }
 
+.plan-cell {
+  min-width: 56px;
+}
+
+.plan-cell-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.plan-input {
+  margin-top: 4px;
+  padding: 5px 6px;
+  font-weight: 600;
+  text-align: center;
+  border-radius: 8px;
+}
+
+/* Section sidebar (SideNav): a list beside the page; a chip row above it when narrow. */
+.side-title {
+  padding: 0 24px 10px;
+}
+
+.side-title-more {
+  padding-top: 18px;
+}
+
+.side-cta {
+  padding: 14px 20px 0;
+}
+
+.side-link {
+  display: block;
+  width: calc(100% - 20px);
+  margin: 0 0 2px 10px;
+  padding: 11px 14px 12px;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.side-link-on {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.side-link-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.side-label {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.side-meta {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.side-meta-accent {
+  color: var(--accent);
+}
+
+.side-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.side-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* Dialogs are native <dialog> elements (components/Modal.tsx): head, a body that scrolls
+   on its own, and a footer that stays put above the keyboard. */
 .dialog {
-  width: 100%;
-  background: var(--panel);
+  width: calc(100% - 32px);
+  max-height: calc(92dvh - 16px);
+  margin: 8vh auto auto;
+  padding: 0;
+  border: none;
   border-radius: 22px;
-  padding: 26px 28px;
+  background: var(--panel);
+  color: var(--ink);
   box-shadow: 0 24px 60px rgba(11, 22, 32, 0.28);
+  overscroll-behavior: contain;
+}
+
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
   animation: riseIn 180ms ease-out;
+}
+
+.dialog::backdrop {
+  background: rgba(11, 22, 32, 0.52);
+}
+
+body:has(dialog[open]) {
+  overflow: hidden;
+}
+
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.dialog-head {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 28px 0;
+}
+
+.dialog-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 28px 4px;
+}
+
+.dialog-foot {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 28px 22px;
 }
 
 @keyframes popIn {
@@ -426,14 +613,93 @@ a {
   [data-shell] {
     flex-direction: column;
   }
+  /* The sidebar becomes one scrolling row of chips, so the page starts under it. */
   [data-sidebar] {
     position: static;
     max-height: none;
-    overflow: visible;
     width: 100% !important;
     flex: none !important;
     border-right: none !important;
     box-shadow: 0 1px 0 var(--divider);
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    padding: 10px 12px !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .side-title {
+    display: none;
+  }
+  .side-link {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: auto;
+    min-height: 44px;
+    margin: 0;
+    padding: 6px 12px;
+    border: 1px solid var(--divider);
+  }
+  .side-link-on {
+    border-color: var(--accent);
+  }
+  .side-link-head {
+    gap: 8px;
+  }
+  .side-sub {
+    display: none;
+  }
+  .side-note {
+    margin-top: 2px;
+  }
+  .side-cta {
+    flex: none;
+    display: flex;
+    align-items: center;
+    padding: 0;
+  }
+  .side-cta .btn {
+    width: auto;
+    padding: 8px 14px;
+  }
+  /* Touch targets: 44px minimum on every control, hit boxes inflated where the
+     drawing must stay small. */
+  .btn,
+  .chip,
+  .disclosure {
+    min-height: 44px;
+  }
+  .btn-ghost {
+    padding: 6px 10px;
+  }
+  .chip {
+    padding: 7px 14px;
+  }
+  .link-quiet,
+  .task-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .task-mark {
+    position: relative;
+  }
+  .task-mark::after {
+    content: "";
+    position: absolute;
+    inset: -13px;
+  }
+  .plan-cell {
+    min-width: 0;
+    padding: 8px 3px !important;
+  }
+  .plan-input {
+    padding: 5px 2px;
   }
   [data-header] .brand {
     min-width: 0 !important;
@@ -464,7 +730,30 @@ a {
   .hide-narrow {
     display: none;
   }
-  .dialog {
-    padding: 22px 18px;
+  .dialog-head {
+    padding: 18px 18px 0;
+  }
+  .dialog-body {
+    padding: 8px 18px 4px;
+  }
+  .dialog-foot {
+    padding: 12px 18px 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .plan-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .plan-cell-head {
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog[open] {
+    animation: none;
   }
 }

@@ -1,30 +1,17 @@
-import { createClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
+import { adminClient, createUser, deleteUserById, localSupabaseUrl, requireLocal } from "../tests/support/local";
 
-function requireLocal(name: string, value: string | undefined): string {
-  if (!value) throw new Error(`${name} is not set; run \`npm run test:e2e\` so scripts/local-env.mjs writes .env.local`);
-  const host = new URL(value).hostname;
-  if (host !== "127.0.0.1" && host !== "localhost") throw new Error(`${name} points at ${host}; e2e runs only against the local stack`);
-  return value;
-}
+const RUNNER = "npm run test:e2e";
+const MAILPIT_URL = requireLocal("LOCAL_MAILPIT_URL", process.env.LOCAL_MAILPIT_URL, RUNNER);
 
-const SUPABASE_URL = requireLocal("NEXT_PUBLIC_SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL);
-const MAILPIT_URL = requireLocal("LOCAL_MAILPIT_URL", process.env.LOCAL_MAILPIT_URL);
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-export const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
+export const admin = adminClient(localSupabaseUrl(RUNNER));
 
 export async function seedUser(label: string): Promise<{ id: string; email: string }> {
-  const email = `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@test.local`;
-  const res = await admin.auth.admin.createUser({ email, email_confirm: true });
-  if (res.error || !res.data.user) throw res.error ?? new Error("createUser returned no user");
-  return { id: res.data.user.id, email };
+  return createUser(admin, label);
 }
 
 export async function deleteUser(id: string | undefined) {
-  if (!id) return;
-  const res = await admin.auth.admin.deleteUser(id);
-  if (res.error) throw res.error;
+  await deleteUserById(admin, id);
 }
 
 /** Polls Mailpit for the newest message to `email` and returns the magic link inside it. */

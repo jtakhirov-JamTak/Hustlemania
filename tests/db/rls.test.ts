@@ -23,12 +23,15 @@ describe("RLS isolation", () => {
   let a: TestUser;
   let b: TestUser;
   let sprintId: string;
+  let impedimentId: string;
 
   beforeAll(async () => {
     a = await createTestUser("rls-a");
     b = await createTestUser("rls-b");
     await insertVision(a, "wealth");
-    sprintId = await startSprint(a, moneySprintArgs({ ...(await seedItems(a)), p_start_date: await dbTodayIn("America/Los_Angeles") }));
+    const items = await seedItems(a);
+    impedimentId = items.p_highest_impediment_id;
+    sprintId = await startSprint(a, moneySprintArgs({ ...items, p_start_date: await dbTodayIn("America/Los_Angeles") }));
   });
 
   afterAll(async () => {
@@ -76,6 +79,20 @@ describe("RLS isolation", () => {
     expect(row.n).toBe(0);
   });
 
+  it("user B cannot update A's vision body or impediment proof (0 rows affected, rows unchanged)", async () => {
+    const v = await b.client.from("visions").update({ body: "hijacked" }).eq("user_id", a.id).select("id");
+    expect(v.error).toBeNull();
+    expect(v.data).toEqual([]);
+    const i = await b.client.from("impediments").update({ proof_when: "hijacked", name: "hijacked" }).eq("id", impedimentId).select("id");
+    expect(i.error).toBeNull();
+    expect(i.data).toEqual([]);
+
+    const [row] = await sql<{ v: number; i: number }[]>`
+      select (select count(*)::int from public.visions where user_id = ${a.id} and body = 'hijacked') as v,
+             (select count(*)::int from public.impediments where id = ${impedimentId} and (name = 'hijacked' or proof_when = 'hijacked')) as i`;
+    expect(row).toEqual({ v: 0, i: 0 });
+  });
+
   it("user B cannot insert a vision as A", async () => {
     const res = await b.client.from("visions").insert({ user_id: a.id, area: "health", body: "forged" }).select("id");
     expect(res.error).not.toBeNull();
@@ -84,7 +101,7 @@ describe("RLS isolation", () => {
 
   // Note: dropping the SELECT policy would NOT leak — RLS with no policy denies all.
   // The mutation that proves the isolation is RLS itself is disabling RLS on the table.
-  it.each(["visions", "sprints", "sprint_days"])(
+  it.each(["visions", "sprints", "sprint_days", "impediments"])(
     "disabling RLS on %s leaks A's rows to B; re-enabling hides them again",
     async (table) => {
       await sql.unsafe(`alter table public.${table} disable row level security`);

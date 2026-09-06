@@ -2,6 +2,24 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## Found during audit remediation phases 4–6 (2026-09-06), not fixed there
+
+- **#43 wizard split by step.** `components/NewSprintWizard.tsx` is ~600 lines across
+  four steps in one component. A refactor with no behaviour change; deferred rather
+  than done inside a fix pass. Actions were split by domain in phase 3.
+- **Tailwind keep or drop** (audit bucket D): still carried for `h-full` / `min-h-full`
+  and the `@theme` block. A decision, not a fix.
+- **Audit LOW lists not swept**: textareas `rows={2}`, `autoCapitalize` / `enterKeyHint`,
+  the date only in a hover `title` on the day strip, 64/78px numerals against a
+  seven-figure target, `aria-label` overriding visible text on Remove buttons, the
+  `▾/▸` glyphs (now `aria-hidden`), `.task-remove` / reorder arrows below 24×24 on
+  desktop (44px on phone now).
+- **Phone footer wrap in the close dialog**: at 390px "Cancel" sits on its own line above
+  the hint and primary. Readable, not pretty.
+- **Playwright screenshots mid-hydration report a hydration mismatch** (`caret-color:
+  transparent` injected by `screenshot()`); harmless, but a capture script should wait
+  for `networkidle` before shooting if the console is being read.
+
 ## Found during the full audit (2026-09-05), not fixed there
 
 The ranked backlog itself is `docs/audits/full-audit-2026-09-05.md` (47 findings +

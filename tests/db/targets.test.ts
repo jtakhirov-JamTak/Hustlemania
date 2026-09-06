@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { zoneOffUtcDate } from "../support/zones";
 import { sameDailyTargets } from "@/lib/targets";
 import {
   createTestUser,
@@ -14,9 +15,9 @@ import {
   type TestUser,
 } from "./helpers";
 
-// UTC+14: "today" here is a different date from UTC for most of the day, so a lock
+// A zone whose date differs from UTC's right now (tests/support/zones), so a lock
 // computed in the server zone instead of the sprint zone would show up.
-const TZ = "Pacific/Kiritimati";
+const TZ = zoneOffUtcDate();
 
 /** Goal ÷ 14 for 8,000.00 USD with the remainder on the first days, in minor units. */
 const SAME = sameDailyTargets(800_000, 100);
@@ -172,20 +173,18 @@ describe("F3 targets: save_targets, locking, ownership", () => {
       expect(res.data!.intention).toBe("Move the money");
     });
 
-    it("the lock uses the sprint's zone: a day that is 'today' in UTC+14 but still yesterday in UTC is locked", async () => {
-      // If the trigger compared against the server date (UTC), day 1 would be open for
-      // the hours when Kiritimati is already on the next date.
+    it("the lock uses the sprint's zone: a day that is 'today' there but not in UTC is locked", async () => {
+      // If the trigger compared against the server date (UTC), day 1 would be open or
+      // locked on the wrong day; TZ is chosen so its date differs from UTC's right now.
       const [row] = await sql<{ sprint_day: string; utc_day: string; same: boolean }[]>`
         select to_char((now() at time zone ${TZ})::date, 'YYYY-MM-DD') as sprint_day,
                to_char((now() at time zone 'UTC')::date, 'YYYY-MM-DD') as utc_day,
                (now() at time zone ${TZ})::date = (now() at time zone 'UTC')::date as same`;
       expect(row.sprint_day).toBe(today);
-      // Whatever the clock says, the rule is evaluated in the sprint zone.
+      expect(row.same, `${TZ} should not share UTC's date at ${new Date().toISOString()}`).toBe(false);
+      // The rule is evaluated in the sprint zone, whichever side of UTC's date it sits.
       await expect(sql`update public.sprint_days set target = 0 where sprint_id = ${sprintId} and day_index = 1`).rejects.toThrow(/target_locked/);
-      if (!row.same) {
-        // The interesting hours: UTC has not reached `today` yet, and day 1 is locked anyway.
-        expect(row.utc_day < row.sprint_day).toBe(true);
-      }
+      expect(row.utc_day).not.toBe(row.sprint_day);
     });
   });
 

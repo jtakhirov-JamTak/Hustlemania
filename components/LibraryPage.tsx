@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { ProofInputs } from "@/components/ProofInputs";
+import { ErrorBar } from "@/components/ErrorBar";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { archiveItem, createItem, deleteItem, moveItem, restoreItem, setItemScope, updateItem, type BlockedSprint } from "@/app/(app)/actions/library";
 import { areaName, isAreaKey } from "@/lib/areas";
 import { callAction } from "@/lib/callAction";
@@ -63,7 +65,7 @@ export function LibraryPage({ kind, items }: { kind: ItemKind; items: LibraryIte
       </h1>
       <p style={{ fontSize: 13.5, color: "var(--muted)", margin: "6px 0 20px", maxWidth: "62ch", lineHeight: 1.55 }}>{copy.blurb}</p>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }} aria-label="Scope filter">
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }} role="group" aria-label="Scope filter">
         {[{ key: "all" as Filter, label: "All" }, ...SCOPES.map((s) => ({ key: s.key as Filter, label: s.label }))].map((f) => (
           <button key={f.key} type="button" className={`chip ${filter === f.key ? "chip-on" : ""}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
             {f.label}
@@ -74,12 +76,7 @@ export function LibraryPage({ kind, items }: { kind: ItemKind; items: LibraryIte
       <AddCard kind={kind} onError={setPageError} />
 
       {pageError ? (
-        <div role="alert" className="error-bar" style={{ marginBottom: 12 }}>
-          <span>{pageError}</span>
-          <button type="button" className="link-quiet" style={{ color: "inherit", fontWeight: 600 }} onClick={() => setPageError(null)}>
-            Dismiss
-          </button>
-        </div>
+        <ErrorBar style={{ marginBottom: 12 }} action={{ label: "Dismiss", onClick: () => setPageError(null) }}>{pageError}</ErrorBar>
       ) : null}
 
       <div data-testid="library-list">
@@ -135,21 +132,6 @@ function ScopeChips({ value, onChange, disabled }: { value: ItemScope; onChange:
   );
 }
 
-function ProofInputs({ when, then, onWhen, onThen, idPrefix }: { when: string; then: string; onWhen: (v: string) => void; onThen: (v: string) => void; idPrefix: string }) {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "8px 12px", marginTop: 10, alignItems: "center" }}>
-      <label htmlFor={`${idPrefix}-when`} className="label-accent" style={{ fontWeight: 700 }}>
-        WHEN
-      </label>
-      <input id={`${idPrefix}-when`} className="input" value={when} onChange={(e) => onWhen(e.target.value)} placeholder="I notice myself…" style={{ fontSize: 13.5, padding: "9px 12px" }} />
-      <label htmlFor={`${idPrefix}-then`} className="label-accent" style={{ fontWeight: 700 }}>
-        THEN
-      </label>
-      <input id={`${idPrefix}-then`} className="input" value={then} onChange={(e) => onThen(e.target.value)} placeholder="I immediately…" style={{ fontSize: 13.5, padding: "9px 12px" }} />
-    </div>
-  );
-}
-
 function AddCard({ kind, onError }: { kind: ItemKind; onError: (e: string | null) => void }) {
   const copy = COPY[kind];
   const [name, setName] = useState("");
@@ -161,7 +143,7 @@ function AddCard({ kind, onError }: { kind: ItemKind; onError: (e: string | null
   const [pending, start] = useTransition();
 
   function submit() {
-    if (!name.trim()) return;
+    if (!name.trim() || pending) return;
     setError(null);
     start(async () => {
       const res = await callAction(() => createItem(kind, { name, explanation, scope, proofWhen: when, proofThen: then }));
@@ -187,23 +169,28 @@ function AddCard({ kind, onError }: { kind: ItemKind; onError: (e: string | null
         submit();
       }}
     >
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{copy.addTitle}</div>
-      <input className="input" aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder={copy.namePlaceholder} />
-      <input className="input" aria-label="Explanation" value={explanation} onChange={(e) => setExplanation(e.target.value)} placeholder="Optional explanation — why this matters" style={{ marginTop: 10, fontSize: 13.5 }} />
-      {kind === "impediment" ? <ProofInputs idPrefix="add" when={when} then={then} onWhen={setWhen} onThen={setThen} /> : null}
+      <h2 className="card-title" style={{ marginBottom: 12 }}>
+        {copy.addTitle}
+      </h2>
+      <label htmlFor="add-name" className="label-accent" style={{ display: "block", marginBottom: 6 }}>
+        Name
+      </label>
+      <input id="add-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={copy.namePlaceholder} />
+      <label htmlFor="add-explanation" className="label-accent" style={{ display: "block", margin: "10px 0 6px" }}>
+        Explanation · optional
+      </label>
+      <input id="add-explanation" className="input" value={explanation} onChange={(e) => setExplanation(e.target.value)} placeholder="Why this matters" />
+      {kind === "impediment" ? <ProofInputs idPrefix="add" when={when} then={then} onWhen={setWhen} onThen={setThen} style={{ marginTop: 10 }} /> : null}
       {error ? (
-        <div role="alert" className="error-bar" style={{ marginTop: 12 }}>
-          <span>{error}</span>
-          <button type="submit" className="link-quiet" style={{ color: "inherit", fontWeight: 600 }}>
-            Retry
-          </button>
-        </div>
+        <ErrorBar style={{ marginTop: 12 }} action={{ label: "Retry", submit: true }}>{error}</ErrorBar>
       ) : null}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, marginTop: 14, flexWrap: "wrap" }}>
         <ScopeChips value={scope} onChange={setScope} />
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {!name.trim() ? <span className="hint">Name it first.</span> : null}
-          <button type="submit" className="btn btn-primary" disabled={pending || !name.trim()}>
+          <span className="hint" id="add-hint" aria-live="polite">
+            {name.trim() ? "" : "Name it first."}
+          </span>
+          <button type="submit" className="btn btn-primary" aria-disabled={pending || !name.trim()} aria-describedby={name.trim() ? undefined : "add-hint"}>
             {pending ? "Adding…" : "Add"}
           </button>
         </div>
@@ -237,6 +224,12 @@ function ItemCard({
   const [blocked, setBlocked] = useState<{ verb: string; list: BlockedSprint[] } | null>(null);
   const [busy, start] = useTransition();
   const hasProof = Boolean(item.proof_when || item.proof_then);
+  const editButton = useRef<HTMLButtonElement>(null);
+  const wasEditing = useRef(false);
+  useEffect(() => {
+    if (wasEditing.current && !editing) editButton.current?.focus();
+    wasEditing.current = editing;
+  }, [editing]);
 
   function startEdit() {
     setName(item.name);
@@ -250,7 +243,7 @@ function ItemCard({
   }
 
   function save() {
-    if (!name.trim()) return;
+    if (!name.trim() || busy) return;
     setError(null);
     setBlocked(null);
     start(async () => {
@@ -306,7 +299,8 @@ function ItemCard({
             ↓
           </button>
         </div>
-        <div style={{ width: 20, fontSize: 13, fontWeight: 700, color: "var(--muted)", paddingTop: 3 }} aria-label={`Rank ${position}`}>
+        <div style={{ width: 20, fontSize: 13, fontWeight: 700, color: "var(--muted)", paddingTop: 3 }}>
+          <span className="sr-only">Rank </span>
           {position}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -322,7 +316,7 @@ function ItemCard({
                     {scopeLabel(item.scope)}
                   </span>
                   <span style={{ fontSize: 10.5, color: "var(--muted)" }}>{item.used ? "In sprint history" : "Unused"}</span>
-                  <button type="button" className="link-quiet" style={{ color: "var(--accent-ink)" }} onClick={startEdit}>
+                  <button ref={editButton} type="button" className="link-quiet" style={{ color: "var(--accent-ink)" }} onClick={startEdit} aria-label={`Edit ${item.name}`}>
                     Edit
                   </button>
                   {item.used ? (
@@ -358,17 +352,25 @@ function ItemCard({
                 save();
               }}
             >
-              <input className="input" aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ fontWeight: 600, padding: "10px 12px" }} />
-              <input className="input" aria-label="Explanation" value={explanation} onChange={(e) => setExplanation(e.target.value)} placeholder="Optional explanation" style={{ marginTop: 8, fontSize: 13.5, padding: "9px 12px" }} />
-              {item.kind === "impediment" ? <ProofInputs idPrefix={`edit-${item.id}`} when={when} then={then} onWhen={setWhen} onThen={setThen} /> : null}
+              <label htmlFor={`edit-${item.id}-name`} className="label-accent" style={{ display: "block", marginBottom: 6 }}>
+                Name
+              </label>
+              <input id={`edit-${item.id}-name`} className="input" value={name} onChange={(e) => setName(e.target.value)} style={{ fontWeight: 600, padding: "10px 12px" }} />
+              <label htmlFor={`edit-${item.id}-explanation`} className="label-accent" style={{ display: "block", margin: "8px 0 6px" }}>
+                Explanation · optional
+              </label>
+              <input id={`edit-${item.id}-explanation`} className="input" value={explanation} onChange={(e) => setExplanation(e.target.value)} style={{ padding: "9px 12px" }} />
+              {item.kind === "impediment" ? <ProofInputs idPrefix={`edit-${item.id}`} when={when} then={then} onWhen={setWhen} onThen={setThen} style={{ marginTop: 10 }} /> : null}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
                 <ScopeChips value={scope} onChange={setScope} disabled={busy} />
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  {!name.trim() ? <span className="hint">A name is required.</span> : null}
+                  <span className="hint" id={`edit-${item.id}-hint`} aria-live="polite">
+                    {name.trim() ? "" : "A name is required."}
+                  </span>
                   <button type="button" className="btn btn-ghost" onClick={() => setEditing(false)}>
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary" disabled={busy || !name.trim()}>
+                  <button type="submit" className="btn btn-primary" aria-disabled={busy || !name.trim()} aria-describedby={name.trim() ? undefined : `edit-${item.id}-hint`}>
                     {busy ? "Saving…" : "Save"}
                   </button>
                 </div>
@@ -376,12 +378,7 @@ function ItemCard({
             </form>
           )}
           {error ? (
-            <div role="alert" className="error-bar" style={{ marginTop: 12 }}>
-              <span>{error}</span>
-              <button type="button" className="link-quiet" style={{ color: "inherit", fontWeight: 600 }} onClick={() => setError(null)}>
-                Dismiss
-              </button>
-            </div>
+            <ErrorBar style={{ marginTop: 12 }} action={{ label: "Dismiss", onClick: () => setError(null) }}>{error}</ErrorBar>
           ) : null}
           {blocked ? <BlockedList blocked={blocked.list} verb={blocked.verb} /> : null}
         </div>

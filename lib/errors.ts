@@ -49,9 +49,6 @@ const MESSAGES: Record<string, string> = {
   tasks_text_check: "Write the task before saving.",
   task_locked: "A task stays on the day it was written for.",
   "violates foreign key": "That item has sprint history, so it can only be archived.",
-  "Signups not allowed": "This email is not on the invite list.",
-  otp_disabled: "This email is not on the invite list.",
-  signup_disabled: "This email is not on the invite list.",
 };
 
 export const GENERIC_SAVE_ERROR = "That did not save. Your input is still here — try again.";

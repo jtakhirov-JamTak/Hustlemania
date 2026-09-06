@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { LibraryPage } from "@/components/LibraryPage";
 import { loadLibrary } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
+
+export const metadata: Metadata = { title: "Impediments" };
 
 export default async function ImpedimentsPage() {
   const supabase = await createClient();

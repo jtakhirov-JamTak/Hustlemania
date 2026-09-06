@@ -6,6 +6,33 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-06 — On a phone every form zoomed on focus, the plan grid overlapped itself, and the sidebar pushed Today off screen
+
+**Problem.** Three rendering defects on a 390px viewport, confirmed in the phone e2e
+capture: (1) `.input` / `.task-text` were 14.5px and eight components set inline sizes
+of 13–15.5px on inputs, so iOS Safari zoomed on every focus and stayed zoomed; (2) the
+14-day plan drew seven ~39px tracks with `minWidth: 56` cells, so cells overlapped,
+D7/D14 clipped and an edit-mode tap on one day landed in the next; (3) the sidebar
+rendered in full above the page, so "Today's target" began ~800px down an 844px
+viewport.
+
+**Fix.** 16px on the two classes and no inline size on any text field; the plan grid
+became class-driven with five columns under 480px, free-shrinking cells at ≤940px and a
+stacked cell header; the sidebar collapses to one scrolling chip row at ≤940px
+(`SideNav` restyled through `.side-*` classes). See DECISIONS 2026-09-06 (phases 4–6).
+
+**Regression test.** `e2e/golden-path.spec.ts` (phone project): after opening plan
+edit mode, every `input`/`textarea` on Today must compute at ≥16px (would list the
+plan-edit inputs at 13px before the fix); the existing sideways-overflow assertion and
+the `[data-sidebar]` width check still hold; `test-results/today-phone.png` is the
+visual record. The grid overlap has no automated assertion (overflow is inside the
+strip); it was verified in the capture.
+
+**Where found.** The full audit (`docs/audits/full-audit-2026-09-05.md`, mobile findings
+#1–#3, the only auditor to catch them), verified in the phone render before the fix.
+
+---
+
 ## 2026-09-06 — Designating a Highest Impediment wrote its Proof Point before the call that could reject it
 
 **Problem.** `setHighestImpediment` (server action) updated `impediments.proof_when /

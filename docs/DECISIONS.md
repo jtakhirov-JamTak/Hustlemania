@@ -6,6 +6,92 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-06 — Audit remediation, phases 4–6: the phone floor, native dialogs, tests that can go red
+
+Fix pass over `docs/audits/full-audit-2026-09-05.md` buckets A + B, phases 4–6 of 6
+(mobile, accessibility, tests and consolidation), resumed on the user's "continue"
+after the phase-3 stop. Verified by `npm run verify` (hooks 115, unit 54, DB 178,
+e2e 8 on desktop + phone) and Playwright captures of the close dialog, result screen,
+library and wizard on both viewports.
+
+**Mobile.** `.input` and `.task-text` are 16px and no `<input>`/`<textarea>` carries an
+inline size any more, so iOS Safari stops zooming on focus; the golden path now asserts
+that no text field on Today, plan-edit inputs included, computes below 16px. The plan
+grid is class-driven (`.plan-grid`, `.plan-cell`, `.plan-input`): seven columns above
+480px, five below, cells free to shrink at ≤940px, the D-label and date stacked in a
+cell on a phone so two-digit dates do not wrap. The sidebar becomes one scrolling row of
+chips at ≤940px (`SideNav` moved from inline styles to `.side-*` classes so the
+breakpoint can restyle it); the phone e2e still measures the aside at the viewport
+width, and Today's target card now starts around 500 CSS px down instead of 800. Touch
+targets: `.btn`, `.chip`, `.disclosure` get `min-height: 44px` at ≤940px; `.link-quiet`
+and `.task-remove` become 44×44 inline-flex boxes; the 18px task checkbox keeps its
+drawing and gains a 44px hit box through a `::after` overlay. The 9–10.5px labels on
+the plan grid and day strip moved to 10.5–11.5px and the D-labels to `--accent-ink`.
+The day strip centres the focus day in its own scroll box (a client effect that sets
+`scrollLeft`, never the page). PWA surface: `app/manifest.ts` (served as
+`/manifest.webmanifest`, already excluded from the proxy matcher), `app/icon.svg`,
+`app/apple-icon.png`, `public/icon-192.png` / `icon-512.png` rendered from the SVG with
+the project's own `sharp`, `viewport.themeColor` and `appleWebApp` metadata; a dev
+probe confirmed every URL and head tag.
+
+**Dialogs.** The three dialogs (item picker, close flow, result screen) are native
+`<dialog>` elements behind `components/Modal.tsx`: `showModal()` traps focus and makes
+the page inert, Escape and the browser's `close` both route to the dismiss handler,
+focus returns to the opener on unmount, and the backdrop dismisses only when a pointer
+both goes down and comes up on it (the old `onMouseDown` scrim fired after a scroll on
+iOS). Body scroll is locked with `body:has(dialog[open])`, the dialog scrolls in its own
+`.dialog-body` with `overscroll-behavior: contain`, and the footer stays out of the
+scroll so the primary is not under the keyboard. The result screen focuses one block
+holding "Day N closed", the actual and its verdict, so a screen reader hears them
+together. Step changes in the wizard and the close flow focus the new heading.
+Rejected on the way: a JS focus trap — the platform has one.
+
+**Validation model.** A primary that is waiting on a hint is no longer `disabled`: it
+keeps `aria-disabled`, stays in the Tab order, names the hint through
+`aria-describedby`, and its click is a no-op until the hint clears; the hint is an
+always-rendered `aria-live="polite"` span so the change is announced. Playwright's
+`toBeDisabled` honours `aria-disabled`, so every existing assertion held. Chip groups
+carry `aria-pressed` and a group label; the alignment checkbox is a real
+`<input type="checkbox">` drawn as the option mark (`.check`), so the sentence toggles
+it and Space works; single-select `OptionRow`s move and pick with the arrow keys inside
+their radiogroup. Visible labels replaced placeholder-only fields (library add/edit,
+inline create rows, mantra, picker create), placeholder contrast went from 40% to 55%,
+`--muted` from 0.62 to 0.70, `.label-accent` to `--accent-ink`, and inputs and option
+marks draw a `--control-border` (0.45) instead of `--divider` (0.13). Per-page
+`<title>`s through the root template, card titles as `<h2>`, status lines live, focus
+returned to Edit after an inline form closes.
+
+**Tests that can fail.** `tests/support/` now owns the loopback guard, the admin client,
+user creation and the past-dated sprint seeder for both suites (five duplications gone;
+a new column reaches the e2e seed and the DB seed through one function). Live-clock
+suites (targets, start_sprint, the offered-items block, the live streak sprint) take
+their zone from `zoneOffUtcDate()` — Kiritimati once UTC passes 10:00, Pago Pago before
+11:00 — so the sprint's date differs from UTC's for the whole run and a `now() at time
+zone 'UTC'` regression cannot pass at any hour; a unit sweep proves the helper never
+lands on UTC's date. 0007's backfill `UPDATE` is read out of the migration file and run
+inside a rolled-back transaction (CHECK dropped, triggers off) against a 23:30-local
+and a 00:30-next-day close: on time and late respectively, and the same rows read in
+UTC would both be late. Cross-user `UPDATE` denial covers `visions.body` and
+`impediments`, and `impediments` joined the disable-RLS leak test. The cascade check
+reads `pg_constraint` for every public table with a `user_id` column (≥10) and a
+rolled-back probe table without the cascade proves it reports one. The e2e backfill
+asserts the red state on the result and the day strip and the derived totals past
+day 1 (`1,350 USD`, `12 days left · 113 USD a day`, `4% of goal`); those numbers come
+from `remainingPlan()` in `lib/targets.ts`, which Today now calls and a unit table pins.
+
+**Consolidation.** `ProofInputs` is one component at its four sites; `ErrorBar` replaced
+thirteen alert blocks (the close flow's two-action bar and the blocked-sprint list keep
+their own shape); `PlanGrid`, the wizard and the plan card call `effectivePlan` /
+`planDelta` instead of inlining the sum; the three OTP entries in `friendlyError`'s
+table went (login matches those codes itself).
+
+**Left open, in BACKLOG.** #43's wizard split by step (a 600-line refactor with no
+behaviour change; actions were already split by domain in phase 3) and the Tailwind
+keep-or-drop question (audit bucket D). The audit's LOW mobile and a11y lists were not
+swept beyond what the batch touched.
+
+---
+
 ## 2026-09-06 — Audit remediation, phases 1–3: the gate can fail, the session is read locally, failures leave a line
 
 Fix pass over `docs/audits/full-audit-2026-09-05.md` buckets A + B, user-approved,

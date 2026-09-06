@@ -1,3 +1,7 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Insights" };
+
 export default function InsightsPage() {
   return (
     <main data-main style={{ flex: 1, minWidth: 0, padding: "30px 40px 100px" }}>

@@ -1,5 +1,6 @@
 "use client";
 
+import { ErrorBar } from "@/components/ErrorBar";
 import { useState, useTransition } from "react";
 import { addSprintItem, createItem, removeSprintItem } from "@/app/(app)/actions/library";
 import { ItemPicker } from "@/components/ItemPicker";
@@ -40,17 +41,12 @@ export function SprintItemsRow({
   return (
     <section style={{ marginTop: 20 }} data-testid="sprint-items">
       <button type="button" className="disclosure" aria-expanded={open} onClick={() => setOpen((o) => !o)} style={{ fontSize: 13 }} data-testid="sprint-items-toggle">
-        {open ? "▾" : "▸"} Other impediments ({others.length}) · Execution cues ({items.cues.length})
+        <span aria-hidden="true">{open ? "▾" : "▸"}</span> Other impediments ({others.length}) · Execution cues ({items.cues.length})
       </button>
       {open ? (
         <>
           {error ? (
-            <div role="alert" className="error-bar" style={{ marginTop: 12 }}>
-              <span>{error}</span>
-              <button type="button" className="link-quiet" style={{ color: "inherit", fontWeight: 600 }} onClick={() => setError(null)}>
-                Dismiss
-              </button>
-            </div>
+            <ErrorBar style={{ marginTop: 12 }} action={{ label: "Dismiss", onClick: () => setError(null) }}>{error}</ErrorBar>
           ) : null}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginTop: 12 }} data-cols>
             <ItemsCard
@@ -118,7 +114,7 @@ function ItemsCard({
   return (
     <div className="card" style={{ padding: "22px 24px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-        <span style={{ fontSize: 13, fontWeight: 600 }}>{title}</span>
+        <h2 className="card-title">{title}</h2>
         <span style={{ fontSize: 11, color: "var(--muted)" }}>{count}</span>
       </div>
       {rows.length === 0 ? <div style={{ fontSize: 12.5, color: "var(--muted)", padding: "8px 0" }}>{emptyLine}</div> : null}

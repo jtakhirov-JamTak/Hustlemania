@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { addDays, localDateIn } from "../lib/sprintDay";
+import { insertSprintRows } from "../tests/support/sprints";
 import { admin, deleteUser, seedUser, signInViaMagicLink } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
@@ -181,6 +183,17 @@ test.describe("golden path", () => {
     // The page never scrolls sideways (the 14-day strip scrolls inside its own box).
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
+    // Every text field renders at 16px or more, so iOS Safari never zooms on focus (audit #1).
+    // Includes the plan grid's edit inputs, the smallest fields on the page.
+    await plan.getByRole("button", { name: "Custom · edit" }).click();
+    const smallFields = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea"))
+        .filter((el) => el.type !== "hidden" && el.type !== "checkbox")
+        .map((el) => ({ label: el.getAttribute("aria-label") ?? el.id, size: parseFloat(getComputedStyle(el).fontSize) }))
+        .filter((f) => f.size < 16),
+    );
+    expect(smallFields).toEqual([]);
+    await plan.getByRole("button", { name: "Cancel" }).click();
     await page.screenshot({ path: `test-results/today-${testInfo.project.name}.png`, fullPage: true });
 
     // Daily Intention autosaves on blur and survives a reload.
@@ -305,35 +318,10 @@ test.describe("golden path", () => {
 
   test("F5: a missed day is backfilled from the plan; it counts, the streak stays broken", async ({ page }) => {
     // A wealth sprint whose day 3 is today (UTC), seeded straight into the tables: days 1
-    // and 2 are already missed. start_sprint only accepts today or tomorrow.
-    const todayUtc = new Date().toISOString().slice(0, 10);
-    const day = (offset: number) => new Date(Date.parse(todayUtc) + offset * 86_400_000).toISOString().slice(0, 10);
-    const vision = await admin.from("visions").insert({ user_id: user.id, area: "wealth", body: "A wealth vision" }).select("id").single();
-    if (vision.error) throw new Error(vision.error.message);
-    const sprint = await admin
-      .from("sprints")
-      .insert({
-        user_id: user.id,
-        vision_id: vision.data.id,
-        area: "wealth",
-        outcome: "Bank the side income",
-        measurement: "money",
-        currency: "USD",
-        amount: 140_000,
-        confidence: 6,
-        why: "why",
-        celebration: "celebration",
-        mantra: "Small deposits, every day.",
-        tz: "UTC",
-        start_date: day(-2),
-        end_date: day(11),
-      })
-      .select("id")
-      .single();
-    if (sprint.error) throw new Error(sprint.error.message);
-    const rows = Array.from({ length: 14 }, (_, i) => ({ sprint_id: sprint.data.id, user_id: user.id, day_index: i + 1, date: day(i - 2), target: 10_000 }));
-    const days = await admin.from("sprint_days").insert(rows);
-    if (days.error) throw new Error(days.error.message);
+    // and 2 are already missed. start_sprint only accepts today or tomorrow. Goal 1,400 USD
+    // as 14 × 100 USD.
+    const todayUtc = localDateIn("UTC", new Date());
+    const sprint = await insertSprintRows(admin, user.id, { startDate: addDays(todayUtc, -2), tz: "UTC", target: 10_000, outcome: "Bank the side income", mantra: "Small deposits, every day." });
 
     await signInViaMagicLink(page, user.email);
     await page.goto("/sprints/wealth");
@@ -356,14 +344,22 @@ test.describe("golden path", () => {
     await dialog.getByRole("button", { name: "Close the day" }).click();
     await expect(page.getByRole("dialog").getByText("Day 1 backfilled")).toBeVisible();
     await expect(page.getByRole("dialog").getByTestId("result-streak")).toHaveText("0 days · unchanged by a backfill");
+    // 50 against 100 is the red state, and the result's cumulative is the whole sprint's.
+    await expect(page.getByTestId("result-actual")).toHaveAttribute("data-state", "under");
+    await expect(page.getByRole("dialog")).toContainText("50 USD · 4% of goal");
     await page.getByRole("button", { name: "Back to today" }).click();
 
     // Counted toward totals, gone from the backfill offers, streak untouched, day 2 still missed.
     await expect(plan.locator('[data-day="1"]')).toContainText("actual 50");
+    await expect(page.getByTestId("day-strip").locator('[data-day="1"]')).toHaveAttribute("data-state", "under");
     await expect(plan.getByRole("button", { name: /Backfill day/ })).toHaveCount(1);
+    // Derived totals past day 1: 1,350 left over the 12 open days from day 3 → 113 a day, rounded up to a whole unit.
     await expect(page.getByTestId("target-hero")).toContainText("50 USD");
+    await expect(page.getByTestId("target-hero")).toContainText("4% of goal");
+    await expect(page.getByTestId("target-hero")).toContainText("1,350 USD");
+    await expect(page.getByTestId("target-hero")).toContainText("12 days left · 113 USD a day");
     await expect(page.getByTestId("streak-label")).toHaveText("No streak");
-    const closed = await admin.from("sprint_days").select("closed_on_time, actual").eq("sprint_id", sprint.data.id).eq("day_index", 1).single();
+    const closed = await admin.from("sprint_days").select("closed_on_time, actual").eq("sprint_id", sprint.sprintId).eq("day_index", 1).single();
     expect(closed.data).toEqual({ closed_on_time: false, actual: 5000 });
   });
 });

@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { ProofInputs } from "@/components/ProofInputs";
+import { ErrorBar } from "@/components/ErrorBar";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { saveProofPoint, setHighestImpediment } from "@/app/(app)/actions/library";
 import { ItemPicker } from "@/components/ItemPicker";
 import { callAction } from "@/lib/callAction";
@@ -19,6 +21,13 @@ export function HighestImpedimentCard({ sprintId, impediments, locked }: { sprin
   const [then, setThen] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const editButton = useRef<HTMLButtonElement>(null);
+  const wasEditing = useRef(false);
+  useEffect(() => {
+    if (wasEditing.current && !editing) editButton.current?.focus();
+    wasEditing.current = editing;
+  }, [editing]);
+  const proofHint = when.trim() && then.trim() ? null : "Both WHEN and THEN are required.";
 
   const picked = impediments.find((i) => i.id === pick) ?? null;
   const needsProof = Boolean(picked && !(picked.proof_when && picked.proof_then));
@@ -52,7 +61,7 @@ export function HighestImpedimentCard({ sprintId, impediments, locked }: { sprin
   }
 
   function saveProof() {
-    if (!highest || !when.trim() || !then.trim()) return;
+    if (!highest || proofHint || pending) return;
     start(async () => {
       const res = await callAction(() => saveProofPoint(highest.id, when, then));
       if (res.error) {
@@ -65,7 +74,9 @@ export function HighestImpedimentCard({ sprintId, impediments, locked }: { sprin
 
   return (
     <section className="card" style={{ marginTop: 20, padding: "24px 26px" }} data-testid="highest-impediment">
-      <div className="label-accent">Highest impediment</div>
+      <h2 className="label-accent" style={{ margin: 0 }}>
+        Highest impediment
+      </h2>
       {highest ? (
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginTop: 6 }}>
@@ -95,7 +106,7 @@ export function HighestImpedimentCard({ sprintId, impediments, locked }: { sprin
                 </span>
               </div>
               {!locked ? (
-                <button type="button" className="link-quiet" style={{ paddingTop: 10 }} onClick={openEdit}>
+                <button ref={editButton} type="button" className="link-quiet" style={{ paddingTop: 10 }} onClick={openEdit}>
                   Edit proof point
                 </button>
               ) : null}
@@ -108,27 +119,18 @@ export function HighestImpedimentCard({ sprintId, impediments, locked }: { sprin
                 saveProof();
               }}
             >
-              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "9px 12px", alignItems: "center" }}>
-                <label htmlFor="hi-when" className="label-accent" style={{ fontWeight: 700 }}>
-                  WHEN
-                </label>
-                <input id="hi-when" className="input" value={when} onChange={(e) => setWhen(e.target.value)} style={{ fontSize: 13.5, padding: "10px 13px" }} />
-                <label htmlFor="hi-then" className="label-accent" style={{ fontWeight: 700 }}>
-                  THEN
-                </label>
-                <input id="hi-then" className="input" value={then} onChange={(e) => setThen(e.target.value)} style={{ fontSize: 13.5, padding: "10px 13px" }} />
-              </div>
+              <ProofInputs idPrefix="hi" when={when} then={then} onWhen={setWhen} onThen={setThen} placeholderWhen="" placeholderThen="" />
               {error ? (
-                <div role="alert" className="error-bar" style={{ marginTop: 12 }}>
-                  <span>{error}</span>
-                </div>
+                <ErrorBar style={{ marginTop: 12 }}>{error}</ErrorBar>
               ) : null}
               <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 12 }}>
-                {!(when.trim() && then.trim()) ? <span className="hint">Both WHEN and THEN are required.</span> : null}
+                <span className="hint" id="hi-hint" aria-live="polite">
+                  {proofHint ?? ""}
+                </span>
                 <button type="button" className="btn btn-ghost" onClick={() => setEditing(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={pending || !(when.trim() && then.trim())}>
+                <button type="submit" className="btn btn-primary" aria-disabled={pending || Boolean(proofHint)} aria-describedby={proofHint ? "hi-hint" : undefined}>
                   {pending ? "Saving…" : "Save"}
                 </button>
               </div>

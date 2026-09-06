@@ -35,6 +35,24 @@ export function planDelta(targets: readonly number[], goal: number): number {
   return targets.reduce((a, b) => a + b, 0) - goal;
 }
 
+/**
+ * Today's numbers from the closed days: cumulative actual, what is left of the goal,
+ * the days still open from the focus day on, and the per-day pace — remaining spread
+ * over those days and rounded up to a whole planning step, so it never shows cents.
+ */
+export function remainingPlan(
+  days: readonly { day_index: number; actual: string | number | null; closed_at: string | null }[],
+  goal: number,
+  focusIndex: number,
+  step: number,
+): { cumulative: number; remaining: number; daysLeft: number; perDay: number } {
+  const cumulative = days.filter((d) => d.closed_at !== null).reduce((acc, d) => acc + Number(d.actual ?? 0), 0);
+  const remaining = Math.max(0, goal - cumulative);
+  const daysLeft = days.filter((d) => d.closed_at === null && d.day_index >= focusIndex).length;
+  const perDay = daysLeft > 0 ? Math.ceil(remaining / daysLeft / step) * step : 0;
+  return { cumulative, remaining, daysLeft, perDay };
+}
+
 /** Rule 10: a day whose date has begun in the sprint's zone keeps its target. */
 export function isLockedDay(date: string, todayInSprintTz: string): boolean {
   return date <= todayInSprintTz;

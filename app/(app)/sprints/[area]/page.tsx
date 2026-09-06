@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { TodayView } from "@/components/today/TodayView";
@@ -5,6 +6,11 @@ import { areaName, isAreaKey } from "@/lib/areas";
 import { allOrThrow, eligibleFor, loadActiveLibrary, loadActiveSprint, loadActiveVision, loadDayOfferedItems, loadSprintItems, loadStreaks, loadTasks, streakOf } from "@/lib/data";
 import { sprintDayFor } from "@/lib/sprintDay";
 import { createClient } from "@/lib/supabase/server";
+
+export async function generateMetadata({ params }: { params: Promise<{ area: string }> }): Promise<Metadata> {
+  const { area } = await params;
+  return { title: isAreaKey(area) ? `${areaName(area)} sprint` : "Sprints" };
+}
 
 export default async function AreaPage({ params }: { params: Promise<{ area: string }> }) {
   const { area } = await params;

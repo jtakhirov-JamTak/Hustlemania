@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { zoneOffUtcDate } from "../support/zones";
 import {
   createTestUser,
   dbTodayIn,
@@ -481,9 +482,9 @@ describe("library rules and sprint membership", () => {
 // Day Close: offered items (rule 23, in the sprint's zone), selections, snapshot.
 // ---------------------------------------------------------------------------
 describe("close_day with hurt/helped selections", () => {
-  // UTC+14: the sprint zone's calendar day is far from UTC's for most of the day, so a
+  // A zone whose calendar date differs from UTC's right now (tests/support/zones), so a
   // UTC-based ::date in day_offered_items would put memberships on the wrong day.
-  const KTZ = "Pacific/Kiritimati";
+  const KTZ = zoneOffUtcDate();
   let u: TestUser;
   let today: string;
   let cueA: string;

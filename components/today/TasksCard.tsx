@@ -1,5 +1,6 @@
 "use client";
 
+import { ErrorBar } from "@/components/ErrorBar";
 import { useRef, useState } from "react";
 import { createTask, removeTask, updateTask } from "@/app/(app)/actions/tasks";
 import { callAction } from "@/lib/callAction";
@@ -114,8 +115,8 @@ export function TasksCard({ dayId, initial, locked, lockedReason }: { dayId: str
   return (
     <section className="card" style={{ marginTop: 20, padding: "22px 26px" }} data-testid="tasks-card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 6 }}>
-        <span style={{ fontSize: 13, fontWeight: 600 }}>Tasks · optional</span>
-        <span style={{ fontSize: 11, color: status.kind === "error" ? "var(--under)" : "var(--muted)" }} data-testid="tasks-hint">
+        <h2 className="card-title">Tasks · optional</h2>
+        <span style={{ fontSize: 11, color: status.kind === "error" ? "var(--under)" : "var(--muted)" }} data-testid="tasks-hint" aria-live="polite">
           {hint}
         </span>
       </div>
@@ -179,12 +180,7 @@ export function TasksCard({ dayId, initial, locked, lockedReason }: { dayId: str
       )}
 
       {status.kind === "error" ? (
-        <div role="alert" className="error-bar" style={{ marginTop: 10 }}>
-          <span>{status.text}</span>
-          <button type="button" className="link-quiet" style={{ color: "inherit", fontWeight: 600 }} onClick={() => status.retry?.()}>
-            Retry
-          </button>
-        </div>
+        <ErrorBar style={{ marginTop: 10 }} action={{ label: "Retry", onClick: () => status.retry?.() }}>{status.text}</ErrorBar>
       ) : null}
 
       {locked ? null : (

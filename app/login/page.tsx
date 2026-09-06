@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { requestMagicLink } from "./actions";
+
+export const metadata: Metadata = { title: "Sign in" };
 
 const ERRORS: Record<string, string> = {
   invalid: "Enter the email address you were invited with.",
@@ -16,7 +19,7 @@ export default async function LoginPage({
   const { email = "", sent, error } = await searchParams;
 
   return (
-    <div className="page" style={{ alignItems: "center", justifyContent: "center", padding: "40px 16px" }}>
+    <main className="page" style={{ alignItems: "center", justifyContent: "center", padding: "40px 16px" }}>
       <div className="card" style={{ width: "100%", maxWidth: 440, padding: "30px 32px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
           <span style={{ width: 9, height: 9, borderRadius: 3, background: "var(--accent)", display: "inline-block" }} />
@@ -74,6 +77,6 @@ export default async function LoginPage({
           </form>
         )}
       </div>
-    </div>
+    </main>
   );
 }

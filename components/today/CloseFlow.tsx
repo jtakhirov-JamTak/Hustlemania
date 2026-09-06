@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { closeDayAction } from "@/app/(app)/actions/day";
+import { Modal } from "@/components/Modal";
 import { OptionRow } from "@/components/OptionRow";
 import { callAction } from "@/lib/callAction";
 import type { OfferedItems, SprintDay } from "@/lib/data";
@@ -82,7 +83,14 @@ function CloseDialog(props: {
   const [error, setError] = useState<{ text: string; closed: boolean } | null>(null);
   const [pending, start] = useTransition();
   const first = useRef<HTMLInputElement>(null);
-  useEffect(() => first.current?.focus(), []);
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  // A step change is a new screen: its heading takes focus and is announced.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current) heading.current?.focus();
+    opened.current = true;
+  }, [step]);
 
   const value =
     measured.measurement === "hours"
@@ -108,9 +116,11 @@ function CloseDialog(props: {
   const helpedAnswered = helpedNone || helped.length > 0;
   const usefulOk = helped.length === 0 || (mostUseful !== null && helped.includes(mostUseful));
   const step2Hint = !helpedAnswered ? "Say which cues helped, or none." : !usefulOk ? "Pick the one that helped most." : null;
+  const hint = step === 1 ? step1Hint : step2Hint;
+  const closeBlocked = Boolean(step2Hint) || pending || error?.closed === true;
 
   function submit() {
-    if (step1Hint || step2Hint || value === null || pending) return;
+    if (closeBlocked || step1Hint || value === null) return;
     start(async () => {
       const res = await callAction(() =>
         closeDayAction(day.id, props.sprintId, {
@@ -136,29 +146,29 @@ function CloseDialog(props: {
   const helpedPicked = helpedItems.filter((c) => helped.includes(c.id));
 
   return (
-    <div className="dialog-scrim" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && props.onCancel()}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="close-title" style={{ maxWidth: 620 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span className="label-muted" data-testid="close-step">
-            {backfill ? "Backfill" : "Close"} day {day.day_index} · step {step} of 2
-          </span>
-          <button type="button" className="link-quiet" aria-label="Cancel" onClick={props.onCancel} style={{ fontSize: 18, lineHeight: 1 }}>
-            ×
-          </button>
-        </div>
+    <Modal labelledBy="close-title" onDismiss={props.onCancel} initialFocus={first} maxWidth={620}>
+      <div className="dialog-head">
+        <span className="label-muted" data-testid="close-step">
+          {backfill ? "Backfill" : "Close"} day {day.day_index} · step {step} of 2
+        </span>
+        <button type="button" className="link-quiet" aria-label="Cancel" onClick={props.onCancel} style={{ fontSize: 18, lineHeight: 1 }}>
+          ×
+        </button>
+      </div>
 
-        <form
-          style={{ marginTop: 10 }}
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (step === 1) {
-              if (!step1Hint) setStep(2);
-            } else submit();
-          }}
-        >
+      <form
+        className="dialog-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (step === 1) {
+            if (!step1Hint) setStep(2);
+          } else submit();
+        }}
+      >
+        <div className="dialog-body">
           {step === 1 ? (
             <>
-              <h2 id="close-title" className="heading" style={{ fontSize: 26, margin: 0 }}>
+              <h2 id="close-title" ref={heading} tabIndex={-1} className="heading" style={{ fontSize: 26, margin: 0, outline: "none" }}>
                 What was the actual result?
               </h2>
               <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }} data-testid="close-note">
@@ -197,9 +207,11 @@ function CloseDialog(props: {
               </div>
 
               <div style={{ marginTop: 22 }} data-testid="hurt-section">
-                <div style={{ fontSize: 15, fontWeight: 600 }}>Which impediments hurt today?</div>
+                <h3 id="hurt-title" style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
+                  Which impediments hurt today?
+                </h3>
                 <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>None is a truthful answer.</div>
-                <div role="group" aria-label="Impediments that hurt" style={{ marginTop: 6 }}>
+                <div role="group" aria-labelledby="hurt-title" style={{ marginTop: 6 }}>
                   {hurtItems.map((i) => (
                     <OptionRow
                       key={i.id}
@@ -227,8 +239,10 @@ function CloseDialog(props: {
                   />
                 </div>
                 {hurt.length > 1 ? (
-                  <div style={{ marginTop: 14 }} role="radiogroup" aria-label="Which hurt most?">
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>Which hurt most?</div>
+                  <div style={{ marginTop: 14 }} role="radiogroup" aria-labelledby="hurt-most-title">
+                    <div id="hurt-most-title" style={{ fontSize: 13, fontWeight: 600 }}>
+                      Which hurt most?
+                    </div>
                     {hurtPicked.map((i) => (
                       <OptionRow key={i.id} single on={mostDamaging === i.id} label={i.name} onPick={() => setMostDamaging(i.id)} />
                     ))}
@@ -238,7 +252,7 @@ function CloseDialog(props: {
             </>
           ) : (
             <>
-              <h2 id="close-title" className="heading" style={{ fontSize: 26, margin: 0 }}>
+              <h2 id="close-title" ref={heading} tabIndex={-1} className="heading" style={{ fontSize: 26, margin: 0, outline: "none" }}>
                 Which execution cues helped?
               </h2>
               <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>None is a truthful answer.</div>
@@ -270,8 +284,10 @@ function CloseDialog(props: {
                 />
               </div>
               {helped.length > 1 ? (
-                <div style={{ marginTop: 14 }} role="radiogroup" aria-label="Which helped most?">
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>Which helped most?</div>
+                <div style={{ marginTop: 14 }} role="radiogroup" aria-labelledby="helped-most-title">
+                  <div id="helped-most-title" style={{ fontSize: 13, fontWeight: 600 }}>
+                    Which helped most?
+                  </div>
                   {helpedPicked.map((c) => (
                     <OptionRow key={c.id} single on={mostUseful === c.id} label={c.name} onPick={() => setMostUseful(c.id)} />
                   ))}
@@ -299,34 +315,35 @@ function CloseDialog(props: {
               )}
             </div>
           ) : null}
+        </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 22, flexWrap: "wrap" }}>
+        <div className="dialog-foot">
+          {step === 1 ? (
+            <button type="button" className="btn btn-ghost" onClick={props.onCancel}>
+              Cancel
+            </button>
+          ) : (
+            <button type="button" className="btn btn-ghost" onClick={() => setStep(1)}>
+              Back
+            </button>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span className="hint" id="close-hint" aria-live="polite">
+              {hint ?? ""}
+            </span>
             {step === 1 ? (
-              <button type="button" className="btn btn-ghost" onClick={props.onCancel}>
-                Cancel
+              <button type="submit" className="btn btn-primary" aria-disabled={Boolean(step1Hint)} aria-describedby={step1Hint ? "close-hint" : undefined}>
+                Continue
               </button>
             ) : (
-              <button type="button" className="btn btn-ghost" onClick={() => setStep(1)}>
-                Back
+              <button type="submit" className="btn btn-primary" aria-disabled={closeBlocked} aria-describedby={step2Hint ? "close-hint" : undefined}>
+                {pending ? "Closing…" : "Close the day"}
               </button>
             )}
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              {step === 1 && step1Hint ? <span className="hint">{step1Hint}</span> : null}
-              {step === 2 && step2Hint ? <span className="hint">{step2Hint}</span> : null}
-              {step === 1 ? (
-                <button type="submit" className="btn btn-primary" disabled={Boolean(step1Hint)}>
-                  Continue
-                </button>
-              ) : (
-                <button type="submit" className="btn btn-primary" disabled={Boolean(step2Hint) || pending || error?.closed === true}>
-                  {pending ? "Closing…" : "Close the day"}
-                </button>
-              )}
-            </div>
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -356,25 +373,29 @@ function ResultScreen({
   const atOrAbove = actual >= target;
   const cumulative = days.reduce((acc, d) => acc + Number(d.actual ?? 0), 0);
   const next = days.find((d) => d.day_index === day.day_index + 1);
+  const summary = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="dialog-scrim" role="presentation">
-      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="result-title" style={{ maxWidth: 620, animation: "popIn 220ms ease-out" }}>
-        <span className="label-muted">{backfill ? `Day ${day.day_index} backfilled` : `Day ${day.day_index} closed`}</span>
-        <div
-          id="result-title"
-          className="heading"
-          data-testid="result-actual"
-          data-state={atOrAbove ? "at-or-above" : "under"}
-          style={{ fontSize: 78, letterSpacing: "-0.04em", lineHeight: 1, marginTop: 8, color: atOrAbove ? "var(--success)" : "var(--under)" }}
-        >
-          {formatNumber(measured, actual)}
-        </div>
-        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--muted)", marginTop: 4 }}>
-          {unitLabel(measured)} · target {formatNumber(measured, target)}
+    <Modal labelledBy="result-title" onDismiss={onBack} initialFocus={summary} maxWidth={620} style={{ animation: "popIn 220ms ease-out" }}>
+      <div className="dialog-body" style={{ paddingTop: 26 }}>
+        {/* Focus lands on the whole summary, so the actual and its verdict are read together. */}
+        <div id="result-title" ref={summary} tabIndex={-1} style={{ outline: "none" }}>
+          <span className="label-muted">{backfill ? `Day ${day.day_index} backfilled` : `Day ${day.day_index} closed`}</span>
+          <div
+            className="heading"
+            data-testid="result-actual"
+            data-state={atOrAbove ? "at-or-above" : "under"}
+            style={{ fontSize: 78, letterSpacing: "-0.04em", lineHeight: 1, marginTop: 8, color: atOrAbove ? "var(--success)" : "var(--under)" }}
+          >
+            {formatNumber(measured, actual)}
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--muted)", marginTop: 4 }}>
+            {unitLabel(measured)} · target {formatNumber(measured, target)}
+            {atOrAbove ? "" : " · under target"}
+          </div>
         </div>
 
-        <div style={{ display: "flex", gap: 4, marginTop: 22 }} aria-label="14-day progress">
+        <div style={{ display: "flex", gap: 4, marginTop: 22 }} role="img" aria-label={`${days.filter((d) => d.closed_at !== null).length} of 14 days closed`}>
           {days.map((d) => {
             const c = d.closed_at !== null;
             const h = c && Number(d.actual) >= Number(d.target);
@@ -403,13 +424,12 @@ function ResultScreen({
         ) : (
           <div style={{ marginTop: 9, fontSize: 13.5, color: "var(--muted)" }}>That was the last day of the sprint.</div>
         )}
-
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 24 }}>
-          <button type="button" className="btn btn-primary" onClick={onBack}>
-            Back to today
-          </button>
-        </div>
       </div>
-    </div>
+      <div className="dialog-foot" style={{ justifyContent: "flex-end" }}>
+        <button type="button" className="btn btn-primary" onClick={onBack}>
+          Back to today
+        </button>
+      </div>
+    </Modal>
   );
 }

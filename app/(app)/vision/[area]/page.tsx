@@ -1,8 +1,14 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { VisionForm } from "@/components/VisionForm";
 import { areaName, isAreaKey } from "@/lib/areas";
 import { loadActiveVision } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
+
+export async function generateMetadata({ params }: { params: Promise<{ area: string }> }): Promise<Metadata> {
+  const { area } = await params;
+  return { title: isAreaKey(area) ? `${areaName(area)} vision` : "Vision" };
+}
 
 export default async function VisionAreaPage({ params }: { params: Promise<{ area: string }> }) {
   const { area } = await params;

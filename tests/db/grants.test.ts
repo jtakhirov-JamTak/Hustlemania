@@ -1,3 +1,4 @@
+import type { Sql, TransactionSql } from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 import { sql } from "./helpers";
 
@@ -91,6 +92,41 @@ describe("public schema access model", () => {
       where c.relnamespace = 'public'::regnamespace
         and b.indisunique and b.indpred is null and not a.indisunique`;
     expect(rows).toEqual([]);
+  });
+
+  // Every table that holds a user's rows must go with the user (SPEC: delete = cascade).
+  // Read from pg_constraint, so a future table (F8 profiles) without the cascade fails here.
+  const noCascade = async (q: Sql | TransactionSql) =>
+    q<{ table_name: string }[]>`
+      select c.relname as table_name
+      from pg_class c
+      join pg_attribute a on a.attrelid = c.oid and a.attname = 'user_id' and not a.attisdropped
+      where c.relnamespace = 'public'::regnamespace and c.relkind = 'r'
+        and not exists (
+          select 1 from pg_constraint k
+          where k.conrelid = c.oid and k.contype = 'f' and k.confrelid = 'auth.users'::regclass
+            and k.confdeltype = 'c' and a.attnum = any(k.conkey))
+      order by 1`;
+
+  it("every public table with a user_id column cascades from auth.users on delete", async () => {
+    const [count] = await sql<{ n: number }[]>`
+      select count(*)::int as n from pg_attribute a join pg_class c on c.oid = a.attrelid
+      where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and a.attname = 'user_id' and not a.attisdropped`;
+    expect(count.n).toBeGreaterThanOrEqual(10);
+    expect((await noCascade(sql)).map((r) => r.table_name)).toEqual([]);
+  });
+
+  it("the cascade check reports a user_id table whose FK does not cascade (rolled back)", async () => {
+    const ROLLBACK = new Error("rollback");
+    await sql
+      .begin(async (tx) => {
+        await tx`create table public.__cascade_probe (id int, user_id uuid references auth.users(id))`;
+        expect((await noCascade(tx)).map((r) => r.table_name)).toEqual(["__cascade_probe"]);
+        throw ROLLBACK;
+      })
+      .catch((e) => {
+        if (e !== ROLLBACK) throw e;
+      });
   });
 
   it("a table created by a later migration is unreachable until granted", async () => {
