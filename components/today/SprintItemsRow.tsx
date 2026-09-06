@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { addSprintItem, createItem, removeSprintItem } from "@/app/(app)/actions";
+import { addSprintItem, createItem, removeSprintItem } from "@/app/(app)/actions/library";
 import { ItemPicker } from "@/components/ItemPicker";
+import { callAction } from "@/lib/callAction";
 import type { ItemKind, LibraryItem, SprintItems } from "@/lib/data";
 
 /**
@@ -31,7 +32,7 @@ export function SprintItemsRow({
   function remove(kind: ItemKind, id: string) {
     setError(null);
     start(async () => {
-      const res = await removeSprintItem(sprintId, kind, id);
+      const res = await callAction(() => removeSprintItem(sprintId, kind, id));
       if (res.error) setError(res.error);
     });
   }
@@ -154,7 +155,7 @@ function AddPicker({ kind, sprintId, candidates, onClose }: { kind: ItemKind; sp
     if (!pick) return;
     setError(null);
     start(async () => {
-      const res = await addSprintItem(sprintId, kind, pick);
+      const res = await callAction(() => addSprintItem(sprintId, kind, pick));
       if (res.error) {
         setError(res.error);
         return;
@@ -174,7 +175,7 @@ function AddPicker({ kind, sprintId, candidates, onClose }: { kind: ItemKind; sp
       create={{
         placeholder: kind === "cue" ? "Create a new execution cue" : "Create a new impediment",
         onCreate: async (name) => {
-          const res = await createItem(kind, { name, explanation: "", scope: "global" });
+          const res = await callAction(() => createItem(kind, { name, explanation: "", scope: "global" }));
           if (res.error || !res.id) return res.error ?? "That did not save.";
           setCreated((c) => [...c, { id: res.id!, kind, name, explanation: null, scope: "global", rank: 0, archived_at: null, proof_when: null, proof_then: null, used: false }]);
           setPick(res.id);

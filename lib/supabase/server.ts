@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 import type { Database } from "@/lib/database.types";
 import { publicSupabaseEnv } from "@/lib/env";
+import { isAuthUnavailable, report } from "@/lib/observe";
 
 /**
  * Per-request Supabase client for Server Components, Server Actions and Route Handlers.
@@ -31,9 +32,25 @@ export const createClient = cache(async function createClient() {
   });
 });
 
-export async function requireUser() {
+export type SessionUser = { id: string; email: string | null };
+
+/**
+ * The signed-in user from the verified session claims (no Auth round trip on
+ * asymmetric keys), once per request. `unavailable` is true when Auth itself failed —
+ * the caller shows that state instead of treating the visitor as signed out.
+ */
+export const requireUser = cache(async function requireUser(): Promise<{
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  user: SessionUser | null;
+  unavailable: boolean;
+}> {
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) return { supabase, user: null };
-  return { supabase, user: data.user };
-}
+  const { data, error } = await supabase.auth.getClaims();
+  if (error) {
+    report("auth.claims_failed", error, { where: "requireUser" });
+    return { supabase, user: null, unavailable: isAuthUnavailable(error) };
+  }
+  const claims = data?.claims;
+  if (!claims || typeof claims.sub !== "string") return { supabase, user: null, unavailable: false };
+  return { supabase, user: { id: claims.sub, email: typeof claims.email === "string" ? claims.email : null }, unavailable: false };
+});

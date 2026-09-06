@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { Fragment, useMemo, useState, useTransition } from "react";
-import { createItem, startSprintAction, type StartSprintInput } from "@/app/(app)/actions";
+import { createItem } from "@/app/(app)/actions/library";
+import { startSprintAction, type StartSprintInput } from "@/app/(app)/actions/sprint";
 import { OptionRow } from "@/components/OptionRow";
 import { effectivePlan, PlanGrid, type PlanCell } from "@/components/PlanGrid";
 import type { AreaKey } from "@/lib/areas";
-import type { LibraryItem } from "@/lib/data";
+import { callAction } from "@/lib/callAction";
+import { eligibleFor, type LibraryItem } from "@/lib/data";
 import { formatIsoDate } from "@/lib/dates";
 import { toBaseUnits, unitLabel, type Measurement, type Measured } from "@/lib/format";
 import { addDays, localDateIn } from "@/lib/sprintDay";
@@ -129,7 +131,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
 
   // Rules 3–6 at setup: eligible = global or the chosen area; 1–5 impediments, one
   // highest with a complete WHEN → THEN, 1–3 cues.
-  const eligible = (l: LibraryItem) => l.scope === "global" || l.scope === d.area;
+  const eligible = d.area ? eligibleFor(d.area) : () => false;
   const impOptions = library.impediments.filter(eligible);
   const cueOptions = library.cues.filter(eligible);
   const highest = impOptions.find((i) => i.id === d.highestId) ?? null;
@@ -183,7 +185,6 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
       usageOfFunds: d.measurement === "money" ? usageRows.map((u) => ({ label: u.label.trim(), amount: toBaseUnits("money", { whole: Number(u.amount) }) })) : [],
       tz,
       startDate,
-      intention: null,
       intentions: d.intentions.some((t) => t.trim()) ? d.intentions : null,
       targets: d.mode === "custom" ? targets : null,
       cueIds: d.cueIds,
@@ -194,7 +195,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
     };
     setError(null);
     start(async () => {
-      const res = await startSprintAction(input);
+      const res = await callAction(() => startSprintAction(input));
       if (res?.error) setError(res.error);
     });
   }
@@ -204,7 +205,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
     if (!name) return;
     setCreating(kind);
     setError(null);
-    const res = await createItem(kind, { name, explanation: "", scope: "global" });
+    const res = await callAction(() => createItem(kind, { name, explanation: "", scope: "global" }));
     setCreating(null);
     if (res.error || !res.id) {
       setError(res.error ?? "That did not save. Your input is still here — try again.");

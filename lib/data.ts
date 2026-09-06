@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { cache } from "react";
 import { AREAS, type AreaKey } from "@/lib/areas";
 import type { Database, Tables } from "@/lib/database.types";
+import { report } from "@/lib/observe";
 
 export type Vision = Tables<"visions">;
 export type Sprint = Tables<"sprints">;
@@ -43,8 +44,12 @@ export type AreaOverview = {
   sprint: Sprint | null;
 };
 
-/** Active vision and active sprint per area, for sidebars and empty states. */
-export async function loadOverview(supabase: Client): Promise<AreaOverview[]> {
+/**
+ * Active vision and active sprint per area, for sidebars and empty states. Memoised per
+ * request on the client identity: the sprints layout, its index page and the vision
+ * layout all read it, and one request should ask the DB once.
+ */
+export const loadOverview = cache(async (supabase: Client): Promise<AreaOverview[]> => {
   const [visions, sprints] = await Promise.all([
     supabase.from("visions").select("*").is("archived_at", null),
     supabase.from("sprints").select("*").eq("status", "active"),
@@ -57,7 +62,7 @@ export async function loadOverview(supabase: Client): Promise<AreaOverview[]> {
     vision: visions.data.find((v) => v.area === a.key) ?? null,
     sprint: sprints.data.find((s) => s.area === a.key) ?? null,
   }));
-}
+});
 
 export async function loadActiveVision(supabase: Client, area: AreaKey): Promise<Vision | null> {
   const res = await supabase.from("visions").select("*").eq("area", area).is("archived_at", null).maybeSingle();
@@ -69,12 +74,18 @@ export async function loadActiveSprint(
   supabase: Client,
   area: AreaKey,
 ): Promise<{ sprint: Sprint; days: SprintDay[] } | null> {
-  const sprint = await supabase.from("sprints").select("*").eq("area", area).eq("status", "active").maybeSingle();
-  if (sprint.error) throw new Error(`sprint: ${sprint.error.message}`);
-  if (!sprint.data) return null;
-  const days = await supabase.from("sprint_days").select("*").eq("sprint_id", sprint.data.id).order("day_index");
-  if (days.error) throw new Error(`sprint_days: ${days.error.message}`);
-  return { sprint: sprint.data, days: days.data };
+  // One round trip: the 14 days ride along on the sprint row (FK embed, RLS on both).
+  const res = await supabase
+    .from("sprints")
+    .select("*, sprint_days(*)")
+    .eq("area", area)
+    .eq("status", "active")
+    .order("day_index", { referencedTable: "sprint_days" })
+    .maybeSingle();
+  if (res.error) throw new Error(`sprint: ${res.error.message}`);
+  if (!res.data) return null;
+  const { sprint_days: days, ...sprint } = res.data;
+  return { sprint, days };
 }
 
 /** One day's live task list (F4): removed tasks are archived and never listed here. */
@@ -95,13 +106,39 @@ export const loadStreaks = cache(async (supabase: Client): Promise<Map<string, n
   return new Map(res.data.map((r) => [r.sprint_id, r.streak]));
 });
 
+/**
+ * The streak of one active sprint. The RPC returns a row for every active sprint of the
+ * caller, so a missing row is a defect (grant drift, a status the RPC does not list),
+ * not a zero — it renders as 0 but is reported so it cannot hide.
+ */
+export function streakOf(streaks: Map<string, number>, sprintId: string): number {
+  const streak = streaks.get(sprintId);
+  if (streak === undefined) report("streak.missing", null, { sprintId });
+  return streak ?? 0;
+}
+
+/** Items a sprint in `area` may carry: global scope or the area's own (rules 3–4). */
+export function eligibleFor(area: AreaKey): (item: { scope: string }) => boolean {
+  return (item) => item.scope === "global" || item.scope === area;
+}
+
+/**
+ * Promise.all that lets every read finish: the first rejection is what is thrown, and
+ * no sibling rejection is left unhandled to surface as noise with no route context.
+ */
+export async function allOrThrow<T extends readonly unknown[] | []>(promises: T): Promise<{ -readonly [K in keyof T]: Awaited<T[K]> }> {
+  const settled = (await Promise.allSettled(promises as readonly Promise<unknown>[])) as PromiseSettledResult<unknown>[];
+  for (const s of settled) if (s.status === "rejected") throw s.reason;
+  return settled.map((s) => (s as PromiseFulfilledResult<unknown>).value) as { -readonly [K in keyof T]: Awaited<T[K]> };
+}
+
 export async function loadDays(supabase: Client, sprintId: string): Promise<SprintDay[]> {
   const days = await supabase.from("sprint_days").select("*").eq("sprint_id", sprintId).order("day_index");
   if (days.error) throw new Error(`sprint_days: ${days.error.message}`);
   return days.data;
 }
 
-function toItem(kind: ItemKind, row: Cue | Impediment, usedIds: Set<string>): LibraryItem {
+function toItem(kind: ItemKind, row: Cue | Impediment, used: boolean): LibraryItem {
   const imp = kind === "impediment" ? (row as Impediment) : null;
   return {
     id: row.id,
@@ -113,30 +150,27 @@ function toItem(kind: ItemKind, row: Cue | Impediment, usedIds: Set<string>): Li
     archived_at: row.archived_at,
     proof_when: imp?.proof_when ?? null,
     proof_then: imp?.proof_then ?? null,
-    used: usedIds.has(row.id),
+    used,
   };
 }
 
-/** The whole library of one kind, archived rows included, in rank order. */
+type Membership = { count: number }[];
+const usedFrom = (m: Membership) => (m[0]?.count ?? 0) > 0;
+
+/**
+ * The whole library of one kind, archived rows included, in rank order. `used` (rule
+ * 19) is a per-row membership count computed in SQL, so the read is O(library) however
+ * many sprints the user has run — never the membership history itself.
+ */
 export async function loadLibrary(supabase: Client, kind: ItemKind): Promise<LibraryItem[]> {
   if (kind === "cue") {
-    const [rows, used] = await Promise.all([
-      supabase.from("cues").select("*").order("rank").order("created_at"),
-      supabase.from("sprint_cues").select("cue_id"),
-    ]);
+    const rows = await supabase.from("cues").select("*, sprint_cues(count)").order("rank").order("created_at");
     if (rows.error) throw new Error(`cues: ${rows.error.message}`);
-    if (used.error) throw new Error(`sprint_cues: ${used.error.message}`);
-    const usedIds = new Set(used.data.map((m) => m.cue_id));
-    return rows.data.map((r) => toItem("cue", r, usedIds));
+    return rows.data.map(({ sprint_cues, ...r }) => toItem("cue", r, usedFrom(sprint_cues as Membership)));
   }
-  const [rows, used] = await Promise.all([
-    supabase.from("impediments").select("*").order("rank").order("created_at"),
-    supabase.from("sprint_impediments").select("impediment_id"),
-  ]);
+  const rows = await supabase.from("impediments").select("*, sprint_impediments(count)").order("rank").order("created_at");
   if (rows.error) throw new Error(`impediments: ${rows.error.message}`);
-  if (used.error) throw new Error(`sprint_impediments: ${used.error.message}`);
-  const usedIds = new Set(used.data.map((m) => m.impediment_id));
-  return rows.data.map((r) => toItem("impediment", r, usedIds));
+  return rows.data.map(({ sprint_impediments, ...r }) => toItem("impediment", r, usedFrom(sprint_impediments as Membership)));
 }
 
 /** Active (non-archived) items of both kinds, for pickers. Rule 24: archived never appear here. */
@@ -171,20 +205,23 @@ export async function loadSprintItems(supabase: Client, sprintId: string): Promi
   ]);
   if (cues.error) throw new Error(`sprint_cues: ${cues.error.message}`);
   if (imps.error) throw new Error(`sprint_impediments: ${imps.error.message}`);
-  const all = new Set<string>();
-  const byRank = (a: LibraryItem, b: LibraryItem) => a.rank - b.rank || a.name.localeCompare(b.name);
+  // A membership whose library row is not visible means RLS or a grant drifted between
+  // the two tables; the sprint would render short of what the rules require.
+  const orphans = cues.data.filter((m) => !m.cues).length + imps.data.filter((m) => !m.impediments).length;
+  if (orphans > 0) report("sprint_items.orphan_membership", null, { sprintId, orphans });
   return {
     cues: cues.data
       .filter((m) => m.cues)
-      .map((m) => toItem("cue", m.cues as Cue, all))
-      .map((c) => ({ ...c, used: true }))
+      .map((m) => toItem("cue", m.cues as Cue, true))
       .sort(byRank),
     impediments: imps.data
       .filter((m) => m.impediments)
-      .map((m) => ({ ...toItem("impediment", m.impediments as Impediment, all), used: true, is_highest: m.is_highest }))
+      .map((m) => ({ ...toItem("impediment", m.impediments as Impediment, true), is_highest: m.is_highest }))
       .sort(byRank),
   };
 }
+
+const byRank = (a: LibraryItem, b: LibraryItem) => a.rank - b.rank || a.name.localeCompare(b.name);
 
 export type OfferedItems = { cues: LibraryItem[]; impediments: LibraryItem[] };
 
@@ -204,7 +241,6 @@ export async function loadDayOfferedItems(supabase: Client, dayId: string): Prom
     proof_then: r.proof_then,
     used: true,
   }));
-  const byRank = (a: LibraryItem, b: LibraryItem) => a.rank - b.rank || a.name.localeCompare(b.name);
   return {
     cues: rows.filter((r) => r.kind === "cue").sort(byRank),
     impediments: rows.filter((r) => r.kind === "impediment").sort(byRank),

@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { closeDayAction } from "@/app/(app)/actions";
+import { closeDayAction } from "@/app/(app)/actions/day";
 import { OptionRow } from "@/components/OptionRow";
+import { callAction } from "@/lib/callAction";
 import type { OfferedItems, SprintDay } from "@/lib/data";
 import { formatAmount, formatNumber, toBaseUnits, unitLabel, type Measured } from "@/lib/format";
 
@@ -111,14 +112,16 @@ function CloseDialog(props: {
   function submit() {
     if (step1Hint || step2Hint || value === null || pending) return;
     start(async () => {
-      const res = await closeDayAction(day.id, props.sprintId, {
-        actual: value,
-        notes,
-        hurt,
-        mostDamaging: hurt.length > 0 ? mostDamaging : null,
-        helped,
-        mostUseful: helped.length > 0 ? mostUseful : null,
-      });
+      const res = await callAction(() =>
+        closeDayAction(day.id, props.sprintId, {
+          actual: value,
+          notes,
+          hurt,
+          mostDamaging: hurt.length > 0 ? mostDamaging : null,
+          helped,
+          mostUseful: helped.length > 0 ? mostUseful : null,
+        }),
+      );
       if (res.error !== undefined) {
         setError({ text: res.error, closed: res.closed === true });
         return;

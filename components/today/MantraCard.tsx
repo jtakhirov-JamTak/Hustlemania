@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { saveMantra } from "@/app/(app)/actions";
+import { saveMantra } from "@/app/(app)/actions/sprint";
+import { callAction } from "@/lib/callAction";
 
 export function MantraCard({ sprintId, initial }: { sprintId: string; initial: string }) {
   const [mantra, setMantra] = useState(initial);
@@ -18,7 +19,7 @@ export function MantraCard({ sprintId, initial }: { sprintId: string; initial: s
           onSubmit={(e) => {
             e.preventDefault();
             start(async () => {
-              const res = await saveMantra(sprintId, draft);
+              const res = await callAction(() => saveMantra(sprintId, draft));
               if (res.error) {
                 setError(res.error);
                 return;

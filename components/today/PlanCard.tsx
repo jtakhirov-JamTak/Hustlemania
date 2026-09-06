@@ -2,9 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { dayOfferedItemsAction, saveTargetsAction } from "@/app/(app)/actions";
+import { dayOfferedItemsAction } from "@/app/(app)/actions/day";
+import { saveTargetsAction } from "@/app/(app)/actions/sprint";
 import { effectivePlan, PlanGrid, type PlanCell } from "@/components/PlanGrid";
 import { CloseFlow } from "@/components/today/CloseFlow";
+import { callAction } from "@/lib/callAction";
 import type { OfferedItems, SprintDay } from "@/lib/data";
 import type { Measured } from "@/lib/format";
 import { formatTargetInput, isLockedDay, isMissedDay, parseTargetInput } from "@/lib/targets";
@@ -57,18 +59,13 @@ export function PlanCard({
     const day = days[index];
     setBackfillError(null);
     setBackfill({ kind: "loading" });
-    try {
-      const res = await dayOfferedItemsAction(day.id);
-      if (res.error !== undefined) {
-        setBackfillError(res.error);
-        setBackfill(null);
-        return;
-      }
-      setBackfill({ kind: "open", day, offered: res.offered });
-    } catch {
-      setBackfillError("That did not load. Try again.");
+    const res = await callAction(() => dayOfferedItemsAction(day.id));
+    if (res.error !== undefined) {
+      setBackfillError(res.error);
       setBackfill(null);
+      return;
     }
+    setBackfill({ kind: "open", day, offered: res.offered });
   }
 
   const parsed = cells.map((c, i) => (editing && !c.locked ? parseTargetInput(measured.measurement, values[i] ?? "") : c.target));
@@ -94,7 +91,7 @@ export function PlanCard({
   async function save() {
     if (!plan) return;
     setStatus({ kind: "saving" });
-    const res = await saveTargetsAction(sprintId, plan);
+    const res = await callAction(() => saveTargetsAction(sprintId, plan));
     if (res.error) {
       setStatus({ kind: "error", text: res.error });
       return;

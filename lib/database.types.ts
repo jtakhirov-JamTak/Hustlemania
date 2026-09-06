@@ -569,7 +569,12 @@ export type Database = {
         Returns: undefined
       }
       set_highest_impediment: {
-        Args: { p_impediment_id: string; p_sprint_id: string }
+        Args: {
+          p_impediment_id: string
+          p_proof_then?: string
+          p_proof_when?: string
+          p_sprint_id: string
+        }
         Returns: undefined
       }
       set_item_scope: {

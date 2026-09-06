@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { report } from "@/lib/observe";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -30,6 +31,8 @@ export async function requestMagicLink(formData: FormData) {
 
   if (error) {
     const notInvited = /signups? not allowed|otp_disabled|signup_disabled/i.test(`${error.code ?? ""} ${error.message}`);
+    // An uninvited address is expected traffic; a failed send is the sign-in path down.
+    if (!notInvited) report("auth.otp_send_failed", error);
     return back({ error: notInvited ? "not_invited" : "send_failed" });
   }
   return back({ sent: "1" });

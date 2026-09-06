@@ -3,8 +3,8 @@ import { Tabs } from "@/components/Tabs";
 import { requireUser } from "@/lib/supabase/server";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user } = await requireUser();
-  if (!user) redirect("/login");
+  const { user, unavailable } = await requireUser();
+  if (!user) redirect(unavailable ? "/login?error=unavailable" : "/login");
 
   return (
     <div className="page">

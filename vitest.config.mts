@@ -12,7 +12,9 @@ export default defineConfig({
   },
   test: {
     include: ["tests/**/*.test.ts"],
-    passWithNoTests: true,
+    // A layer that discovers zero files must fail: a renamed directory or glob would
+    // otherwise leave `npm run verify` green with the whole layer skipped.
+    passWithNoTests: false,
     environment: "node",
     testTimeout: 30_000,
     hookTimeout: 60_000,

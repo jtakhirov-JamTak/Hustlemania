@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { createTask, removeTask, updateTask } from "@/app/(app)/actions";
+import { createTask, removeTask, updateTask } from "@/app/(app)/actions/tasks";
+import { callAction } from "@/lib/callAction";
 import type { Task } from "@/lib/data";
 import { GENERIC_SAVE_ERROR } from "@/lib/errors";
 
@@ -38,7 +39,7 @@ export function TasksCard({ dayId, initial, locked, lockedReason }: { dayId: str
     adding.current = true;
     const ok = await run(
       async () => {
-        const res = await createTask(dayId, text);
+        const res = await callAction(() => createTask(dayId, text));
         const task = res.task;
         if (res.error || !task) return { error: res.error ?? GENERIC_SAVE_ERROR };
         setRows((r) => [...r, { id: task.id, text: task.text, saved: task.text, done: task.done }]);
@@ -63,7 +64,7 @@ export function TasksCard({ dayId, initial, locked, lockedReason }: { dayId: str
     if (text === row.saved) return;
     void run(
       async () => {
-        const res = await updateTask(id, { text });
+        const res = await callAction(() => updateTask(id, { text }));
         const task = res.task;
         if (res.error || !task) return { error: res.error ?? GENERIC_SAVE_ERROR };
         setRows((r) => r.map((x) => (x.id === id ? { ...x, text: task.text, saved: task.text } : x)));
@@ -80,7 +81,7 @@ export function TasksCard({ dayId, initial, locked, lockedReason }: { dayId: str
     setRows((r) => r.map((x) => (x.id === id ? { ...x, done } : x)));
     void run(
       async () => {
-        const res = await updateTask(id, { done });
+        const res = await callAction(() => updateTask(id, { done }));
         if (res.error) {
           setRows((r) => r.map((x) => (x.id === id ? { ...x, done: !done } : x)));
           return res;
@@ -97,7 +98,7 @@ export function TasksCard({ dayId, initial, locked, lockedReason }: { dayId: str
     setRows((r) => r.filter((x) => x.id !== id));
     void run(
       async () => {
-        const res = await removeTask(id);
+        const res = await callAction(() => removeTask(id));
         if (res.error) {
           setRows((r) => (r.some((x) => x.id === id) ? r : [...r, row]));
           return res;

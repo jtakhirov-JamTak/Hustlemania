@@ -24,6 +24,7 @@ measures nothing but memory.
 | F3 — Custom daily targets; reconciliation; target locking; intention pre-planning | 2026-09-05T19:25Z | 2026-09-05T19:55Z | 0h30m | 0 | 0 | 0 |
 | F4 — Tasks: per-day optional task list, locks with the day, no roll-over | 2026-09-05T20:08Z | 2026-09-05T20:46Z | 0h38m | 0 | 0 | 0 |
 | F5 — Day boundaries, streaks, missed days, backfill | 2026-09-05T20:56Z | 2026-09-05T21:33Z | 0h37m | 2 (both to remove an unapplied `0007` draft so it could be rewritten — the write and shell guards block any change to a migration file once it exists) | 1 (first 0007 draft rebuilt the immutability trigger from its 0001 body and lost 0004's snapshot columns; caught by the existing DB suite before commit) | 0 |
+| Audit remediation — buckets A + B of `docs/audits/full-audit-2026-09-05.md` (not a SPEC feature; user-approved fix pass) | 2026-09-06T00:51Z | — (phases 1–3 of 6 green at 2026-09-06T01:14Z, user stopped the pass there; 4–6 open) | — | 1 (user: "stop after phase 3 completes") | 0 | 0 |
 
 ### Who opens the row
 

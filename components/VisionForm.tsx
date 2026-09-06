@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { saveVision } from "@/app/(app)/actions";
+import { saveVision } from "@/app/(app)/actions/vision";
 import type { AreaKey } from "@/lib/areas";
+import { callAction } from "@/lib/callAction";
 
 export function VisionForm({ area, initialBody, savedAt }: { area: AreaKey; initialBody: string; savedAt: string | null }) {
   const [body, setBody] = useState(initialBody);
@@ -18,7 +19,7 @@ export function VisionForm({ area, initialBody, savedAt }: { area: AreaKey; init
       onSubmit={(e) => {
         e.preventDefault();
         start(async () => {
-          const res = await saveVision(area, body);
+          const res = await callAction(() => saveVision(area, body));
           if (res.error) {
             setStatus({ kind: "error", text: res.error });
             return;

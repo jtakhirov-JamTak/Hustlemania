@@ -5,6 +5,7 @@ const ERRORS: Record<string, string> = {
   not_invited: "This email is not on the invite list.",
   send_failed: "The link could not be sent. Try again in a minute.",
   link: "That link has expired or was already used. Request a new one.",
+  unavailable: "Sign-in is unavailable right now. Nothing is lost — try again in a few minutes.",
 };
 
 export default async function LoginPage({

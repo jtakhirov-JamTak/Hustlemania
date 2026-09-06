@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { archiveItem, createItem, deleteItem, moveItem, restoreItem, setItemScope, updateItem, type BlockedSprint } from "@/app/(app)/actions";
+import { archiveItem, createItem, deleteItem, moveItem, restoreItem, setItemScope, updateItem, type BlockedSprint } from "@/app/(app)/actions/library";
 import { areaName, isAreaKey } from "@/lib/areas";
+import { callAction } from "@/lib/callAction";
 import { SCOPES, type ItemKind, type ItemScope, type LibraryItem } from "@/lib/data";
 import { blockedReason } from "@/lib/errors";
 
@@ -92,7 +93,7 @@ export function LibraryPage({ kind, items }: { kind: ItemKind; items: LibraryIte
             pending={pending}
             onMove={(dir) =>
               start(async () => {
-                const res = await moveItem(kind, item.id, dir);
+                const res = await callAction(() => moveItem(kind, item.id, dir));
                 if (res.error) setPageError(res.error);
               })
             }
@@ -163,7 +164,7 @@ function AddCard({ kind, onError }: { kind: ItemKind; onError: (e: string | null
     if (!name.trim()) return;
     setError(null);
     start(async () => {
-      const res = await createItem(kind, { name, explanation, scope, proofWhen: when, proofThen: then });
+      const res = await callAction(() => createItem(kind, { name, explanation, scope, proofWhen: when, proofThen: then }));
       if (res.error) {
         setError(res.error);
         return;
@@ -253,13 +254,13 @@ function ItemCard({
     setError(null);
     setBlocked(null);
     start(async () => {
-      const res = await updateItem(item.kind, item.id, { name, explanation, proofWhen: when, proofThen: then });
+      const res = await callAction(() => updateItem(item.kind, item.id, { name, explanation, proofWhen: when, proofThen: then }));
       if (res.error) {
         setError(res.error);
         return;
       }
       if (scope !== item.scope) {
-        const sc = await setItemScope(item.kind, item.id, scope);
+        const sc = await callAction(() => setItemScope(item.kind, item.id, scope));
         if (sc.error) {
           setError(sc.error);
           return;
@@ -277,7 +278,7 @@ function ItemCard({
     setError(null);
     setBlocked(null);
     start(async () => {
-      const res = await archiveItem(item.kind, item.id);
+      const res = await callAction(() => archiveItem(item.kind, item.id));
       if (res.error) {
         setError(res.error);
         return;
@@ -289,7 +290,7 @@ function ItemCard({
   function remove() {
     setError(null);
     start(async () => {
-      const res = await deleteItem(item.kind, item.id);
+      const res = await callAction(() => deleteItem(item.kind, item.id));
       if (res.error) setError(res.error);
     });
   }
@@ -403,7 +404,7 @@ function ArchivedRow({ item, onError }: { item: LibraryItem; onError: (e: string
         disabled={busy}
         onClick={() =>
           start(async () => {
-            const res = await restoreItem(item.kind, item.id);
+            const res = await callAction(() => restoreItem(item.kind, item.id));
             onError(res.error ?? null);
           })
         }

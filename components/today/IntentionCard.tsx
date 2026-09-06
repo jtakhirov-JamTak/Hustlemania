@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { saveIntention } from "@/app/(app)/actions";
+import { saveIntention } from "@/app/(app)/actions/day";
+import { callAction } from "@/lib/callAction";
 
 export function IntentionCard({ dayId, initial, locked }: { dayId: string; initial: string; locked: boolean }) {
   const [text, setText] = useState(initial);
@@ -11,7 +12,7 @@ export function IntentionCard({ dayId, initial, locked }: { dayId: string; initi
   async function persist() {
     if (text.trim() === saved.trim()) return;
     setStatus({ kind: "saving" });
-    const res = await saveIntention(dayId, text);
+    const res = await callAction(() => saveIntention(dayId, text));
     if (res.error) {
       setStatus({ kind: "error", text: res.error });
       return;

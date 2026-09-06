@@ -76,6 +76,19 @@ describe("F2 RLS isolation", () => {
     expect(res.data).toEqual([]);
   });
 
+  it("the membership count embed reports rule-19 `used` per row under RLS (what loadLibrary reads)", async () => {
+    const mine = await a.client.from("cues").select("id, sprint_cues(count)");
+    expect(mine.error).toBeNull();
+    expect(mine.data).toEqual([{ id: cueId, sprint_cues: [{ count: 1 }] }]);
+    const fresh = await insertCue(a, "Fresh");
+    const unused = await a.client.from("cues").select("id, sprint_cues(count)").eq("id", fresh).single();
+    expect(unused.error).toBeNull();
+    expect(unused.data!.sprint_cues).toEqual([{ count: 0 }]);
+    const theirs = await b.client.from("cues").select("id, sprint_cues(count)");
+    expect(theirs.error).toBeNull();
+    expect(theirs.data).toEqual([]);
+  });
+
   it("user B cannot insert a cue or impediment as A", async () => {
     const c = await b.client.from("cues").insert({ user_id: a.id, name: "forged" }).select("id");
     expect(c.error).not.toBeNull();
@@ -403,6 +416,36 @@ describe("library rules and sprint membership", () => {
     await rpc(u, "add_sprint_item", { p_sprint_id: sprintId, p_kind: "impediment", p_item_id: noProof });
     await expectRpcError(u, "set_highest_impediment", { p_sprint_id: sprintId, p_impediment_id: noProof }, "proof_point_required");
     await expectRpcError(u, "set_highest_impediment", { p_sprint_id: sprintId, p_impediment_id: impHighest }, "not_in_sprint");
+  });
+
+  it("set_highest_impediment writes the proof it is given in the same transaction; a rejected call writes nothing (0008)", async () => {
+    const [np] = await sql<{ id: string }[]>`select id from public.impediments where user_id = ${u.id} and name = 'No proof'`;
+    await rpc(u, "set_highest_impediment", { p_sprint_id: sprintId, p_impediment_id: np.id, p_proof_when: "  I stall  ", p_proof_then: "I start" });
+    const [written] = await sql<{ proof_when: string; proof_then: string }[]>`select proof_when, proof_then from public.impediments where id = ${np.id}`;
+    expect(written).toEqual({ proof_when: "I stall", proof_then: "I start" });
+    const flags = await sql<{ impediment_id: string }[]>`
+      select impediment_id from public.sprint_impediments where sprint_id = ${sprintId} and removed_at is null and is_highest`;
+    expect(flags.map((r) => r.impediment_id)).toEqual([np.id]);
+
+    // impHighest was removed from the sprint: the designation is rejected and its proof is untouched.
+    const [before] = await sql<{ proof_when: string; proof_then: string }[]>`select proof_when, proof_then from public.impediments where id = ${impHighest}`;
+    await expectRpcError(u, "set_highest_impediment", { p_sprint_id: sprintId, p_impediment_id: impHighest, p_proof_when: "changed", p_proof_then: "changed" }, "not_in_sprint");
+    const [after] = await sql<{ proof_when: string; proof_then: string }[]>`select proof_when, proof_then from public.impediments where id = ${impHighest}`;
+    expect(after).toEqual(before);
+
+    // A blank half is no proof: rejected, and the row keeps what it had.
+    await expectRpcError(u, "set_highest_impediment", { p_sprint_id: sprintId, p_impediment_id: np.id, p_proof_when: "   ", p_proof_then: "x" }, "proof_point_required");
+    const [kept] = await sql<{ proof_when: string; proof_then: string }[]>`select proof_when, proof_then from public.impediments where id = ${np.id}`;
+    expect(kept).toEqual({ proof_when: "I stall", proof_then: "I start" });
+  });
+
+  it("sprint_invalid_reason with the default arguments judges the whole sprint (0008 null-safety)", async () => {
+    // Before 0008 the NULL exclusion arguments made every membership row NOT match, so a
+    // valid sprint read as `no_cues`.
+    const [r] = await sql<{ reason: string | null }[]>`select public.sprint_invalid_reason(${sprintId}) as reason`;
+    expect(r.reason).toBeNull();
+    const [c] = await sql<{ n: number }[]>`select count(*)::int as n from public.sprint_cues where sprint_id = ${sprintId} and removed_at is null`;
+    expect(c.n).toBeGreaterThan(0);
   });
 
   it("at most one highest per sprint, even for the postgres role", async () => {

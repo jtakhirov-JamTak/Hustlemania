@@ -6,6 +6,72 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-06 — Audit remediation, phases 1–3: the gate can fail, the session is read locally, failures leave a line
+
+Fix pass over `docs/audits/full-audit-2026-09-05.md` buckets A + B, user-approved,
+stopped by the user after phase 3 of 6 (phases 4–6 — mobile CSS, accessibility, test
+additions, consolidation — are still open in `docs/PROGRESS.md`).
+
+**Verify gate.** `passWithNoTests` (Vitest) and `--pass-with-no-tests` (Playwright)
+removed; each runner now exits 1 on zero files (proven: `vitest run tests/does-not-exist`
+→ 1, `playwright test does-not-exist` → 1). The three Python hook suites joined `verify`
+as `test:hooks` (60 + 44 + 11 cases) — they had only ever run by hand. A `prebuild`
+guard refuses a build with `VERCEL`/`CI` set against a loopback or non-https
+`NEXT_PUBLIC_SUPABASE_URL`, and every build prints its target.
+
+**Session read.** `proxy.ts` and `requireUser` use `getClaims()` (local JWT
+verification; a network round trip only on the local stack's symmetric key) instead of
+two `getUser()` calls per request. An Auth *error* is reported and, when it is the
+service's (5xx / fetch failure), answered with `/login?error=unavailable` — it is never
+folded into "signed out". `requireUser` is React-`cache`d and is the identity source
+for every action that needs a user id.
+
+**Reads.** `used` (rule 19) is a `sprint_cues(count)` / `sprint_impediments(count)`
+embed computed per row in SQL, so `loadLibrary` is O(library) and never fetches the
+membership history (the audit's silent-truncation cliff at PostgREST's 1000-row cap).
+`loadActiveSprint` embeds the 14 days on the sprint row (one round trip, not two);
+`loadOverview` is `cache`d; the sprints layout reads overview and streaks in parallel;
+the area page uses `allOrThrow` (allSettled) so a sibling rejection never surfaces as an
+unhandled rejection with no route.
+
+**Signal.** `lib/observe.ts` `report(kind, error, ctx)` writes one JSON line to stderr
+— the host's runtime log is the sink until an error tracker exists; `shouldCapture`
+holds the five-minute per-kind cooldown that capture will sit behind. Wired at: every
+DB error in every action (`failed()` in `lib/actionResult.ts`, 22 sites), the two
+"closed but not refreshed" branches, `auth.claims_failed`, `auth.callback_failed`,
+`auth.otp_send_failed`, `auth.signout_failed`, a streak the RPC did not return, an
+orphan membership, and Next's `onRequestError` (`instrumentation.ts`) for every render,
+route and action throw. `app/(app)/error.tsx` keeps the shell with a retry;
+`app/global-error.tsx` covers the root. Client components call actions through
+`callAction`, which turns a *thrown* action (deploy mid-form, network) into `{ error }`
+so the form and its input stay mounted. Verified live: a bogus `/auth/callback?code=`
+logged `{"event":"auth.callback_failed","code":"pkce_code_verifier_not_found",…}`.
+PostgREST row values in messages (`(a)=(b)`) are redacted before logging; context is
+ids only.
+
+**Headers.** `frame-ancestors 'none'`, `X-Frame-Options: DENY`, nosniff,
+`Referrer-Policy: strict-origin-when-cross-origin`, a Permissions-Policy, and
+`poweredByHeader: false`. No `script-src` CSP: Next's inline bootstrap needs nonces —
+a separate change.
+
+**Migration 0008.** Drops the index that duplicated the unique (sprint_id, date) key;
+`set_highest_impediment(sprint, impediment, proof_when?, proof_then?)` writes proof and
+flag atomically (FIX_LOG 2026-09-06); `sprint_invalid_reason` gets `coalesce(…, false)`
+on its exclusion so the default arguments judge the whole sprint (it returned `no_cues`
+for a valid sprint before; no caller hit it). Actions were split by domain into
+`app/(app)/actions/{vision,sprint,day,tasks,library}.ts`.
+
+**Rejected.** *ESLint 10*: `eslint-config-next@16.3.4` declares `eslint >=9` but its
+bundled `eslint-plugin-react`/`-import`/`-jsx-a11y` peer on `^9` at most, and
+`npm run lint` crashed in `eslint-plugin-react`'s version detection on 10.10.0. Stays
+on 9.39.5 (deprecated on the registry) until `eslint-config-next` ships a 10-ready
+release. *Deleting `docs/mockups/UI mockups.zip`*: `docs/SPEC.md:7,160,630` and the F1
+decision cite it as the design reference; the extracted tree is a copy, the zip is the
+source. *Rate limiter, uniform "sent" login response, dropping the `token_hash`
+callback branch*: design decisions (audit bucket D), untouched.
+
+---
+
 ## 2026-09-05 — F5 streaks: computed in SQL from a per-day on-time flag, never stored; the clock is a parameter
 
 **Decision.** `close_day` records one boolean per closed day, `closed_on_time =
@@ -226,6 +292,15 @@ wins over the PRD's "whole units" storage note; behaviour is identical.
 is the look; its bundled `spec.md` is an older PRD draft and loses to
 `docs/references/`. Today's section order and the two-step Close dialog are the
 user's calls over both the PRD and the prototype (SPEC Part 2 §5).
+
+**Hosted project (recorded 2026-09-05, after the full audit found it unlogged):**
+the user created the Supabase project `hustlemania` — ref `zcdvuhcslwalhziinfqz`,
+region us-west-1, Postgres 17 — at 2026-09-05T13:29Z, before F2 began, in a
+**separate organisation** (`tlfaqzgduptciyxbkwdf`) from `pure-eq`'s
+(`fsbryklkgnhmmtzukfrh`, "Jam Taks Org"). Its keys live in `.env`. The Supabase MCP
+plugin is authorised only against the `pure-eq` organisation, so it lists one project
+and cannot reach this one; the CLI login (`npx supabase projects list`) sees both.
+Not linked from this clone yet; `supabase link` and `db push` remain the F10 step.
 
 ---
 

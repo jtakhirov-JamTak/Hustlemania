@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { saveProofPoint, setHighestImpediment } from "@/app/(app)/actions";
+import { saveProofPoint, setHighestImpediment } from "@/app/(app)/actions/library";
 import { ItemPicker } from "@/components/ItemPicker";
+import { callAction } from "@/lib/callAction";
 import type { SprintItems } from "@/lib/data";
 
 /**
@@ -41,7 +42,7 @@ export function HighestImpedimentCard({ sprintId, impediments, locked }: { sprin
   function confirmChange() {
     if (!pick || pickHint) return;
     start(async () => {
-      const res = await setHighestImpediment(sprintId, pick, needsProof ? { when, then } : undefined);
+      const res = await callAction(() => setHighestImpediment(sprintId, pick, needsProof ? { when, then } : undefined));
       if (res.error) {
         setError(res.error);
         return;
@@ -53,7 +54,7 @@ export function HighestImpedimentCard({ sprintId, impediments, locked }: { sprin
   function saveProof() {
     if (!highest || !when.trim() || !then.trim()) return;
     start(async () => {
-      const res = await saveProofPoint(highest.id, when, then);
+      const res = await callAction(() => saveProofPoint(highest.id, when, then));
       if (res.error) {
         setError(res.error);
         return;

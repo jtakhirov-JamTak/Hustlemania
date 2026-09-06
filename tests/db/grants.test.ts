@@ -82,6 +82,17 @@ describe("public schema access model", () => {
     ]);
   });
 
+  it("no plain index duplicates a full unique index on the same columns (0008 dropped one)", async () => {
+    const rows = await sql<{ dup: string; unique_index: string }[]>`
+      select a.indexrelid::regclass::text as dup, b.indexrelid::regclass::text as unique_index
+      from pg_index a
+      join pg_index b on b.indrelid = a.indrelid and b.indkey::text = a.indkey::text and b.indexrelid <> a.indexrelid
+      join pg_class c on c.oid = a.indrelid
+      where c.relnamespace = 'public'::regnamespace
+        and b.indisunique and b.indpred is null and not a.indisunique`;
+    expect(rows).toEqual([]);
+  });
+
   it("a table created by a later migration is unreachable until granted", async () => {
     await sql.begin(async (tx) => {
       await tx`create table public.__grant_probe (id int)`;

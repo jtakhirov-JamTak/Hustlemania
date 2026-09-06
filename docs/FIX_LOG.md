@@ -6,6 +6,34 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-06 — Designating a Highest Impediment wrote its Proof Point before the call that could reject it
+
+**Problem.** `setHighestImpediment` (server action) updated `impediments.proof_when /
+proof_then` first and called the `set_highest_impediment` RPC second. When the RPC
+rejected the designation — `not_in_sprint`, `sprint_not_active`, a foreign sprint —
+the user saw the error while the library row had already changed. Two individually
+correct writes with no transaction between them.
+
+**Fix.** Migration `0008_audit_remediation.sql` gives `set_highest_impediment` two
+optional parameters (`p_proof_when`, `p_proof_then`); the function writes the proof and
+flips the flag in one transaction, and rejects before writing. The action passes the
+proof through and writes nothing itself.
+
+**Regression test.** `tests/db/libraries.test.ts` "set_highest_impediment writes the
+proof it is given in the same transaction; a rejected call writes nothing (0008)":
+designates a proof-less member with a proof (row updated, flag set), then attempts a
+removed impediment with a new proof (`not_in_sprint`, proof byte-identical before and
+after), then a blank half (`proof_point_required`, proof unchanged). Against the 0004
+function the first call fails on arity, so the test cannot pass without the fix.
+
+**Where found.** The full audit (`docs/audits/full-audit-2026-09-05.md`, test-audit
+finding #8), by reading the action; no test reached it.
+
+**Rule.** A multi-row write that must succeed or fail together lives in one SQL
+function, as `start_sprint` already does — never in two client calls.
+
+---
+
 ## 2026-09-05 — A redefined trigger function dropped the columns a later migration had added
 
 **Problem.** Migration 0007 had to add `closed_on_time` to the lock in
