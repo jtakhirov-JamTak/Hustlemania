@@ -1,14 +1,17 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import type { Database } from "@/lib/database.types";
 import { publicSupabaseEnv } from "@/lib/env";
 
 /**
  * Per-request Supabase client for Server Components, Server Actions and Route Handlers.
  * Runs as the signed-in user, so every query is under RLS. Identity comes from the
- * session cookie, never from the request body.
+ * session cookie, never from the request body. One instance per request (React
+ * `cache`), so a layout and its page share it and loaders memoised on the client
+ * identity run once.
  */
-export async function createClient() {
+export const createClient = cache(async function createClient() {
   const cookieStore = await cookies();
   const { url, anonKey } = publicSupabaseEnv();
   return createServerClient<Database>(url, anonKey, {
@@ -26,7 +29,7 @@ export async function createClient() {
       },
     },
   });
-}
+});
 
 export async function requireUser() {
   const supabase = await createClient();

@@ -6,6 +6,34 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-05 — A redefined trigger function dropped the columns a later migration had added
+
+**Problem.** Migration 0007 had to add `closed_on_time` to the lock in
+`sprint_days_immutable_after_close`. The first draft copied the function body from
+0001, where it was created, and added the column — but 0004 had already redefined the
+same function to lock the Highest Impediment snapshot (`highest_impediment_id`,
+`proof_when`, `proof_then`). `create or replace` took the stale body whole, and a closed
+day's snapshot became writable again. Nothing in the migration looked wrong on its own;
+only the history made it wrong.
+
+**Fix.** Rebuilt the function from the *latest* definition (`grep -n "function
+public.<name>"` across every migration, take the last hit) and added the column to
+that. Then a local `supabase db reset` so 0001–0007 applied from disk.
+
+**Regression test.** Already existed: `tests/db/libraries.test.ts` "a closed day's
+selections and snapshot are immutable" went red on the first run and green on the
+second. That is the
+check that could fail, and it did.
+
+**Where found.** The DB suite, on the first run after applying the draft — before any
+commit.
+
+**Rule.** Before `create or replace function` in a migration, find the most recent
+definition, not the first one. A lint that diffs the new body against the previous one
+is in BACKLOG.
+
+---
+
 ## 2026-08-25 — Governance was writable from the shell; the docs claimed otherwise
 
 **Problem.** `write_guard.py` is registered for `Edit|Write|MultiEdit` only, so it

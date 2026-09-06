@@ -12,6 +12,8 @@ export type PlanCell = {
   target: number;
   /** Closed days show their actual under the target. */
   actual: number | null;
+  /** F5: the date has passed in the sprint's zone and the day was never closed. */
+  missed?: boolean;
 };
 
 /**
@@ -28,6 +30,8 @@ export function PlanGrid({
   parsed,
   onChange,
   inputIdPrefix = "target",
+  onBackfill,
+  backfillBusy = false,
 }: {
   measured: Measured;
   goal: number;
@@ -37,6 +41,10 @@ export function PlanGrid({
   parsed: (number | null)[];
   onChange: (index: number, raw: string) => void;
   inputIdPrefix?: string;
+  /** When given, a missed day is one Backfill button (F5). */
+  onBackfill?: (index: number) => void;
+  /** A backfill is being opened: the buttons stay put, disabled. */
+  backfillBusy?: boolean;
 }) {
   const effective = cells.map((c, i) => (editing && !c.locked ? parsed[i] : c.target));
   const allValid = effective.every((t) => t !== null);
@@ -49,26 +57,58 @@ export function PlanGrid({
         {cells.map((c, i) => {
           const edit = editing && !c.locked;
           const invalid = edit && parsed[i] === null;
+          const backfillable = Boolean(c.missed && onBackfill);
+          const status =
+            c.actual !== null
+              ? { text: `actual ${formatNumber(measured, c.actual)}`, color: c.actual >= c.target ? "var(--success)" : "var(--under)", bold: false }
+              : c.missed
+                ? { text: "missed", color: "var(--under)", bold: true }
+                : c.locked
+                  ? { text: "locked", color: "var(--muted)", bold: false }
+                  : null;
+          const header = (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 4 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: "var(--accent)" }}>D{c.dayIndex}</span>
+              <span style={{ fontSize: 9.5, color: "var(--muted)" }}>
+                {SHORT_DOW[dayOfWeek(c.date)]} {dayOfMonth(c.date)}
+              </span>
+            </div>
+          );
+          const cellStyle = {
+            border: `1px solid ${invalid ? "var(--under)" : "var(--divider)"}`,
+            borderRadius: 10,
+            padding: "8px 6px",
+            textAlign: "center" as const,
+            minWidth: 56,
+            background: c.locked ? "var(--faint)" : "var(--panel)",
+          };
+          if (backfillable) {
+            // The whole cell is the target (≥ 44 pt tall), so the label never has to be.
+            return (
+              <button
+                key={c.dayIndex}
+                type="button"
+                data-day={c.dayIndex}
+                data-locked="true"
+                data-missed="true"
+                aria-label={`Backfill day ${c.dayIndex}`}
+                aria-busy={backfillBusy || undefined}
+                disabled={backfillBusy}
+                onClick={() => onBackfill?.(i)}
+                style={{ ...cellStyle, display: "block", width: "100%", minHeight: 44, font: "inherit", color: "inherit", cursor: backfillBusy ? "progress" : "pointer" }}
+              >
+                {header}
+                <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 4 }} data-testid={`plan-target-${c.dayIndex}`}>
+                  {formatNumber(measured, c.target)}
+                </div>
+                <div style={{ fontSize: 9.5, fontWeight: 600, color: "var(--under)", marginTop: 2 }}>missed</div>
+                <div style={{ fontSize: 10.5, fontWeight: 600, color: "var(--accent-ink)", marginTop: 4 }}>Backfill</div>
+              </button>
+            );
+          }
           return (
-            <div
-              key={c.dayIndex}
-              data-day={c.dayIndex}
-              data-locked={c.locked ? "true" : "false"}
-              style={{
-                border: `1px solid ${invalid ? "var(--under)" : "var(--divider)"}`,
-                borderRadius: 10,
-                padding: "8px 6px",
-                textAlign: "center",
-                minWidth: 0,
-                background: c.locked ? "var(--faint)" : "var(--panel)",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 4 }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "var(--accent)" }}>D{c.dayIndex}</span>
-                <span style={{ fontSize: 9.5, color: "var(--muted)" }}>
-                  {SHORT_DOW[dayOfWeek(c.date)]} {dayOfMonth(c.date)}
-                </span>
-              </div>
+            <div key={c.dayIndex} data-day={c.dayIndex} data-locked={c.locked ? "true" : "false"} data-missed={c.missed ? "true" : undefined} style={cellStyle}>
+              {header}
               {edit ? (
                 <input
                   id={`${inputIdPrefix}-${c.dayIndex}`}
@@ -85,8 +125,8 @@ export function PlanGrid({
                   <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 4 }} data-testid={`plan-target-${c.dayIndex}`}>
                     {formatNumber(measured, c.target)}
                   </div>
-                  <div style={{ fontSize: 9.5, color: c.actual !== null ? (c.actual >= c.target ? "var(--success)" : "var(--under)") : "var(--muted)", marginTop: 2 }}>
-                    {c.actual !== null ? `actual ${formatNumber(measured, c.actual)}` : c.locked ? "locked" : " "}
+                  <div style={{ fontSize: 9.5, fontWeight: status?.bold ? 600 : undefined, color: status?.color ?? "var(--muted)", marginTop: 2, minHeight: 12 }}>
+                    {status?.text ?? ""}
                   </div>
                 </>
               )}

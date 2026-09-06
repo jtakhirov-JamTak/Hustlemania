@@ -11,7 +11,7 @@ import type { LibraryItem, OfferedItems, Sprint, SprintDay, SprintItems, Task } 
 import { formatIsoDate } from "@/lib/dates";
 import { formatAmount, formatNumber, unitLabel, type Measured } from "@/lib/format";
 import { hasRoundingDifference, measurementStep } from "@/lib/targets";
-import { localDateIn, type SprintDayPosition } from "@/lib/sprintDay";
+import { localDateIn, streakLabel, type SprintDayPosition } from "@/lib/sprintDay";
 
 type UsageRow = { label: string; amount: number };
 
@@ -23,6 +23,7 @@ export function TodayView({
   library,
   offered,
   tasks,
+  streak,
 }: {
   sprint: Sprint;
   days: SprintDay[];
@@ -31,6 +32,7 @@ export function TodayView({
   library: { cues: LibraryItem[]; impediments: LibraryItem[] };
   offered: OfferedItems;
   tasks: Task[];
+  streak: number;
 }) {
   const measured: Measured = { measurement: sprint.measurement as Measured["measurement"], currency: sprint.currency, unit: sprint.unit };
   const goal = Number(sprint.amount);
@@ -73,6 +75,9 @@ export function TodayView({
         <div style={{ textAlign: "right" }}>
           <div className="heading" style={{ fontSize: 30, lineHeight: 1 }} data-testid="day-label">
             Day {focusIndex} / 14
+          </div>
+          <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 5 }} data-testid="streak-label">
+            {position.kind === "before" ? "Streak starts with day 1" : streakLabel(streak)}
           </div>
         </div>
       </div>
@@ -136,7 +141,6 @@ export function TodayView({
         measured={measured}
         goal={goal}
         day={day}
-        days={days}
         offered={offered}
         canClose={canClose}
         cannotCloseReason={cannotCloseReason}
@@ -151,7 +155,7 @@ export function TodayView({
         initialMode={sprint.target_mode === "custom" ? "custom" : "same"}
         days={days}
         todayInSprintTz={todayInSprintTz}
-        locked={sprintOver}
+        sprintOver={sprintOver}
       />
     </div>
   );

@@ -111,6 +111,7 @@ describe("public schema access model", () => {
       "save_targets",
       "set_highest_impediment",
       "set_item_scope",
+      "sprint_streaks",
       "start_sprint",
     ]);
   });
@@ -122,11 +123,12 @@ describe("public schema access model", () => {
     expect(row).toEqual({ start: false, close: false });
   });
 
-  it("the plan validator and the lock trigger functions are not callable by the API roles", async () => {
-    const [row] = await sql<{ validate: boolean; lock: boolean; tasks: boolean }[]>`
+  it("the plan validator, the lock trigger functions and the fixed-clock streak are not callable by the API roles", async () => {
+    const [row] = await sql<{ validate: boolean; lock: boolean; tasks: boolean; streak_at: boolean }[]>`
       select has_function_privilege('authenticated', 'public.validate_targets(text,bigint,bigint[])', 'execute') as validate,
              has_function_privilege('authenticated', 'public.sprint_days_target_locked()', 'execute') as lock,
-             has_function_privilege('authenticated', 'public.tasks_lock_with_day()', 'execute') as tasks`;
-    expect(row).toEqual({ validate: false, lock: false, tasks: false });
+             has_function_privilege('authenticated', 'public.tasks_lock_with_day()', 'execute') as tasks,
+             has_function_privilege('authenticated', 'public.sprint_streak_at(uuid,timestamptz)', 'execute') as streak_at`;
+    expect(row).toEqual({ validate: false, lock: false, tasks: false, streak_at: false });
   });
 });

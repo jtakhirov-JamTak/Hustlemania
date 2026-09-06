@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Measurement } from "@/lib/format";
-import { formatTargetInput, hasRoundingDifference, isLockedDay, parseTargetInput, planDelta, sameDailyTargets } from "@/lib/targets";
+import { formatTargetInput, hasRoundingDifference, isLockedDay, isMissedDay, parseTargetInput, planDelta, sameDailyTargets } from "@/lib/targets";
 
 describe("sameDailyTargets", () => {
   // SPEC F1: 14 targets sum to the Goal exactly for goal ∈ {14, 15, 27, 100, 1}.
@@ -80,5 +80,14 @@ describe("target input formatter/parser pair (SPEC F3 risk: precision per measur
   ])("%s: formats %i → %j and round-trips", (m, base, text) => {
     expect(formatTargetInput(m, base)).toBe(text);
     expect(parseTargetInput(m, text)).toBe(base);
+  });
+});
+
+describe("isMissedDay (F5)", () => {
+  it("is a past date that was never closed; today and closed days are not missed", () => {
+    expect(isMissedDay("2026-09-04", null, "2026-09-05")).toBe(true);
+    expect(isMissedDay("2026-09-05", null, "2026-09-05")).toBe(false);
+    expect(isMissedDay("2026-09-06", null, "2026-09-05")).toBe(false);
+    expect(isMissedDay("2026-09-04", "2026-09-05T03:00:00Z", "2026-09-05")).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SideNav, type SideItem } from "@/components/SideNav";
-import { loadOverview } from "@/lib/data";
-import { sprintDayFor } from "@/lib/sprintDay";
+import { loadOverview, loadStreaks } from "@/lib/data";
+import { sprintDayFor, streakLabel } from "@/lib/sprintDay";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function SprintsLayout({ children }: { children: React.ReactNode }) {
@@ -9,11 +9,14 @@ export default async function SprintsLayout({ children }: { children: React.Reac
   const areas = await loadOverview(supabase);
   const now = new Date();
 
+  const streaks = await loadStreaks(supabase);
+
   const items: SideItem[] = areas.map((a) => {
     if (a.sprint) {
       const pos = sprintDayFor(a.sprint, now);
       const meta = pos.kind === "during" ? `Day ${pos.dayIndex}/14` : pos.kind === "before" ? "Starts tomorrow" : "Ended";
-      return { href: `/sprints/${a.key}`, label: a.name, meta, sub: a.sprint.outcome };
+      const note = pos.kind === "before" ? undefined : streakLabel(streaks.get(a.sprint.id) ?? 0);
+      return { href: `/sprints/${a.key}`, label: a.name, meta, sub: a.sprint.outcome, note };
     }
     if (a.vision) return { href: `/sprints/${a.key}`, label: a.name, meta: "Ready", sub: "No active sprint" };
     return { href: `/sprints/${a.key}`, label: a.name, meta: "Locked", sub: "No 1-year vision yet" };

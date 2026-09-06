@@ -40,6 +40,11 @@ export function isLockedDay(date: string, todayInSprintTz: string): boolean {
   return date <= todayInSprintTz;
 }
 
+/** F5: the day's date has passed in the sprint's zone and it was never closed — it can be backfilled. */
+export function isMissedDay(date: string, closedAt: string | null, todayInSprintTz: string): boolean {
+  return closedAt === null && date < todayInSprintTz;
+}
+
 /**
  * The text a target input shows for a base-unit value: whole currency units, "h:mm"
  * for hours, a whole number for quantity. Inverse of parseTargetInput.

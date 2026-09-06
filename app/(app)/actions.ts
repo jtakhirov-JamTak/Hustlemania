@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isAreaKey, type AreaKey } from "@/lib/areas";
-import { isItemScope, loadDays, type ItemKind, type ItemScope, type SprintDay, type Task } from "@/lib/data";
+import { isItemScope, loadDayOfferedItems, loadDays, type ItemKind, type ItemScope, type OfferedItems, type SprintDay, type Task } from "@/lib/data";
 import { friendlyError, GENERIC_SAVE_ERROR } from "@/lib/errors";
 import type { Measurement } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
@@ -193,8 +193,16 @@ export type CloseDayInput = {
   mostUseful: string | null;
 };
 
-/** Calls close_day and returns the sprint's fresh day rows for the result screen. */
-export async function closeDayAction(dayId: string, sprintId: string, input: CloseDayInput): Promise<Result<{ days: SprintDay[] }>> {
+export type CloseDayResult = Result<{ days: SprintDay[]; streak: number }> & {
+  /** Set when the day did close but the fresh rows could not be read: the error is about the refresh, not the close. */
+  closed?: true;
+};
+
+/**
+ * Closes today's day or backfills a missed one (F5); the DB decides which, records it,
+ * and returns the streak. The fresh day rows are read afterwards for the result screen.
+ */
+export async function closeDayAction(dayId: string, sprintId: string, input: CloseDayInput): Promise<CloseDayResult> {
   if (!Number.isInteger(input.actual) || input.actual < 0) return { error: friendlyError("invalid_actual") };
   if (input.hurt.length > 0 && !input.mostDamaging) return { error: friendlyError("most_damaging_required") };
   if (input.helped.length > 0 && !input.mostUseful) return { error: friendlyError("most_useful_required") };
@@ -209,9 +217,22 @@ export async function closeDayAction(dayId: string, sprintId: string, input: Clo
     p_most_useful: input.helped.length > 0 ? (input.mostUseful ?? undefined) : undefined,
   });
   if (res.error) return { error: friendlyError(res.error.message) };
-  const days = await loadDays(supabase, sprintId);
   revalidatePath("/sprints", "layout");
-  return { days };
+  try {
+    return { days: await loadDays(supabase, sprintId), streak: res.data };
+  } catch {
+    return { closed: true, error: "The day is closed, but the page could not refresh. Reload to see it." };
+  }
+}
+
+/** What Day Close offers for one day (rule 23) — fetched on demand when a missed day is backfilled. */
+export async function dayOfferedItemsAction(dayId: string): Promise<Result<{ offered: OfferedItems }>> {
+  const supabase = await createClient();
+  try {
+    return { offered: await loadDayOfferedItems(supabase, dayId) };
+  } catch (e) {
+    return { error: friendlyError(e instanceof Error ? e.message : undefined) };
+  }
 }
 
 // ---------------------------------------------------------------------------

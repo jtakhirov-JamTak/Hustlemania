@@ -28,6 +28,31 @@
   also flips archived rows. No UI path does this; decide the semantics with History /
   Insights (F7 / F9).
 
+## Found during F5 (2026-09-05), not fixed there
+
+- **The streak must stop at the closure date once F6 adds early completion.**
+  `sprint_streak_at` walks every day with date ≤ today; after "Complete Sprint" on day 9
+  the cancelled days 10–14 would read as missed and the streak as 0. F6 owns this in the
+  migration that adds the closure timestamp (DECISIONS, F5 entry).
+- **A backfill offers the day's own items but not the day's own intention or tasks**:
+  the dialog closes a missed day with Actual, hurt/helped and notes; the Intention and
+  Tasks cards keep showing today's day. Reading a past day in full is the History view
+  (F7/F9).
+- **`sprint_invalid_reason` null-default bug is still open** — 0007 does not touch that
+  function either.
+- **A torn-down request leaves sibling loader rejections unhandled.** The area page and
+  the sprints layout `Promise.all` loaders that throw on `.error`; when a request is
+  abandoned mid-render (seen in the e2e teardown: the user deleted while a
+  `router.refresh()` was in flight) the first rejection is handled and the rest surface
+  as `unhandledRejection: permission denied` in the dev log. Harmless today; a
+  `Promise.allSettled` at the two call sites, or a loader that returns `{ error }`, would
+  make it quiet. `app/(app)/sprints/[area]/page.tsx`, `app/(app)/sprints/layout.tsx`.
+- **`create or replace function` from a stale copy silently drops later additions.** 0007
+  first rebuilt `sprint_days_immutable_after_close` from its 0001 text and lost the three
+  snapshot columns 0004 had added; an existing test caught it (FIX_LOG). A lint that
+  diffs a redefined function body against the last definition in an earlier migration
+  would catch this before the suite runs.
+
 ## Found during F4 (2026-09-05), not fixed there
 
 - **Optimistic task writes are lost if the user leaves the page before the request

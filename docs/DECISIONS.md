@@ -6,6 +6,70 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-05 — F5 streaks: computed in SQL from a per-day on-time flag, never stored; the clock is a parameter
+
+**Decision.** `close_day` records one boolean per closed day, `closed_on_time =
+(now() at sprint tz)::date <= day.date`, and the streak is derived from those flags by
+`sprint_streak_at(sprint_id, asof)`: the trailing run of on-time closes among the days
+whose date is on or before "today" in the sprint's zone, with today's still-open day
+left out (neither missed nor earned). Two entry points read it: `close_day` returns
+the streak it just produced, and `sprint_streaks()` returns `(sprint_id, streak)` for
+every active sprint of the caller in one call (definer rights, filtered on
+`auth.uid()`); the `_at` variant is not callable by the API roles. There is no `streak`
+column and no function that assigns `closed_on_time` except `close_day` (a DB test
+scans `pg_proc` for `=`, `:=` and column-list forms and pins the trigger list on
+`sprint_days`).
+
+**Why.** A stored streak is a second copy of the truth that has to be kept in step by
+every path that closes a day, and the PRD's rule 18 ("never restore a streak through
+backfill") is then a rule about updates rather than a property of the data. Deriving it
+from the flags makes the rule structural: a backfilled day carries `closed_on_time =
+false` forever (the immutability trigger locks the column), so it ends any run it sits
+in, and the only way to a long streak is to have closed each day on its own date. The
+clock as a parameter is what makes the calendar logic testable: the table test closes
+days and asks for the streak at ten fixed instants, including 23:30 and 00:30 local
+across the US DST end, where a UTC date or a stale −7 offset both count Nov 1 missed
+(verified: swapping the zone conversion for `p_asof::date` turned that scenario red).
+
+**Sprint-zone "today" decides both ends.** The same expression, `now() at time zone
+tz`, is what refuses a future day, what marks a close on time, and what the streak reads
+as "today", so a sprint locked to Los Angeles keeps its midnight when the user travels
+(PRD §6) and no two code paths can disagree about the boundary.
+
+**Why the flag is stored rather than derived.** `closed_on_time` is a function of
+`closed_at`, `sprints.tz` and `date`, all locked after the close, so it could be
+computed at read time. It is stored because it is the *record of the close as it
+happened*, written by the one path that closes a day: History and Insights read it
+without repeating zone arithmetic, and if `tz` ever becomes editable (it is locked
+today) the record does not silently move. The cost — a CHECK, a trigger line, the
+pg_proc scan and a grants line — is the price of keeping that record honest, and the
+suite carries it. Deriving at read was considered and rejected on those grounds.
+
+**Sidebar and Today read one call.** One `sprint_streaks()` RPC per request replaces a
+per-sprint RPC in the layout plus a duplicate on the page: the server client is created
+once per request (React `cache`) and the loader is memoised on it, so the layout and
+its page share the result. `close_day` returns the streak so the result screen needs no
+second read.
+
+**Noted for F6.** `sprint_streak_at` considers every day with date ≤ today. When early
+completion cancels the remaining days (PRD §10: "cancelled, not missed") the function
+must stop at the closure date, or a sprint completed on day 9 reads a streak of 0 on day
+11. That is F6's change to make, in the migration that adds the closure timestamp.
+Until F6 exists a sprint stays `active` after day 14, and Backfill stays available on
+the plan grid for exactly as long as `close_day` accepts it (PRD §9: "while the Sprint
+remains open") — the UI and the DB agree on what "open" means, and F6 closes both at
+once.
+
+**Rejected.** A stored `streak` column on `sprints` (second copy, rule 18 becomes a
+write rule); a nullable `closed_on_time` default of `false` (an open day is not late,
+it is open — the CHECK ties the flag to `closed_at` exactly); letting the client pass
+the clock to the RPC (harmless for a read, but a wider API for no user need); a
+per-sprint `sprint_streak(id)` RPC (N calls per navigation for a value one call
+returns); a PostgREST computed column on `sprints` (the generated types do not carry
+it, so every read would be hand-typed).
+
+---
+
 ## 2026-09-05 — F4 tasks: direct table writes under a row trigger; "remove" is archive
 
 **Decision.** `tasks` is written directly by the authenticated role (insert

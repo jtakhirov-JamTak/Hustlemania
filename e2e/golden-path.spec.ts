@@ -248,9 +248,13 @@ test.describe("golden path", () => {
     await expect(result).toHaveAttribute("data-state", "at-or-above");
     expect(await result.evaluate((el) => getComputedStyle(el).fontSize)).toBe("78px");
     await expect(page.getByRole("dialog").getByText("Tomorrow's target", { exact: true })).toBeVisible();
+    // F5: an on-time close starts the streak.
+    await expect(page.getByRole("dialog").getByTestId("result-streak")).toHaveText("1 day");
     await page.getByRole("button", { name: "Back to today" }).click();
 
     await expect(page.getByText("Day closed · locked")).toBeVisible();
+    await expect(page.getByTestId("streak-label")).toHaveText("1-day streak");
+    await expect(page.locator("[data-sidebar]").getByTestId("side-note").filter({ hasText: "1-day streak" })).toHaveCount(1);
     await expect(page.getByTestId("closed-actual")).toHaveText("600 USD");
     await expect(page.getByTestId("closed-actual")).toHaveAttribute("data-state", "at-or-above");
     await expect(page.getByTestId("day-strip").locator('[data-day="1"]')).toHaveAttribute("data-state", "at-or-above");
@@ -297,5 +301,69 @@ test.describe("golden path", () => {
     const used = page.getByTestId("library-item").filter({ hasText: "Ask how much this pays" });
     await expect(used.getByRole("button", { name: "Archive" })).toBeVisible();
     await expect(used.getByRole("button", { name: "Delete" })).toHaveCount(0);
+  });
+
+  test("F5: a missed day is backfilled from the plan; it counts, the streak stays broken", async ({ page }) => {
+    // A wealth sprint whose day 3 is today (UTC), seeded straight into the tables: days 1
+    // and 2 are already missed. start_sprint only accepts today or tomorrow.
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    const day = (offset: number) => new Date(Date.parse(todayUtc) + offset * 86_400_000).toISOString().slice(0, 10);
+    const vision = await admin.from("visions").insert({ user_id: user.id, area: "wealth", body: "A wealth vision" }).select("id").single();
+    if (vision.error) throw new Error(vision.error.message);
+    const sprint = await admin
+      .from("sprints")
+      .insert({
+        user_id: user.id,
+        vision_id: vision.data.id,
+        area: "wealth",
+        outcome: "Bank the side income",
+        measurement: "money",
+        currency: "USD",
+        amount: 140_000,
+        confidence: 6,
+        why: "why",
+        celebration: "celebration",
+        mantra: "Small deposits, every day.",
+        tz: "UTC",
+        start_date: day(-2),
+        end_date: day(11),
+      })
+      .select("id")
+      .single();
+    if (sprint.error) throw new Error(sprint.error.message);
+    const rows = Array.from({ length: 14 }, (_, i) => ({ sprint_id: sprint.data.id, user_id: user.id, day_index: i + 1, date: day(i - 2), target: 10_000 }));
+    const days = await admin.from("sprint_days").insert(rows);
+    if (days.error) throw new Error(days.error.message);
+
+    await signInViaMagicLink(page, user.email);
+    await page.goto("/sprints/wealth");
+    await expect(page.getByTestId("day-label")).toHaveText("Day 3 / 14");
+    await expect(page.getByTestId("streak-label")).toHaveText("No streak");
+    const plan = page.getByTestId("plan-card");
+    await expect(plan.locator('[data-day="1"]')).toHaveAttribute("data-missed", "true");
+    await expect(plan.locator('[data-day="2"]')).toHaveAttribute("data-missed", "true");
+    await expect(plan.locator('[data-day="3"]')).not.toHaveAttribute("data-missed", "true");
+    await expect(plan.getByRole("button", { name: /Backfill day/ })).toHaveCount(2);
+
+    await plan.getByRole("button", { name: "Backfill day 1" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByTestId("close-step")).toHaveText("Backfill day 1 · step 1 of 2");
+    await expect(dialog.getByTestId("close-note")).toContainText("never repairs the streak");
+    await dialog.getByLabel("Actual result").fill("50");
+    await dialog.getByTestId("hurt-none").click();
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await dialog.getByTestId("helped-none").click();
+    await dialog.getByRole("button", { name: "Close the day" }).click();
+    await expect(page.getByRole("dialog").getByText("Day 1 backfilled")).toBeVisible();
+    await expect(page.getByRole("dialog").getByTestId("result-streak")).toHaveText("0 days · unchanged by a backfill");
+    await page.getByRole("button", { name: "Back to today" }).click();
+
+    // Counted toward totals, gone from the backfill offers, streak untouched, day 2 still missed.
+    await expect(plan.locator('[data-day="1"]')).toContainText("actual 50");
+    await expect(plan.getByRole("button", { name: /Backfill day/ })).toHaveCount(1);
+    await expect(page.getByTestId("target-hero")).toContainText("50 USD");
+    await expect(page.getByTestId("streak-label")).toHaveText("No streak");
+    const closed = await admin.from("sprint_days").select("closed_on_time, actual").eq("sprint_id", sprint.data.id).eq("day_index", 1).single();
+    expect(closed.data).toEqual({ closed_on_time: false, actual: 5000 });
   });
 });

@@ -56,3 +56,9 @@ function isoParts(date: string): [number, number, number] {
   if (!m) throw new Error(`not an ISO calendar date: ${date}`);
   return [Number(m[1]), Number(m[2]) - 1, Number(m[3])];
 }
+
+/** "3-day streak", "1-day streak", or "No streak" — the copy under Day N / 14 and in the sidebar. */
+export function streakLabel(streak: number): string {
+  if (streak <= 0) return "No streak";
+  return `${streak}-day streak`;
+}

@@ -9,6 +9,8 @@ export type SideItem = {
   meta?: string;
   metaAccent?: boolean;
   sub?: string;
+  /** A second quiet line under `sub` — the sprint's streak. */
+  note?: string;
 };
 
 export function SideNavList({ items }: { items: SideItem[] }) {
@@ -51,6 +53,11 @@ export function SideNavList({ items }: { items: SideItem[] }) {
             </span>
             {it.sub ? (
               <span style={{ display: "block", fontSize: 11.5, color: "var(--muted)", marginTop: 3, lineHeight: 1.4 }}>{it.sub}</span>
+            ) : null}
+            {it.note ? (
+              <span style={{ display: "block", fontSize: 10.5, color: "var(--muted)", marginTop: 4, fontWeight: 600 }} data-testid="side-note">
+                {it.note}
+              </span>
             ) : null}
           </Link>
         );

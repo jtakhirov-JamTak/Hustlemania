@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, daysBetween, localDateIn, sprintDayFor } from "@/lib/sprintDay";
+import { addDays, daysBetween, localDateIn, sprintDayFor, streakLabel } from "@/lib/sprintDay";
 
 describe("localDateIn", () => {
   it("uses the sprint zone, not UTC", () => {
@@ -45,5 +45,13 @@ describe("date arithmetic", () => {
     expect(addDays("2026-12-25", 13)).toBe("2027-01-07");
     expect(daysBetween("2026-12-25", "2027-01-07")).toBe(13);
     expect(daysBetween("2026-03-05", "2026-03-04")).toBe(-1);
+  });
+});
+
+describe("streakLabel", () => {
+  it("reads as a count of days, with a plain line at zero", () => {
+    expect(streakLabel(0)).toBe("No streak");
+    expect(streakLabel(1)).toBe("1-day streak");
+    expect(streakLabel(7)).toBe("7-day streak");
   });
 });

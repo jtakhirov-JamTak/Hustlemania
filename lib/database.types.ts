@@ -242,6 +242,7 @@ export type Database = {
         Row: {
           actual: number | null
           closed_at: string | null
+          closed_on_time: boolean | null
           created_at: string
           date: string
           day_index: number
@@ -259,6 +260,7 @@ export type Database = {
         Insert: {
           actual?: number | null
           closed_at?: string | null
+          closed_on_time?: boolean | null
           created_at?: string
           date: string
           day_index: number
@@ -276,6 +278,7 @@ export type Database = {
         Update: {
           actual?: number | null
           closed_at?: string | null
+          closed_on_time?: boolean | null
           created_at?: string
           date?: string
           day_index?: number
@@ -530,7 +533,7 @@ export type Database = {
           p_notes?: string
           p_sprint_day_id: string
         }
-        Returns: undefined
+        Returns: number
       }
       day_offered_items: {
         Args: { p_sprint_day_id: string }
@@ -576,6 +579,17 @@ export type Database = {
       sprint_invalid_reason: {
         Args: { p_exclude_item?: string; p_kind?: string; p_sprint_id: string }
         Returns: string
+      }
+      sprint_streak_at: {
+        Args: { p_asof: string; p_sprint_id: string }
+        Returns: number
+      }
+      sprint_streaks: {
+        Args: never
+        Returns: {
+          sprint_id: string
+          streak: number
+        }[]
       }
       start_sprint: {
         Args: {

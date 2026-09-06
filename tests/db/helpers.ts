@@ -157,6 +157,31 @@ export async function startSprint(user: TestUser, args: StartSprintArgs): Promis
   return res.data as string;
 }
 
+/**
+ * A sprint whose day 1 is `startDate` (any date, past included) with 14 open days,
+ * inserted straight into the tables as the superuser. start_sprint only accepts today
+ * or tomorrow, so this is how the suite gets days that are already missed.
+ */
+export async function insertSprintRows(
+  user: TestUser,
+  opts: { startDate: string; tz: string; area?: string; target?: number },
+): Promise<{ sprintId: string; dayIds: string[] }> {
+  const area = opts.area ?? "wealth";
+  const target = opts.target ?? 100;
+  const visionId = await insertVision(user, area);
+  const [s] = await sql<{ id: string }[]>`
+    insert into public.sprints (user_id, vision_id, area, outcome, measurement, currency, amount, confidence, why, celebration, mantra, tz, start_date, end_date)
+    values (${user.id}, ${visionId}, ${area}, 'Past-dated sprint', 'money', 'USD', ${target * 14}, 7, 'why', 'celebration', 'mantra', ${opts.tz},
+            ${opts.startDate}::date, ${opts.startDate}::date + 13)
+    returning id`;
+  await sql`
+    insert into public.sprint_days (sprint_id, user_id, day_index, date, target)
+    select ${s.id}, ${user.id}, i, ${opts.startDate}::date + (i - 1), ${target}
+    from generate_series(1, 14) as i`;
+  const days = await sql<{ id: string }[]>`select id from public.sprint_days where sprint_id = ${s.id} order by day_index`;
+  return { sprintId: s.id, dayIds: days.map((d) => d.id) };
+}
+
 export async function expectRpcError(user: TestUser, fn: string, args: Record<string, unknown>, message: string) {
   const res = await user.client.rpc(fn, args);
   if (!res.error) throw new Error(`${fn} succeeded but should have failed with ${message}`);

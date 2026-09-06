@@ -421,6 +421,62 @@ per PRD), hours → minutes, quantity → whole units.
 - **Non-goals.** Reminders (F9).
 - **Risks.** Streak drift vs calendar — all logic in SQL, tested with fixed clocks.
 - **Evaluator.** none.
+- **As built (2026-09-05, no evaluator trigger).**
+  - Migration `0007_streaks.sql`: `sprint_days.closed_on_time boolean` with
+    `CHECK ((closed_at is null) = (closed_on_time is null))`, existing closed rows
+    backfilled from `closed_at` in the sprint's zone before the constraint; the
+    immutability trigger redefined from its latest (0004) body plus `closed_on_time`;
+    `close_day` recreated with the same parameters, now `returns integer` — the streak
+    after the close — and writing `closed_on_time = (now() at time zone tz)::date <=
+    day.date`; `sprint_streak_at(sprint, asof)` (invoker rights, not callable by the API
+    roles) and `sprint_streaks()` returning `(sprint_id, streak)` for the caller's active
+    sprints (definer rights, filtered on `auth.uid()`, granted to `authenticated`). No
+    streak column; no function other than `close_day` assigns `closed_on_time` (DB test
+    scans `pg_proc` for `=`, `:=` and column-list forms, and pins the trigger list on
+    `sprint_days`). The trigger draft that copied the 0001 body and lost the snapshot
+    columns was caught by the existing libraries test (FIX_LOG).
+  - Streak rule as coded: among days with date ≤ today in the sprint's zone, drop today's
+    day if it is still open, then count the trailing run of `closed_on_time = true`. A
+    missed day and a backfilled day both end the run; a still-open today neither counts
+    nor breaks. Decision and the F6 caveat (cancelled days after early completion) in
+    DECISIONS.
+  - UI: streak label under "Day N / 14" (`streakLabel`: "No streak" / "1-day streak" /
+    "N-day streak") and as a third line on the sprint's sidebar entry, both from one
+    `sprint_streaks()` read per request (the server client is created once per request
+    and the loader memoised on it). A plan-grid cell for a past, unclosed day is one
+    Backfill button (the whole cell, ≥ 44 pt; cells have a 56 px minimum so the strip
+    scrolls on a phone rather than clipping); it opens the same two-step Day Close
+    (`CloseFlow`, shared with the Close card: titled "Backfill day N", note: counts
+    toward the goal, never repairs the streak) with that day's own offers fetched on
+    press, buttons disabled while they load. The result screen gains a Streak row ("N
+    days", "· unchanged by a backfill") and labels the next day by number; whether the
+    close was a backfill is read from the row the DB wrote, never from the caller, so a
+    close submitted after midnight reports truthfully. `closeDayAction` returns the
+    streak from `close_day` and, if only the follow-up read fails, says the day is closed
+    and offers Reload instead of Retry. Backfill stays available after day 14 for as
+    long as `close_day` accepts it (F6 closes both; DECISIONS).
+  - Full review (2026-09-05, /full-review after green): 0 CRITICAL, 0 HIGH, 8 MEDIUM,
+    13 LOW; all eight MEDIUM fixed — result-screen truth from the row, backfill after day
+    14, tap target, wider rule-18 scan plus trigger list, closed-but-not-refreshed
+    error, one streak read per request, one `CloseFlow` host, the stored-flag rationale
+    in DECISIONS.
+  - Verification: DB suite 147 → 168 (`tests/db/streaks.test.ts` 21: ten fixed-clock
+    scenarios through `sprint_streak_at` — before day 1, today open, three on time, today
+    closed, missed middle, backfilled middle, missed yesterday, 23:30 and 00:30 local
+    across the US DST end, all 14 after the sprint — plus live-clock `close_day` cases:
+    future day, on-time flag, backfill flag and totals, column locked with the day, the
+    CHECK both ways, no direct UPDATE privilege, another user reads 0, closed sprint
+    refuses, and the no-repair scan; grants updated for the two functions); unit 43 → 44
+    (`streakLabel`); Playwright 6 → 8 (streak on the golden path's result screen, header
+    and sidebar; a seeded past-dated sprint backfilled from the plan on desktop and
+    phone). Falsifiability: nine live mutations each turned their tests red — streak on
+    UTC date (1), every close on time (3), trigger without the column (1), CHECK dropped
+    (1), ownership check removed (1), `_at` granted (2), future-day check removed (2),
+    closed-sprint check removed (1), a repair function added (2) — and the restored run
+    was green; then `supabase db reset` reapplied 0001–0007 from disk. Visual check in
+    Chrome (1138 px): header, sidebar, plan-grid missed cells, the backfill dialog, the
+    result screen, and the grid after it, with the DB row reading `closed_on_time =
+    false`; horizontal overflow 0. Phone layout covered by the Playwright phone project.
 
 ### F6 — Sprint completion, End Early, Review, next-sprint gate
 - **Behavior.** Reaching the Goal enables Complete Sprint (not automatic). End Sprint

@@ -23,6 +23,7 @@ measures nothing but memory.
 | F2 — Cue and Impediment libraries; Highest Impediment; Day Close selections | 2026-09-05T18:05Z | 2026-09-05T19:16Z | 1h11m | 0 | 0 | 0 |
 | F3 — Custom daily targets; reconciliation; target locking; intention pre-planning | 2026-09-05T19:25Z | 2026-09-05T19:55Z | 0h30m | 0 | 0 | 0 |
 | F4 — Tasks: per-day optional task list, locks with the day, no roll-over | 2026-09-05T20:08Z | 2026-09-05T20:46Z | 0h38m | 0 | 0 | 0 |
+| F5 — Day boundaries, streaks, missed days, backfill | 2026-09-05T20:56Z | 2026-09-05T21:33Z | 0h37m | 2 (both to remove an unapplied `0007` draft so it could be rewritten — the write and shell guards block any change to a migration file once it exists) | 1 (first 0007 draft rebuilt the immutability trigger from its 0001 body and lost 0004's snapshot columns; caught by the existing DB suite before commit) | 0 |
 
 ### Who opens the row
 
@@ -72,6 +73,14 @@ and the metric cannot be read.
 
 (Newest first. One line per shipped milestone, dated.)
 
+- 2026-09-05 — **F5 streaks green** (no evaluator trigger; nine DB mutations each turned
+  their tests red, six more after the review rewrite; visual check in Chrome;
+  `/full-review` 0 CRITICAL / 0 HIGH / 8 MEDIUM all fixed; `npm run verify` green:
+  unit 45, DB 169, Playwright 8). Migration `0007_streaks.sql` — `closed_on_time`
+  written by `close_day`, which returns the streak; `sprint_streaks()` for the sidebar
+  and Today in one read; backfill of missed days that counts but never repairs — and
+  the streak under Day N / 14, in the sidebar and on the result screen, with the whole
+  missed plan-grid cell as the Backfill button.
 - 2026-09-05 — **F4 tasks green** (eval-03: 5/5 criteria PASS, 0 P0/P1, 3 P2 → BACKLOG;
   eight DB mutations each turned their tests red; visual check in Chrome; `npm run verify`
   green: unit 43, DB 147, Playwright 6). Migration `0006_tasks.sql` — `tasks` table with

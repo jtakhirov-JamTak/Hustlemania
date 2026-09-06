@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cache } from "react";
 import { AREAS, type AreaKey } from "@/lib/areas";
 import type { Database, Tables } from "@/lib/database.types";
 
@@ -82,6 +83,17 @@ export async function loadTasks(supabase: Client, dayId: string): Promise<Task[]
   if (res.error) throw new Error(`tasks: ${res.error.message}`);
   return res.data;
 }
+
+/**
+ * Streak per active sprint (F5): consecutive on-time closes ending at the latest
+ * closable day, from the SQL that owns it. One RPC for all areas, memoised per request
+ * on the client identity so the sprints layout and its page share the result.
+ */
+export const loadStreaks = cache(async (supabase: Client): Promise<Map<string, number>> => {
+  const res = await supabase.rpc("sprint_streaks");
+  if (res.error) throw new Error(`sprint_streaks: ${res.error.message}`);
+  return new Map(res.data.map((r) => [r.sprint_id, r.streak]));
+});
 
 export async function loadDays(supabase: Client, sprintId: string): Promise<SprintDay[]> {
   const days = await supabase.from("sprint_days").select("*").eq("sprint_id", sprintId).order("day_index");
