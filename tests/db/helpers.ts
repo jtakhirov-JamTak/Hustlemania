@@ -63,7 +63,7 @@ export async function insertCue(user: TestUser, name: string, scope = "global", 
 export async function insertImpediment(
   user: TestUser,
   name: string,
-  opts: { scope?: string; proofWhen?: string | null; proofThen?: string | null; explanation?: string | null } = {},
+  opts: { scope?: string; proofWhen?: string | null; proofThen?: string | null; proofRecover?: string | null; explanation?: string | null } = {},
 ): Promise<string> {
   const res = await user.client
     .from("impediments")
@@ -74,6 +74,7 @@ export async function insertImpediment(
       explanation: opts.explanation ?? null,
       proof_when: opts.proofWhen ?? null,
       proof_then: opts.proofThen ?? null,
+      proof_recover: opts.proofRecover ?? null,
     })
     .select("id")
     .single();
@@ -94,6 +95,7 @@ export async function seedItems(user: TestUser, scope = "global"): Promise<Sprin
     scope,
     proofWhen: "I notice myself delaying my first work block",
     proofThen: "I start a 10-minute timer on the smallest executable task",
+    proofRecover: "The timer is running within 10 minutes",
   });
   return { p_cue_ids: [cue], p_impediment_ids: [imp], p_highest_impediment_id: imp };
 }
@@ -115,6 +117,7 @@ export type StartSprintArgs = SprintItems & {
   p_intention?: string | null;
   p_proof_when?: string | null;
   p_proof_then?: string | null;
+  p_proof_recover?: string | null;
   p_targets?: number[] | null;
   p_intentions?: (string | null)[] | null;
 };

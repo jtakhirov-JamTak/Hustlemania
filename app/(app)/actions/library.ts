@@ -3,22 +3,29 @@
 import { revalidatePath } from "next/cache";
 import { failed, type Result } from "@/lib/actionResult";
 import { isItemScope, type ItemKind, type ItemScope } from "@/lib/data";
-import { friendlyError, GENERIC_SAVE_ERROR } from "@/lib/errors";
+import { friendlyError, GENERIC_SAVE_ERROR, HIGHEST_PROOF_EDIT_ERROR } from "@/lib/errors";
 import { createClient, requireUser } from "@/lib/supabase/server";
 
-// Libraries (F2) and sprint membership during a sprint.
+// Libraries (F2, F6) and sprint membership during a sprint.
 
 export type ItemInput = {
   name: string;
   explanation: string;
   scope: ItemScope;
+  /** F6: a cue's WHEN. Required by every UI path that creates or edits a cue (D5: nullable in the DB). */
+  cueWhen?: string;
   proofWhen?: string;
   proofThen?: string;
+  proofRecover?: string;
 };
+
+export type ProofInput = { when: string; then: string; recover: string };
 
 function table(kind: ItemKind) {
   return kind === "cue" ? ("cues" as const) : ("impediments" as const);
 }
+
+const blank = (s: string | undefined) => s?.trim() || null;
 
 /** Creates a library item as the signed-in user; the DB appends it at the end of the library. */
 export async function createItem(kind: ItemKind, input: ItemInput): Promise<Result<{ id: string }>> {
@@ -35,7 +42,7 @@ export async function createItem(kind: ItemKind, input: ItemInput): Promise<Resu
     kind === "cue"
       ? await supabase
           .from("cues")
-          .insert({ user_id: user.id, name, explanation: input.explanation.trim() || null, scope: input.scope, rank })
+          .insert({ user_id: user.id, name, explanation: blank(input.explanation), scope: input.scope, cue_when: blank(input.cueWhen), rank })
           .select("id")
           .single()
       : await supabase
@@ -44,10 +51,11 @@ export async function createItem(kind: ItemKind, input: ItemInput): Promise<Resu
             user_id: user.id,
             rank,
             name,
-            explanation: input.explanation.trim() || null,
+            explanation: blank(input.explanation),
             scope: input.scope,
-            proof_when: input.proofWhen?.trim() || null,
-            proof_then: input.proofThen?.trim() || null,
+            proof_when: blank(input.proofWhen),
+            proof_then: blank(input.proofThen),
+            proof_recover: blank(input.proofRecover),
           })
           .select("id")
           .single();
@@ -63,18 +71,22 @@ export async function updateItem(kind: ItemKind, id: string, input: Omit<ItemInp
   const supabase = await createClient();
   const res =
     kind === "cue"
-      ? await supabase.from("cues").update({ name, explanation: input.explanation.trim() || null }).eq("id", id).select("id")
+      ? await supabase.from("cues").update({ name, explanation: blank(input.explanation), cue_when: blank(input.cueWhen) }).eq("id", id).select("id")
       : await supabase
           .from("impediments")
           .update({
             name,
-            explanation: input.explanation.trim() || null,
-            proof_when: input.proofWhen?.trim() || null,
-            proof_then: input.proofThen?.trim() || null,
+            explanation: blank(input.explanation),
+            proof_when: blank(input.proofWhen),
+            proof_then: blank(input.proofThen),
+            proof_recover: blank(input.proofRecover),
           })
           .eq("id", id)
           .select("id");
-  if (res.error) return failed("updateItem", res.error, { kind, itemId: id });
+  if (res.error) {
+    const out = failed("updateItem", res.error, { kind, itemId: id });
+    return res.error.message.includes("proof_point_required") ? { error: HIGHEST_PROOF_EDIT_ERROR } : out;
+  }
   if (res.data.length === 0) return { error: GENERIC_SAVE_ERROR };
   revalidatePath("/", "layout");
   return {};
@@ -151,16 +163,18 @@ export async function removeSprintItem(sprintId: string, kind: ItemKind, itemId:
  * Designates the Highest Impediment. A Proof Point supplied with it is written by the
  * same DB function, so a rejected designation changes nothing in the library.
  */
-export async function setHighestImpediment(sprintId: string, impedimentId: string, proof?: { when: string; then: string }): Promise<Result> {
+export async function setHighestImpediment(sprintId: string, impedimentId: string, proof?: ProofInput): Promise<Result> {
   const when = proof?.when.trim();
   const then = proof?.then.trim();
-  if (proof && (!when || !then)) return { error: friendlyError("proof_point_required") };
+  const recover = proof?.recover.trim();
+  if (proof && (!when || !then || !recover)) return { error: friendlyError("proof_point_required") };
   const supabase = await createClient();
   const res = await supabase.rpc("set_highest_impediment", {
     p_sprint_id: sprintId,
     p_impediment_id: impedimentId,
     p_proof_when: when || undefined,
     p_proof_then: then || undefined,
+    p_proof_recover: recover || undefined,
   });
   if (res.error) return failed("setHighestImpediment", res.error, { sprintId, impedimentId, withProof: Boolean(proof) });
   revalidatePath("/sprints", "layout");
@@ -168,11 +182,11 @@ export async function setHighestImpediment(sprintId: string, impedimentId: strin
 }
 
 /** Edits a Proof Point in place (rule 22 is enforced by the DB trigger). */
-export async function saveProofPoint(impedimentId: string, when: string, then: string): Promise<Result> {
+export async function saveProofPoint(impedimentId: string, proof: ProofInput): Promise<Result> {
   const supabase = await createClient();
   const res = await supabase
     .from("impediments")
-    .update({ proof_when: when.trim() || null, proof_then: then.trim() || null })
+    .update({ proof_when: blank(proof.when), proof_then: blank(proof.then), proof_recover: blank(proof.recover) })
     .eq("id", impedimentId)
     .select("id");
   if (res.error) return failed("saveProofPoint", res.error, { impedimentId });

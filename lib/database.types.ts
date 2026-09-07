@@ -38,6 +38,7 @@ export type Database = {
         Row: {
           archived_at: string | null
           created_at: string
+          cue_when: string | null
           explanation: string | null
           id: string
           name: string
@@ -49,6 +50,7 @@ export type Database = {
         Insert: {
           archived_at?: string | null
           created_at?: string
+          cue_when?: string | null
           explanation?: string | null
           id?: string
           name: string
@@ -60,6 +62,7 @@ export type Database = {
         Update: {
           archived_at?: string | null
           created_at?: string
+          cue_when?: string | null
           explanation?: string | null
           id?: string
           name?: string
@@ -161,6 +164,7 @@ export type Database = {
           explanation: string | null
           id: string
           name: string
+          proof_recover: string | null
           proof_then: string | null
           proof_when: string | null
           rank: number
@@ -174,6 +178,7 @@ export type Database = {
           explanation?: string | null
           id?: string
           name: string
+          proof_recover?: string | null
           proof_then?: string | null
           proof_when?: string | null
           rank: number
@@ -187,6 +192,7 @@ export type Database = {
           explanation?: string | null
           id?: string
           name?: string
+          proof_recover?: string | null
           proof_then?: string | null
           proof_when?: string | null
           rank?: number
@@ -508,7 +514,15 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      library_item_usage: {
+        Row: {
+          active: boolean | null
+          item_id: string | null
+          kind: string | null
+          used: boolean | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       add_sprint_item: {
@@ -571,6 +585,7 @@ export type Database = {
       set_highest_impediment: {
         Args: {
           p_impediment_id: string
+          p_proof_recover?: string
           p_proof_then?: string
           p_proof_when?: string
           p_sprint_id: string
@@ -611,6 +626,7 @@ export type Database = {
           p_mantra: string
           p_measurement: string
           p_outcome: string
+          p_proof_recover?: string
           p_proof_then?: string
           p_proof_when?: string
           p_start_date: string

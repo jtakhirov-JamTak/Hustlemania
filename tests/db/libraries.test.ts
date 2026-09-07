@@ -17,7 +17,7 @@ import {
 } from "./helpers";
 
 const TZ = "America/Los_Angeles";
-const PROOF = { proofWhen: "I notice myself delaying", proofThen: "I start a 10-minute timer" };
+const PROOF = { proofWhen: "I notice myself delaying", proofThen: "I start a 10-minute timer", proofRecover: "The timer is running within 10 minutes" };
 
 afterAll(async () => {
   await sql.end();
@@ -77,7 +77,7 @@ describe("F2 RLS isolation", () => {
     expect(res.data).toEqual([]);
   });
 
-  it("the membership count embed reports rule-19 `used` per row under RLS (what loadLibrary reads)", async () => {
+  it("the membership count embed reports rule-19 `used` per row under RLS (loadLibrary read it before F6's view)", async () => {
     const mine = await a.client.from("cues").select("id, sprint_cues(count)");
     expect(mine.error).toBeNull();
     expect(mine.data).toEqual([{ id: cueId, sprint_cues: [{ count: 1 }] }]);
@@ -212,6 +212,7 @@ describe("start_sprint with cues and impediments (rules 3–6)", () => {
       ...base({ p_cue_ids: cues.slice(0, 3), p_impediment_ids: chosen, p_highest_impediment_id: blank }),
       p_proof_when: "  I open social media  ",
       p_proof_then: "I close the tab and write one sentence",
+      p_proof_recover: "The sentence exists within five minutes",
     });
     const sc = await u.client.from("sprint_cues").select("cue_id, removed_at").eq("sprint_id", id);
     expect(sc.data!.map((r) => r.cue_id).sort()).toEqual(cues.slice(0, 3).sort());
@@ -243,7 +244,7 @@ describe("library rules and sprint membership", () => {
     cueA = await insertCue(u, "Cue A", "global", "  why it matters  ");
     cueB = await insertCue(u, "Cue B");
     impHighest = await insertImpediment(u, "Highest", PROOF);
-    impOther = await insertImpediment(u, "Other", { proofWhen: "when", proofThen: "then" });
+    impOther = await insertImpediment(u, "Other", { proofWhen: "when", proofThen: "then", proofRecover: "recovered" });
     sprintId = await startSprint(
       u,
       moneySprintArgs({ p_cue_ids: [cueA], p_impediment_ids: [impHighest, impOther], p_highest_impediment_id: impHighest, p_start_date: today }),
@@ -421,9 +422,9 @@ describe("library rules and sprint membership", () => {
 
   it("set_highest_impediment writes the proof it is given in the same transaction; a rejected call writes nothing (0008)", async () => {
     const [np] = await sql<{ id: string }[]>`select id from public.impediments where user_id = ${u.id} and name = 'No proof'`;
-    await rpc(u, "set_highest_impediment", { p_sprint_id: sprintId, p_impediment_id: np.id, p_proof_when: "  I stall  ", p_proof_then: "I start" });
-    const [written] = await sql<{ proof_when: string; proof_then: string }[]>`select proof_when, proof_then from public.impediments where id = ${np.id}`;
-    expect(written).toEqual({ proof_when: "I stall", proof_then: "I start" });
+    await rpc(u, "set_highest_impediment", { p_sprint_id: sprintId, p_impediment_id: np.id, p_proof_when: "  I stall  ", p_proof_then: "I start", p_proof_recover: "I am typing" });
+    const [written] = await sql<{ proof_when: string; proof_then: string; proof_recover: string }[]>`select proof_when, proof_then, proof_recover from public.impediments where id = ${np.id}`;
+    expect(written).toEqual({ proof_when: "I stall", proof_then: "I start", proof_recover: "I am typing" });
     const flags = await sql<{ impediment_id: string }[]>`
       select impediment_id from public.sprint_impediments where sprint_id = ${sprintId} and removed_at is null and is_highest`;
     expect(flags.map((r) => r.impediment_id)).toEqual([np.id]);
@@ -434,10 +435,13 @@ describe("library rules and sprint membership", () => {
     const [after] = await sql<{ proof_when: string; proof_then: string }[]>`select proof_when, proof_then from public.impediments where id = ${impHighest}`;
     expect(after).toEqual(before);
 
-    // A blank half is no proof: rejected, and the row keeps what it had.
-    await expectRpcError(u, "set_highest_impediment", { p_sprint_id: sprintId, p_impediment_id: np.id, p_proof_when: "   ", p_proof_then: "x" }, "proof_point_required");
-    const [kept] = await sql<{ proof_when: string; proof_then: string }[]>`select proof_when, proof_then from public.impediments where id = ${np.id}`;
-    expect(kept).toEqual({ proof_when: "I stall", proof_then: "I start" });
+    // A blank part is "not given" (F6 coalesce): the row keeps that column. A part the
+    // row still lacks is still missing, so the call is rejected and writes nothing.
+    const partial = await insertImpediment(u, "Partial proof", { proofWhen: "when" });
+    await rpc(u, "add_sprint_item", { p_sprint_id: sprintId, p_kind: "impediment", p_item_id: partial });
+    await expectRpcError(u, "set_highest_impediment", { p_sprint_id: sprintId, p_impediment_id: partial, p_proof_when: "   ", p_proof_then: "x" }, "proof_point_required");
+    const [kept] = await sql<{ proof_when: string; proof_then: string | null; proof_recover: string | null }[]>`select proof_when, proof_then, proof_recover from public.impediments where id = ${partial}`;
+    expect(kept).toEqual({ proof_when: "when", proof_then: null, proof_recover: null });
   });
 
   it("sprint_invalid_reason with the default arguments judges the whole sprint (0008 null-safety)", async () => {
@@ -655,5 +659,292 @@ describe("close_day with hurt/helped selections", () => {
            + (select count(*) from public.sprint_cues where user_id = ${victim.id})
            + (select count(*) from public.day_cue_helped where user_id = ${victim.id}) as n`;
     expect(Number(left.n)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F6 — Libraries v2: cue WHEN, RECOVERED WHEN, rule 6 / rule 22 over three parts,
+// the usage view, and the pin test against stale function bodies.
+// ---------------------------------------------------------------------------
+describe("F6 libraries v2", () => {
+  let u: TestUser;
+  let today: string;
+  let cueId: string;
+  let sprintId: string;
+  let impHighest: string;
+  let impOther: string;
+
+  /** A highest whose RECOVERED WHEN is null: pre-F6 rows look like this. Bypasses the
+   *  rule-22 trigger the way no API role can, so the suite can stage legacy state. */
+  const stageLegacyHighest = async (id: string) => {
+    await sql.begin(async (tx) => {
+      await tx`set local session_replication_role = replica`;
+      await tx`update public.impediments set proof_recover = null where id = ${id}`;
+    });
+  };
+
+  beforeAll(async () => {
+    u = await createTestUser("lib-v2");
+    today = await dbTodayIn(TZ);
+    await insertVision(u, "wealth");
+    cueId = await insertCue(u, "Ask how much this pays");
+    impHighest = await insertImpediment(u, "Starting late", PROOF);
+    impOther = await insertImpediment(u, "Other", { proofWhen: "when", proofThen: "then" });
+    sprintId = await startSprint(
+      u,
+      moneySprintArgs({ p_cue_ids: [cueId], p_impediment_ids: [impHighest, impOther], p_highest_impediment_id: impHighest, p_start_date: today }),
+    );
+  });
+
+  afterAll(async () => {
+    await deleteTestUser(u);
+  });
+
+  it("adds cues.cue_when and impediments.proof_recover, both nullable text, with INSERT and UPDATE for authenticated", async () => {
+    const cols = await sql<{ table_name: string; column_name: string; data_type: string; is_nullable: string }[]>`
+      select table_name, column_name, data_type, is_nullable from information_schema.columns
+      where table_schema = 'public' and (table_name, column_name) in (('cues', 'cue_when'), ('impediments', 'proof_recover'))
+      order by table_name`;
+    expect(cols).toEqual([
+      { table_name: "cues", column_name: "cue_when", data_type: "text", is_nullable: "YES" },
+      { table_name: "impediments", column_name: "proof_recover", data_type: "text", is_nullable: "YES" },
+    ]);
+    const grants = await sql<{ table_name: string; column_name: string; privilege_type: string }[]>`
+      select table_name, column_name, privilege_type from information_schema.column_privileges
+      where table_schema = 'public' and grantee = 'authenticated'
+        and (table_name, column_name) in (('cues', 'cue_when'), ('impediments', 'proof_recover'))
+      order by table_name, privilege_type`;
+    expect(grants).toEqual([
+      { table_name: "cues", column_name: "cue_when", privilege_type: "INSERT" },
+      { table_name: "cues", column_name: "cue_when", privilege_type: "SELECT" },
+      { table_name: "cues", column_name: "cue_when", privilege_type: "UPDATE" },
+      { table_name: "impediments", column_name: "proof_recover", privilege_type: "INSERT" },
+      { table_name: "impediments", column_name: "proof_recover", privilege_type: "SELECT" },
+      { table_name: "impediments", column_name: "proof_recover", privilege_type: "UPDATE" },
+    ]);
+    const [days] = await sql<{ n: number }[]>`
+      select count(*)::int as n from information_schema.columns where table_schema = 'public' and table_name = 'sprint_days' and column_name = 'proof_recover'`;
+    expect(days.n).toBe(0);
+  });
+
+  it("pin: every redefined function carries the marker only its latest definer has", async () => {
+    const fns = await sql<{ proname: string; prosrc: string }[]>`
+      select proname, prosrc from pg_proc where pronamespace = 'public'::regnamespace`;
+    const src = (name: string) => {
+      const rows = fns.filter((f) => f.proname === name);
+      expect(rows, `${name}: one definition`).toHaveLength(1);
+      return rows[0].prosrc;
+    };
+    // 0005 markers kept by 0009.
+    expect(src("start_sprint")).toMatch(/p_targets/);
+    expect(src("start_sprint")).toMatch(/p_intentions/);
+    // 0008 markers kept by 0009.
+    expect(src("sprint_invalid_reason")).toMatch(/not coalesce\(p_kind = 'cue' and cue_id = p_exclude_item, false\)/);
+    expect(src("set_highest_impediment")).toMatch(/p_proof_when/);
+    // 0004 markers kept by 0009.
+    expect(src("library_item_before_insert")).toMatch(/coalesce\(max\(rank\), 0\) \+ 1/);
+    expect(src("impediments_before_update")).toMatch(/s\.status = 'active'/);
+    expect(src("cues_before_update")).toMatch(/new\.explanation := nullif/);
+    // 0009 itself.
+    for (const name of ["start_sprint", "sprint_invalid_reason", "set_highest_impediment", "library_item_before_insert", "impediments_before_update"]) {
+      expect(src(name), `${name}: proof_recover`).toMatch(/proof_recover/);
+    }
+    expect(src("cues_before_update")).toMatch(/cue_when/);
+    expect(src("library_item_before_insert")).toMatch(/cue_when/);
+  });
+
+  it("cue_when is trimmed and blank becomes null on insert and update; a cue may be saved without one (D5)", async () => {
+    const ins = await u.client.from("cues").insert({ user_id: u.id, name: "Timed", cue_when: "  I schedule anything  " }).select("cue_when").single();
+    expect(ins.error).toBeNull();
+    expect(ins.data!.cue_when).toBe("I schedule anything");
+    const blank = await u.client.from("cues").insert({ user_id: u.id, name: "Legacy", cue_when: "   " }).select("id, cue_when").single();
+    expect(blank.error).toBeNull();
+    expect(blank.data!.cue_when).toBeNull();
+    const upd = await u.client.from("cues").update({ cue_when: " later " }).eq("id", blank.data!.id).select("cue_when").single();
+    expect(upd.error).toBeNull();
+    expect(upd.data!.cue_when).toBe("later");
+  });
+
+  it("proof_recover is trimmed and blank becomes null on insert", async () => {
+    const ins = await u.client.from("impediments").insert({ user_id: u.id, name: "Trim me", proof_recover: "  by noon  " }).select("proof_recover").single();
+    expect(ins.error).toBeNull();
+    expect(ins.data!.proof_recover).toBe("by noon");
+    const blank = await u.client.from("impediments").insert({ user_id: u.id, name: "Blank recover", proof_recover: "  " }).select("proof_recover").single();
+    expect(blank.error).toBeNull();
+    expect(blank.data!.proof_recover).toBeNull();
+  });
+
+  describe("start_sprint (rule 6 over three parts)", () => {
+    let h: TestUser;
+    let hToday: string;
+    let hCue: string;
+
+    beforeAll(async () => {
+      h = await createTestUser("lib-v2-start");
+      hToday = await dbTodayIn(TZ);
+      await insertVision(h, "health");
+      hCue = await insertCue(h, "Cue");
+    });
+    afterAll(async () => {
+      await deleteTestUser(h);
+    });
+    const base = (imp: string) =>
+      moneySprintArgs({ p_area: "health", p_cue_ids: [hCue], p_impediment_ids: [imp], p_highest_impediment_id: imp, p_start_date: hToday });
+
+    it("rejects a highest with WHEN and THEN but a blank RECOVERED WHEN", async () => {
+      const imp = await insertImpediment(h, "Two of three", { proofWhen: "when", proofThen: "then" });
+      await expectRpcError(h, "start_sprint", base(imp), "proof_point_required");
+      await expectRpcError(h, "start_sprint", { ...base(imp), p_proof_recover: "   " }, "proof_point_required");
+      const [n] = await sql<{ n: number }[]>`select count(*)::int as n from public.sprints where user_id = ${h.id}`;
+      expect(n.n).toBe(0);
+    });
+
+    it("starts when only p_proof_recover is passed for an impediment already carrying WHEN + THEN (coalesce per column)", async () => {
+      const imp = await insertImpediment(h, "Two of three, completed at setup", { proofWhen: "when", proofThen: "then" });
+      const id = await startSprint(h, { ...base(imp), p_proof_recover: "  recovered by noon  " });
+      expect(id).toBeTruthy();
+      const [row] = await sql<{ proof_when: string; proof_then: string; proof_recover: string }[]>`
+        select proof_when, proof_then, proof_recover from public.impediments where id = ${imp}`;
+      expect(row).toEqual({ proof_when: "when", proof_then: "then", proof_recover: "recovered by noon" });
+    });
+
+    it("writes all three inline parts to the impediment row when given together", async () => {
+      const r = await createTestUser("lib-v2-start-3");
+      try {
+        await insertVision(r, "wealth");
+        const cue = await insertCue(r, "Cue");
+        const imp = await insertImpediment(r, "Nothing yet");
+        const args = moneySprintArgs({ p_cue_ids: [cue], p_impediment_ids: [imp], p_highest_impediment_id: imp, p_start_date: hToday });
+        await startSprint(r, { ...args, p_proof_when: "w", p_proof_then: "t", p_proof_recover: "r" });
+        const [row] = await sql<{ proof_when: string; proof_then: string; proof_recover: string }[]>`
+          select proof_when, proof_then, proof_recover from public.impediments where id = ${imp}`;
+        expect(row).toEqual({ proof_when: "w", proof_then: "t", proof_recover: "r" });
+      } finally {
+        await deleteTestUser(r);
+      }
+    });
+  });
+
+  it("set_highest_impediment: a call passing only the recover keeps WHEN and THEN; a null recover is rejected and writes nothing", async () => {
+    await expectRpcError(u, "set_highest_impediment", { p_sprint_id: sprintId, p_impediment_id: impOther }, "proof_point_required");
+    await expectRpcError(
+      u,
+      "set_highest_impediment",
+      { p_sprint_id: sprintId, p_impediment_id: impOther, p_proof_when: "changed", p_proof_then: "changed" },
+      "proof_point_required",
+    );
+    const [untouched] = await sql<{ proof_when: string; proof_then: string; proof_recover: string | null }[]>`
+      select proof_when, proof_then, proof_recover from public.impediments where id = ${impOther}`;
+    expect(untouched).toEqual({ proof_when: "when", proof_then: "then", proof_recover: null });
+    const flags = async () =>
+      (await sql<{ impediment_id: string }[]>`select impediment_id from public.sprint_impediments where sprint_id = ${sprintId} and is_highest`).map(
+        (r) => r.impediment_id,
+      );
+    expect(await flags()).toEqual([impHighest]);
+
+    await rpc(u, "set_highest_impediment", { p_sprint_id: sprintId, p_impediment_id: impOther, p_proof_recover: " recovered " });
+    const [after] = await sql<{ proof_when: string; proof_then: string; proof_recover: string }[]>`
+      select proof_when, proof_then, proof_recover from public.impediments where id = ${impOther}`;
+    expect(after).toEqual({ proof_when: "when", proof_then: "then", proof_recover: "recovered" });
+    expect(await flags()).toEqual([impOther]);
+    await rpc(u, "set_highest_impediment", { p_sprint_id: sprintId, p_impediment_id: impHighest });
+    expect(await flags()).toEqual([impHighest]);
+  });
+
+  it("rule 22: clearing any of the three parts of the highest is rejected; editing text is allowed", async () => {
+    for (const col of ["proof_when", "proof_then", "proof_recover"] as const) {
+      const clear = await u.client.from("impediments").update({ [col]: "  " }).eq("id", impHighest);
+      expect(clear.error, col).not.toBeNull();
+      expect(clear.error!.message).toMatch(/proof_point_required/);
+    }
+    const edit = await u.client
+      .from("impediments")
+      .update({ proof_recover: "The timer is running within 5 minutes" })
+      .eq("id", impHighest)
+      .select("proof_recover")
+      .single();
+    expect(edit.error).toBeNull();
+    expect(edit.data!.proof_recover).toBe("The timer is running within 5 minutes");
+    const [row] = await sql<{ proof_when: string; proof_then: string; proof_recover: string }[]>`
+      select proof_when, proof_then, proof_recover from public.impediments where id = ${impHighest}`;
+    expect(row).toEqual({ proof_when: PROOF.proofWhen, proof_then: PROOF.proofThen, proof_recover: "The timer is running within 5 minutes" });
+    // A non-highest impediment can clear its recover freely.
+    const other = await u.client.from("impediments").update({ proof_recover: "" }).eq("id", impOther).select("proof_recover").single();
+    expect(other.error).toBeNull();
+    expect(other.data!.proof_recover).toBeNull();
+  });
+
+  describe("a pre-F6 highest whose RECOVERED WHEN is still null", () => {
+    beforeAll(async () => {
+      await stageLegacyHighest(impHighest);
+      const [row] = await sql<{ proof_recover: string | null }[]>`select proof_recover from public.impediments where id = ${impHighest}`;
+      expect(row.proof_recover).toBeNull();
+    });
+
+    it("rule 22 narrowed: move_item, set_item_scope and a rename go through (not proof); a proof edit that leaves recover null does not", async () => {
+      const rank = async () => (await sql<{ rank: number }[]>`select rank from public.impediments where id = ${impHighest}`)[0].rank;
+      const r0 = await rank();
+      await rpc(u, "move_item", { p_kind: "impediment", p_item_id: impHighest, p_direction: "down" });
+      expect(await rank()).not.toBe(r0);
+      await rpc(u, "move_item", { p_kind: "impediment", p_item_id: impHighest, p_direction: "up" });
+      expect(await rank()).toBe(r0);
+
+      const widen = await rpc<ArchiveResult>(u, "set_item_scope", { p_kind: "impediment", p_item_id: impHighest, p_scope: "global" });
+      expect(widen.ok).toBe(true);
+      const name = await u.client.from("impediments").update({ name: "Starting late (renamed)" }).eq("id", impHighest).select("name").single();
+      expect(name.error).toBeNull();
+
+      const edit = await u.client.from("impediments").update({ proof_then: "changed while incomplete" }).eq("id", impHighest);
+      expect(edit.error).not.toBeNull();
+      expect(edit.error!.message).toMatch(/proof_point_required/);
+    });
+
+    it("sprint_invalid_reason reports proof_point_required, so archive_item and set_item_scope on another member are blocked by it", async () => {
+      const [r] = await sql<{ reason: string | null }[]>`select public.sprint_invalid_reason(${sprintId}) as reason`;
+      expect(r.reason).toBe("proof_point_required");
+      const archive = await rpc<ArchiveResult>(u, "archive_item", { p_kind: "impediment", p_item_id: impOther });
+      expect(archive.ok).toBe(false);
+      expect(archive.failing![0]).toMatchObject({ sprint_id: sprintId, reason: "proof_point_required" });
+      const narrow = await rpc<ArchiveResult>(u, "set_item_scope", { p_kind: "impediment", p_item_id: impOther, p_scope: "health" });
+      expect(narrow.ok).toBe(false);
+      expect(narrow.failing![0].reason).toBe("proof_point_required");
+    });
+
+    it("completing the recover under Edit is allowed and clears the reason", async () => {
+      const fix = await u.client.from("impediments").update({ proof_recover: "back on track" }).eq("id", impHighest).select("proof_recover").single();
+      expect(fix.error).toBeNull();
+      const [r] = await sql<{ reason: string | null }[]>`select public.sprint_invalid_reason(${sprintId}) as reason`;
+      expect(r.reason).toBeNull();
+    });
+  });
+
+  it("library_item_usage: used / active per item, one row per library item, scoped by RLS", async () => {
+    type Usage = { kind: string; item_id: string; used: boolean; active: boolean };
+    const mine = await u.client.from("library_item_usage").select("*");
+    expect(mine.error).toBeNull();
+    const rows = mine.data as Usage[];
+    const byId = new Map(rows.map((r) => [r.item_id, r]));
+    expect(byId.get(cueId)).toMatchObject({ kind: "cue", used: true, active: true });
+    expect(byId.get(impHighest)).toMatchObject({ kind: "impediment", used: true, active: true });
+    const [{ n: items }] = await sql<{ n: number }[]>`
+      select (select count(*) from public.cues where user_id = ${u.id}) + (select count(*) from public.impediments where user_id = ${u.id}) as n`;
+    expect(rows).toHaveLength(Number(items));
+    const unused = rows.filter((r) => !r.used);
+    expect(unused.length).toBeGreaterThan(0);
+    expect(unused.every((r) => !r.active)).toBe(true);
+
+    // Removed from the sprint: still used (history), no longer active.
+    await rpc(u, "remove_sprint_item", { p_sprint_id: sprintId, p_kind: "impediment", p_item_id: impOther });
+    const again = await u.client.from("library_item_usage").select("*").eq("item_id", impOther).single();
+    expect(again.data).toMatchObject({ used: true, active: false });
+
+    const b = await createTestUser("lib-v2-b");
+    try {
+      const theirs = await b.client.from("library_item_usage").select("*");
+      expect(theirs.error).toBeNull();
+      expect(theirs.data).toEqual([]);
+    } finally {
+      await deleteTestUser(b);
+    }
   });
 });

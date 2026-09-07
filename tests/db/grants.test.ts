@@ -43,12 +43,14 @@ describe("public schema access model", () => {
       where table_schema = 'public' and grantee = 'authenticated' and privilege_type = 'INSERT'
       order by table_name, column_name`;
     expect(cols).toEqual([
+      { table_name: "cues", column_name: "cue_when" },
       { table_name: "cues", column_name: "explanation" },
       { table_name: "cues", column_name: "name" },
       { table_name: "cues", column_name: "scope" },
       { table_name: "cues", column_name: "user_id" },
       { table_name: "impediments", column_name: "explanation" },
       { table_name: "impediments", column_name: "name" },
+      { table_name: "impediments", column_name: "proof_recover" },
       { table_name: "impediments", column_name: "proof_then" },
       { table_name: "impediments", column_name: "proof_when" },
       { table_name: "impediments", column_name: "scope" },
@@ -68,10 +70,12 @@ describe("public schema access model", () => {
       where table_schema = 'public' and grantee = 'authenticated' and privilege_type = 'UPDATE'
       order by table_name, column_name`;
     expect(rows).toEqual([
+      { table_name: "cues", column_name: "cue_when" },
       { table_name: "cues", column_name: "explanation" },
       { table_name: "cues", column_name: "name" },
       { table_name: "impediments", column_name: "explanation" },
       { table_name: "impediments", column_name: "name" },
+      { table_name: "impediments", column_name: "proof_recover" },
       { table_name: "impediments", column_name: "proof_then" },
       { table_name: "impediments", column_name: "proof_when" },
       { table_name: "sprint_days", column_name: "intention" },
@@ -165,7 +169,7 @@ describe("public schema access model", () => {
 
   it("anon cannot execute the write functions", async () => {
     const [row] = await sql<{ start: boolean; close: boolean }[]>`
-      select has_function_privilege('anon', 'public.start_sprint(text,text,text,text,text,bigint,int,text,text,text,jsonb,text,date,uuid[],uuid[],uuid,text,text,text,bigint[],text[])', 'execute') as "start",
+      select has_function_privilege('anon', 'public.start_sprint(text,text,text,text,text,bigint,int,text,text,text,jsonb,text,date,uuid[],uuid[],uuid,text,text,text,text,bigint[],text[])', 'execute') as "start",
              has_function_privilege('anon', 'public.close_day(uuid,bigint,text,uuid[],uuid,uuid[],uuid)', 'execute') as close`;
     expect(row).toEqual({ start: false, close: false });
   });

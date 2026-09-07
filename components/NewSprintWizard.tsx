@@ -10,7 +10,7 @@ import { OptionRow } from "@/components/OptionRow";
 import { effectivePlan, PlanGrid, type PlanCell } from "@/components/PlanGrid";
 import type { AreaKey } from "@/lib/areas";
 import { callAction } from "@/lib/callAction";
-import { eligibleFor, type LibraryItem } from "@/lib/data";
+import { cueSummary, eligibleFor, proofComplete, proofSummary, type LibraryItem } from "@/lib/data";
 import { formatIsoDate } from "@/lib/dates";
 import { toBaseUnits, unitLabel, type Measurement, type Measured } from "@/lib/format";
 import { addDays, localDateIn } from "@/lib/sprintDay";
@@ -42,6 +42,7 @@ type Draft = {
   highestId: string | null;
   proofWhen: string;
   proofThen: string;
+  proofRecover: string;
   cueIds: string[];
   aligned: boolean;
 };
@@ -56,6 +57,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
   const [library, setLibrary] = useState<Library>(initialLibrary);
   const [newImp, setNewImp] = useState("");
   const [newCue, setNewCue] = useState("");
+  const [newCueWhen, setNewCueWhen] = useState("");
   const [creating, setCreating] = useState<"cue" | "impediment" | null>(null);
   const [pending, start] = useTransition();
   const [d, setD] = useState<Draft>({
@@ -80,6 +82,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
     highestId: null,
     proofWhen: "",
     proofThen: "",
+    proofRecover: "",
     cueIds: [],
     aligned: false,
   });
@@ -138,13 +141,13 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
   }
 
   // Rules 3–6 at setup: eligible = global or the chosen area; 1–5 impediments, one
-  // highest with a complete WHEN → THEN, 1–3 cues.
+  // highest with a complete WHEN → THEN → RECOVERED WHEN, 1–3 cues.
   const eligible = d.area ? eligibleFor(d.area) : () => false;
   const impOptions = library.impediments.filter(eligible);
   const cueOptions = library.cues.filter(eligible);
   const highest = impOptions.find((i) => i.id === d.highestId) ?? null;
-  const highestNeedsProof = Boolean(highest && !(highest.proof_when && highest.proof_then));
-  const proofOk = Boolean(highest) && (!highestNeedsProof || Boolean(d.proofWhen.trim() && d.proofThen.trim()));
+  const highestNeedsProof = Boolean(highest && !proofComplete(highest));
+  const proofOk = Boolean(highest) && (!highestNeedsProof || Boolean(d.proofWhen.trim() && d.proofThen.trim() && d.proofRecover.trim()));
 
   const usageRows = d.usage.filter((u) => u.label.trim() || u.amount !== "");
   const usageValid = d.measurement !== "money" || usageRows.every((u) => u.label.trim() && Number(u.amount) > 0);
@@ -168,7 +171,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
       : !d.highestId
         ? "Designate the highest impediment."
         : !proofOk
-          ? "The highest impediment needs a WHEN → THEN."
+          ? "The highest impediment needs WHEN → THEN and a recovery criterion."
           : d.cueIds.length === 0
             ? "Select 1–3 execution cues."
             : !d.aligned
@@ -200,6 +203,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
       highestImpedimentId: d.highestId,
       proofWhen: highestNeedsProof ? d.proofWhen : null,
       proofThen: highestNeedsProof ? d.proofThen : null,
+      proofRecover: highestNeedsProof ? d.proofRecover : null,
     };
     setError(null);
     start(async () => {
@@ -208,21 +212,39 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
     });
   }
 
+  const newCueReady = Boolean(newCue.trim() && newCueWhen.trim());
+
   async function createInline(kind: "cue" | "impediment") {
     const name = (kind === "cue" ? newCue : newImp).trim();
-    if (!name) return;
+    const cueWhen = newCueWhen.trim();
+    if (!name || (kind === "cue" && !cueWhen)) return;
     setCreating(kind);
     setError(null);
-    const res = await callAction(() => createItem(kind, { name, explanation: "", scope: "global" }));
+    const res = await callAction(() => createItem(kind, { name, explanation: "", scope: "global", cueWhen: kind === "cue" ? cueWhen : undefined }));
     setCreating(null);
     if (res.error || !res.id) {
       setError(res.error ?? "That did not save. Your input is still here — try again.");
       return;
     }
-    const item: LibraryItem = { id: res.id, kind, name, explanation: null, scope: "global", rank: 0, archived_at: null, proof_when: null, proof_then: null, used: false };
+    const item: LibraryItem = {
+      id: res.id,
+      kind,
+      name,
+      explanation: null,
+      scope: "global",
+      rank: 0,
+      archived_at: null,
+      cue_when: kind === "cue" ? cueWhen : null,
+      proof_when: null,
+      proof_then: null,
+      proof_recover: null,
+      used: false,
+      active: false,
+    };
     if (kind === "cue") {
       setLibrary((l) => ({ ...l, cues: [...l.cues, item] }));
       setNewCue("");
+      setNewCueWhen("");
       if (d.cueIds.length < 3) set("cueIds", [...d.cueIds, item.id]);
     } else {
       setLibrary((l) => ({ ...l, impediments: [...l.impediments, item] }));
@@ -463,7 +485,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
                     on={d.impedimentIds.includes(i.id)}
                     disabled={!d.impedimentIds.includes(i.id) && d.impedimentIds.length >= 5}
                     label={i.name}
-                    sub={i.proof_when && i.proof_then ? `WHEN ${i.proof_when} · THEN ${i.proof_then}` : i.explanation}
+                    sub={proofSummary(i) ?? i.explanation}
                     tag={i.scope === "global" ? "Global" : null}
                     onPick={() => toggleImpediment(i.id)}
                   />
@@ -484,13 +506,20 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
               <div style={{ marginTop: 22, background: "var(--faint)", borderRadius: 16, padding: "18px 20px" }} data-testid="wizard-highest">
                 <div style={{ fontSize: 13, fontWeight: 600 }}>Highest impediment</div>
                 <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "4px 0 6px", lineHeight: 1.5 }}>
-                  The obstacle most likely to cause this sprint to fail. It must carry a WHEN → THEN proof point.
+                  The obstacle most likely to cause this sprint to fail. It must carry a WHEN → THEN proof point and a recovery criterion.
                 </div>
                 <div role="radiogroup" aria-label="Highest impediment">
                   {impOptions
                     .filter((i) => d.impedimentIds.includes(i.id))
                     .map((i) => (
-                      <OptionRow key={i.id} single on={d.highestId === i.id} label={i.name} sub={i.proof_when && i.proof_then ? null : "No proof point yet — write one below"} onPick={() => setD((p) => ({ ...p, highestId: i.id, proofWhen: "", proofThen: "" }))} />
+                      <OptionRow
+                        key={i.id}
+                        single
+                        on={d.highestId === i.id}
+                        label={i.name}
+                        sub={proofComplete(i) ? null : proofSummary(i) ? "Proof point incomplete — complete it below" : "No proof point yet — write one below"}
+                        onPick={() => setD((p) => ({ ...p, highestId: i.id, proofWhen: i.proof_when ?? "", proofThen: i.proof_then ?? "", proofRecover: i.proof_recover ?? "" }))}
+                      />
                     ))}
                 </div>
                 {highestNeedsProof ? (
@@ -498,10 +527,13 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
                     idPrefix="proof"
                     when={d.proofWhen}
                     then={d.proofThen}
+                    recover={d.proofRecover}
                     onWhen={(v) => set("proofWhen", v)}
                     onThen={(v) => set("proofThen", v)}
+                    onRecover={(v) => set("proofRecover", v)}
                     placeholderWhen="I notice myself delaying my first work block"
                     placeholderThen="I start a 10-minute timer on the smallest executable task"
+                    placeholderRecover="The timer is running within 10 minutes"
                     style={{ marginTop: 14 }}
                   />
                 ) : null}
@@ -522,20 +554,44 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
                     on={d.cueIds.includes(c.id)}
                     disabled={!d.cueIds.includes(c.id) && d.cueIds.length >= 3}
                     label={c.name}
-                    sub={c.explanation}
+                    sub={cueSummary(c) ?? c.explanation}
                     tag={c.scope === "global" ? "Global" : null}
                     onPick={() => set("cueIds", d.cueIds.includes(c.id) ? d.cueIds.filter((x) => x !== c.id) : [...d.cueIds, c.id])}
                   />
                 ))}
               </div>
-              <label htmlFor="new-cue" className="label-accent" style={{ display: "block", marginTop: 12 }}>
+              <div className="label-accent" id="new-cue-label" style={{ marginTop: 12 }}>
                 Create a new execution cue
-              </label>
-              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                <input id="new-cue" className="input" value={newCue} onChange={(e) => setNewCue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInline("cue"); } }} style={{ flex: 1 }} />
-                <button type="button" className="btn btn-ghost" style={{ color: "var(--accent-ink)", padding: "6px 12px" }} disabled={!newCue.trim() || creating !== null} onClick={() => createInline("cue")}>
-                  {creating === "cue" ? "Creating…" : "Create"}
-                </button>
+              </div>
+              <div className="proof-grid" style={{ marginTop: 6 }} role="group" aria-labelledby="new-cue-label">
+                <label htmlFor="new-cue-when" className="label-accent proof-label">
+                  WHEN
+                </label>
+                <input
+                  id="new-cue-when"
+                  className="input input-compact"
+                  value={newCueWhen}
+                  onChange={(e) => setNewCueWhen(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInline("cue"); } }}
+                  placeholder="I schedule anything"
+                />
+                <label htmlFor="new-cue" className="label-accent proof-label">
+                  REMIND
+                </label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    id="new-cue"
+                    className="input input-compact"
+                    value={newCue}
+                    onChange={(e) => setNewCue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInline("cue"); } }}
+                    placeholder='ask "How much does this pay?"'
+                    style={{ flex: 1 }}
+                  />
+                  <button type="button" className="btn btn-ghost" style={{ color: "var(--accent-ink)", padding: "6px 12px" }} disabled={!newCueReady || creating !== null} onClick={() => createInline("cue")}>
+                    {creating === "cue" ? "Creating…" : "Create"}
+                  </button>
+                </div>
               </div>
             </div>
 

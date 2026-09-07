@@ -31,10 +31,16 @@ export type LibraryItem = {
   scope: ItemScope;
   rank: number;
   archived_at: string | null;
+  /** F6: the moment a cue fires (cue only; null on cues saved before F6 until edited). */
+  cue_when: string | null;
   proof_when: string | null;
   proof_then: string | null;
+  /** F6: RECOVERED WHEN — what you would observe to know you are back on track. */
+  proof_recover: string | null;
   /** Has ever been a member of any sprint (rule 19: then it can only be archived). */
   used: boolean;
+  /** Is a current member of an active sprint. */
+  active: boolean;
 };
 
 export type AreaOverview = {
@@ -122,6 +128,24 @@ export function eligibleFor(area: AreaKey): (item: { scope: string }) => boolean
   return (item) => item.scope === "global" || item.scope === area;
 }
 
+type ProofParts = Pick<LibraryItem, "proof_when" | "proof_then" | "proof_recover">;
+
+/** All three parts of a Proof Point are present (rule 6, F6). */
+export function proofComplete(i: ProofParts): boolean {
+  return Boolean(i.proof_when && i.proof_then && i.proof_recover);
+}
+
+/** "WHEN … · THEN … · RECOVERED …" over the parts an impediment has; null when it has none. */
+export function proofSummary(i: ProofParts): string | null {
+  const parts = [i.proof_when && `WHEN ${i.proof_when}`, i.proof_then && `THEN ${i.proof_then}`, i.proof_recover && `RECOVERED ${i.proof_recover}`].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+/** "WHEN …" for a cue that has its trigger; null for a pre-F6 cue. */
+export function cueSummary(c: Pick<LibraryItem, "cue_when">): string | null {
+  return c.cue_when ? `WHEN ${c.cue_when}` : null;
+}
+
 /**
  * Promise.all that lets every read finish: the first rejection is what is thrown, and
  * no sibling rejection is left unhandled to surface as noise with no route context.
@@ -138,7 +162,8 @@ export async function loadDays(supabase: Client, sprintId: string): Promise<Spri
   return days.data;
 }
 
-function toItem(kind: ItemKind, row: Cue | Impediment, used: boolean): LibraryItem {
+function toItem(kind: ItemKind, row: Cue | Impediment, usage: { used: boolean; active: boolean }): LibraryItem {
+  const cue = kind === "cue" ? (row as Cue) : null;
   const imp = kind === "impediment" ? (row as Impediment) : null;
   return {
     id: row.id,
@@ -148,29 +173,32 @@ function toItem(kind: ItemKind, row: Cue | Impediment, used: boolean): LibraryIt
     scope: row.scope as ItemScope,
     rank: row.rank,
     archived_at: row.archived_at,
+    cue_when: cue?.cue_when ?? null,
     proof_when: imp?.proof_when ?? null,
     proof_then: imp?.proof_then ?? null,
-    used,
+    proof_recover: imp?.proof_recover ?? null,
+    used: usage.used,
+    active: usage.active,
   };
 }
 
-type Membership = { count: number }[];
-const usedFrom = (m: Membership) => (m[0]?.count ?? 0) > 0;
+const IN_SPRINT = { used: true, active: true };
 
 /**
  * The whole library of one kind, archived rows included, in rank order. `used` (rule
- * 19) is a per-row membership count computed in SQL, so the read is O(library) however
- * many sprints the user has run — never the membership history itself.
+ * 19) and `active` come from the `library_item_usage` view, one row per item computed
+ * in SQL and read in parallel with the items, so the read is O(library) however many
+ * sprints the user has run — never the membership history itself.
  */
 export async function loadLibrary(supabase: Client, kind: ItemKind): Promise<LibraryItem[]> {
-  if (kind === "cue") {
-    const rows = await supabase.from("cues").select("*, sprint_cues(count)").order("rank").order("created_at");
-    if (rows.error) throw new Error(`cues: ${rows.error.message}`);
-    return rows.data.map(({ sprint_cues, ...r }) => toItem("cue", r, usedFrom(sprint_cues as Membership)));
-  }
-  const rows = await supabase.from("impediments").select("*, sprint_impediments(count)").order("rank").order("created_at");
-  if (rows.error) throw new Error(`impediments: ${rows.error.message}`);
-  return rows.data.map(({ sprint_impediments, ...r }) => toItem("impediment", r, usedFrom(sprint_impediments as Membership)));
+  const usageQuery = supabase.from("library_item_usage").select("item_id, used, active").eq("kind", kind);
+  const [rows, usage] = kind === "cue"
+    ? await Promise.all([supabase.from("cues").select("*").order("rank").order("created_at"), usageQuery])
+    : await Promise.all([supabase.from("impediments").select("*").order("rank").order("created_at"), usageQuery]);
+  if (rows.error) throw new Error(`${kind === "cue" ? "cues" : "impediments"}: ${rows.error.message}`);
+  if (usage.error) throw new Error(`library_item_usage: ${usage.error.message}`);
+  const byId = new Map(usage.data.map((u) => [u.item_id, { used: Boolean(u.used), active: Boolean(u.active) }]));
+  return rows.data.map((r) => toItem(kind, r, byId.get(r.id) ?? { used: false, active: false }));
 }
 
 /** Active (non-archived) items of both kinds, for pickers. Rule 24: archived never appear here. */
@@ -212,11 +240,11 @@ export async function loadSprintItems(supabase: Client, sprintId: string): Promi
   return {
     cues: cues.data
       .filter((m) => m.cues)
-      .map((m) => toItem("cue", m.cues as Cue, true))
+      .map((m) => toItem("cue", m.cues as Cue, IN_SPRINT))
       .sort(byRank),
     impediments: imps.data
       .filter((m) => m.impediments)
-      .map((m) => ({ ...toItem("impediment", m.impediments as Impediment, true), is_highest: m.is_highest }))
+      .map((m) => ({ ...toItem("impediment", m.impediments as Impediment, IN_SPRINT), is_highest: m.is_highest }))
       .sort(byRank),
   };
 }
@@ -237,9 +265,14 @@ export async function loadDayOfferedItems(supabase: Client, dayId: string): Prom
     scope: "global" as ItemScope,
     rank: r.rank,
     archived_at: null,
+    // F7 extends day_offered_items with the F6 columns; until then the close dialog
+    // renders the rows it always has.
+    cue_when: null,
     proof_when: r.proof_when,
     proof_then: r.proof_then,
+    proof_recover: null,
     used: true,
+    active: true,
   }));
   return {
     cues: rows.filter((r) => r.kind === "cue").sort(byRank),

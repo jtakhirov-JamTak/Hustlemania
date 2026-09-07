@@ -8,9 +8,12 @@ import { OptionRow } from "@/components/OptionRow";
 
 export type PickerOption = { id: string; label: string; sub?: string | null; tag?: string | null; disabled?: boolean };
 
+export type PickerProof = { when: string; then: string; recover: string; onWhen: (v: string) => void; onThen: (v: string) => void; onRecover: (v: string) => void };
+
 /**
- * The 560px picker dialog: a list of selection rows, optional WHEN/THEN inputs, an
- * optional inline "Create" line, a hint beside the primary. Callers own the state.
+ * The 560px picker dialog: a list of selection rows, optional proof inputs, an optional
+ * inline "Create" line (one input, or WHEN + REMIND for a cue), a hint beside the
+ * primary. Callers own the state.
  */
 export function ItemPicker({
   title,
@@ -35,8 +38,9 @@ export function ItemPicker({
   single: boolean;
   selected: string[];
   onToggle: (id: string) => void;
-  proof?: { when: string; then: string; onWhen: (v: string) => void; onThen: (v: string) => void } | null;
-  create?: { placeholder: string; onCreate: (name: string) => Promise<string | null> } | null;
+  proof?: PickerProof | null;
+  /** `whenLabel` adds a required WHEN input ahead of the name (a cue's trigger, F6). */
+  create?: { placeholder: string; whenLabel?: string; onCreate: (name: string, when: string) => Promise<string | null> } | null;
   hint?: string | null;
   error?: string | null;
   doneLabel: string;
@@ -46,19 +50,24 @@ export function ItemPicker({
   emptyLine?: string;
 }) {
   const [draft, setDraft] = useState("");
+  const [draftWhen, setDraftWhen] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const blocked = Boolean(hint) || pending;
+  const createReady = Boolean(draft.trim()) && (!create?.whenLabel || Boolean(draftWhen.trim()));
 
   async function submitCreate() {
-    if (!create || !draft.trim() || creating) return;
+    if (!create || !createReady || creating) return;
     setCreating(true);
     setCreateError(null);
-    const err = await create.onCreate(draft.trim());
+    const err = await create.onCreate(draft.trim(), draftWhen.trim());
     setCreating(false);
     if (err) setCreateError(err);
-    else setDraft("");
+    else {
+      setDraft("");
+      setDraftWhen("");
+    }
   }
 
   return (
@@ -79,7 +88,9 @@ export function ItemPicker({
             <OptionRow key={o.id} on={selected.includes(o.id)} single={single} disabled={o.disabled} onPick={() => onToggle(o.id)} label={o.label} sub={o.sub} tag={o.tag} />
           ))}
         </div>
-        {proof ? <ProofInputs idPrefix="picker" when={proof.when} then={proof.then} onWhen={proof.onWhen} onThen={proof.onThen} className="mt-14" /> : null}
+        {proof ? (
+          <ProofInputs idPrefix="picker" when={proof.when} then={proof.then} recover={proof.recover} onWhen={proof.onWhen} onThen={proof.onThen} onRecover={proof.onRecover} className="mt-14" />
+        ) : null}
         {create ? (
           <form
             className="mt-14"
@@ -88,15 +99,33 @@ export function ItemPicker({
               submitCreate();
             }}
           >
-            <label htmlFor="picker-create" className="label-accent block field-label-top">
+            <label htmlFor={create.whenLabel ? "picker-create-when" : "picker-create"} className="label-accent block field-label-top">
               {create.placeholder}
             </label>
-            <div className="row">
-              <input id="picker-create" className="input grow" value={draft} onChange={(e) => setDraft(e.target.value)} />
-              <button type="submit" className="btn btn-ghost btn-ghost-accent" aria-disabled={creating || !draft.trim()}>
-                {creating ? "Creating…" : "Create"}
-              </button>
-            </div>
+            {create.whenLabel ? (
+              <div className="proof-grid" style={{ marginBottom: 8 }}>
+                <label htmlFor="picker-create-when" className="label-accent proof-label">
+                  WHEN
+                </label>
+                <input id="picker-create-when" className="input input-compact" value={draftWhen} onChange={(e) => setDraftWhen(e.target.value)} placeholder={create.whenLabel} />
+                <label htmlFor="picker-create" className="label-accent proof-label">
+                  REMIND
+                </label>
+                <div className="row">
+                  <input id="picker-create" className="input input-compact grow" value={draft} onChange={(e) => setDraft(e.target.value)} />
+                  <button type="submit" className="btn btn-ghost btn-ghost-accent" aria-disabled={creating || !createReady}>
+                    {creating ? "Creating…" : "Create"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="row">
+                <input id="picker-create" className="input grow" value={draft} onChange={(e) => setDraft(e.target.value)} />
+                <button type="submit" className="btn btn-ghost btn-ghost-accent" aria-disabled={creating || !createReady}>
+                  {creating ? "Creating…" : "Create"}
+                </button>
+              </div>
+            )}
           </form>
         ) : null}
         {createError || error ? <ErrorBar className="mt-12">{createError ?? error}</ErrorBar> : null}

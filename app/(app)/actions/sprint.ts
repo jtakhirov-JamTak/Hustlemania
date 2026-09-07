@@ -29,6 +29,7 @@ export type StartSprintInput = {
   highestImpedimentId: string | null;
   proofWhen: string | null;
   proofThen: string | null;
+  proofRecover: string | null;
   /** F3: a custom plan in base units (14 entries summing to `amount`), or null for Goal ÷ 14. */
   targets: number[] | null;
   /** F3: pre-planned Daily Intentions by day (14 entries; blank = none). Day 1 travels here too. */
@@ -66,6 +67,7 @@ export async function startSprintAction(input: StartSprintInput): Promise<{ erro
     p_highest_impediment_id: input.highestImpedimentId,
     p_proof_when: input.proofWhen?.trim() || undefined,
     p_proof_then: input.proofThen?.trim() || undefined,
+    p_proof_recover: input.proofRecover?.trim() || undefined,
     p_targets: input.targets ?? undefined,
     p_intentions: intentions?.some((t) => t) ? intentions : undefined,
   });

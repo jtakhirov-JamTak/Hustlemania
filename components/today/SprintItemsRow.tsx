@@ -5,12 +5,12 @@ import { useState, useTransition } from "react";
 import { addSprintItem, createItem, removeSprintItem } from "@/app/(app)/actions/library";
 import { ItemPicker } from "@/components/ItemPicker";
 import { callAction } from "@/lib/callAction";
-import type { ItemKind, LibraryItem, SprintItems } from "@/lib/data";
+import { cueSummary, proofSummary, type ItemKind, type LibraryItem, type SprintItems } from "@/lib/data";
 
 /**
  * "▸ Other impediments (n) · Execution cues (n)", expanding to two cards with Remove /
  * Add. Add opens the picker over the eligible library items not yet in the sprint,
- * with inline creation (saved to the library, global scope).
+ * with inline creation (saved to the library, global scope; a cue needs its WHEN).
  */
 export function SprintItemsRow({
   sprintId,
@@ -52,7 +52,7 @@ export function SprintItemsRow({
             <ItemsCard
               title="Other impediments"
               count={`${items.impediments.length} of 5 in sprint`}
-              rows={others.map((i) => ({ id: i.id, name: i.name, sub: i.proof_when && i.proof_then ? `WHEN ${i.proof_when} · THEN ${i.proof_then}` : i.explanation }))}
+              rows={others.map((i) => ({ id: i.id, name: i.name, sub: proofSummary(i) ?? i.explanation }))}
               addLabel="Add impediment"
               canAdd={!locked && items.impediments.length < 5}
               canRemove={!locked}
@@ -64,7 +64,7 @@ export function SprintItemsRow({
             <ItemsCard
               title="Execution cues"
               count={`${items.cues.length} of 3 in sprint`}
-              rows={items.cues.map((c) => ({ id: c.id, name: c.name, sub: c.explanation }))}
+              rows={items.cues.map((c) => ({ id: c.id, name: c.name, sub: cueSummary(c) ?? c.explanation }))}
               addLabel="Add cue"
               canAdd={!locked && items.cues.length < 3}
               canRemove={!locked && items.cues.length > 1}
@@ -145,7 +145,8 @@ function AddPicker({ kind, sprintId, candidates, onClose }: { kind: ItemKind; sp
   const [created, setCreated] = useState<LibraryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const all = [...candidates, ...created];
+  // A created item lands in `candidates` once the page revalidates; until then it lives in `created`.
+  const all = [...candidates, ...created.filter((c) => !candidates.some((x) => x.id === c.id))];
 
   function done() {
     if (!pick) return;
@@ -164,16 +165,34 @@ function AddPicker({ kind, sprintId, candidates, onClose }: { kind: ItemKind; sp
     <ItemPicker
       title={kind === "cue" ? "Add an execution cue" : "Add an impediment"}
       blurb={kind === "cue" ? "From your library, or create one — it is saved to the library too." : "From your library, or create one — it is saved to the library too. A proof point can be added later on the Impediments page."}
-      options={all.map((c) => ({ id: c.id, label: c.name, sub: c.explanation, tag: c.scope === "global" ? "Global" : null }))}
+      options={all.map((c) => ({ id: c.id, label: c.name, sub: (kind === "cue" ? cueSummary(c) : proofSummary(c)) ?? c.explanation, tag: c.scope === "global" ? "Global" : null }))}
       single
       selected={pick ? [pick] : []}
       onToggle={setPick}
       create={{
         placeholder: kind === "cue" ? "Create a new execution cue" : "Create a new impediment",
-        onCreate: async (name) => {
-          const res = await callAction(() => createItem(kind, { name, explanation: "", scope: "global" }));
+        whenLabel: kind === "cue" ? "I schedule anything" : undefined,
+        onCreate: async (name, when) => {
+          const res = await callAction(() => createItem(kind, { name, explanation: "", scope: "global", cueWhen: kind === "cue" ? when : undefined }));
           if (res.error || !res.id) return res.error ?? "That did not save.";
-          setCreated((c) => [...c, { id: res.id!, kind, name, explanation: null, scope: "global", rank: 0, archived_at: null, proof_when: null, proof_then: null, used: false }]);
+          setCreated((c) => [
+            ...c,
+            {
+              id: res.id!,
+              kind,
+              name,
+              explanation: null,
+              scope: "global",
+              rank: 0,
+              archived_at: null,
+              cue_when: kind === "cue" ? when.trim() || null : null,
+              proof_when: null,
+              proof_then: null,
+              proof_recover: null,
+              used: false,
+              active: false,
+            },
+          ]);
           setPick(res.id);
           return null;
         },

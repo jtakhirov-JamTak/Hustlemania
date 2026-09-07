@@ -6,6 +6,22 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-07 — A cue created inside the Today "Add cue" picker appeared twice
+
+**Problem.** `SprintItemsRow`'s picker listed `[...candidates, ...created]`. `createItem`
+revalidates the layout, so the fresh cue arrived in `candidates` from the server while
+`created` still held the local copy: two identical rows, two radios with the same name.
+Present since F2; no test had exercised the picker's create row.
+
+**Fix.** `created` contributes only the ids `candidates` does not already carry.
+
+**Regression test.** `e2e/golden-path.spec.ts` (both projects): after creating a cue in
+the Today picker, `getByRole("radio", { name: /Close the laptop at nine/ })` must resolve
+to one element (strict mode fails on two), be checked, and "Add to sprint" must bring the
+cue count to 2. Found by the F6 e2e step that covers the picker's WHEN + REMIND row.
+
+---
+
 ## 2026-09-06 — On a phone every form zoomed on focus, the plan grid overlapped itself, and the sidebar pushed Today off screen
 
 **Problem.** Three rendering defects on a 390px viewport, confirmed in the phone e2e

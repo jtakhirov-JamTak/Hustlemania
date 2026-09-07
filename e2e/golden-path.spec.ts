@@ -109,13 +109,24 @@ test.describe("golden path", () => {
     await expect(page.getByTestId("wizard-impediments").getByRole("checkbox", { name: "Starting late" })).toHaveAttribute("aria-checked", "true");
     await expect(page.getByText("Designate the highest impediment.")).toBeVisible();
     await page.getByTestId("wizard-highest").getByRole("radio", { name: /Starting late/ }).click();
-    await expect(page.getByText("The highest impediment needs a WHEN → THEN.")).toBeVisible();
-    await page.getByLabel("WHEN").fill("I notice myself delaying my first work block");
-    await page.getByLabel("THEN").fill("I start a 10-minute timer on the smallest executable task");
+    const highestSetup = page.getByTestId("wizard-highest");
+    await expect(page.getByText("The highest impediment needs WHEN → THEN and a recovery criterion.")).toBeVisible();
+    await highestSetup.getByLabel("WHEN", { exact: true }).fill("I notice myself delaying my first work block");
+    await highestSetup.getByLabel("THEN", { exact: true }).fill("I start a 10-minute timer on the smallest executable task");
+    // F6: WHEN + THEN alone do not unblock — the recovery criterion is the third part.
+    await expect(page.getByText("The highest impediment needs WHEN → THEN and a recovery criterion.")).toBeVisible();
+    await highestSetup.getByLabel("RECOVERED WHEN").fill("The timer is running within 10 minutes");
     await expect(page.getByText("Select 1–3 execution cues.")).toBeVisible();
-    await page.getByLabel("Create a new execution cue").fill("Ask how much this pays");
-    await page.getByTestId("wizard-cues").getByRole("button", { name: "Create" }).click();
-    await expect(page.getByTestId("wizard-cues").getByRole("checkbox", { name: "Ask how much this pays" })).toHaveAttribute("aria-checked", "true");
+    // F6: a cue is a WHEN → REMIND pair; Create waits for both.
+    const cueSetup = page.getByTestId("wizard-cues");
+    const createCue = cueSetup.getByRole("button", { name: "Create" });
+    await cueSetup.getByLabel("REMIND").fill("Ask how much this pays");
+    await expect(createCue).toBeDisabled();
+    await cueSetup.getByLabel("WHEN", { exact: true }).fill("I schedule anything");
+    await expect(createCue).toBeEnabled();
+    await createCue.click();
+    await expect(cueSetup.getByRole("checkbox", { name: "Ask how much this pays" })).toHaveAttribute("aria-checked", "true");
+    await expect(cueSetup.getByRole("checkbox", { name: "Ask how much this pays" })).toContainText("WHEN I schedule anything");
     await expect(page.getByText("Confirm the outcome advances the vision.")).toBeVisible();
     await page.getByRole("checkbox", { name: "Vision alignment" }).click();
     await expect(start).toBeEnabled();
@@ -138,9 +149,24 @@ test.describe("golden path", () => {
     expect(await highest.getByTestId("highest-name").evaluate((el) => getComputedStyle(el).fontSize)).toBe("22px");
     await expect(highest.getByTestId("proof-when")).toHaveText("I notice myself delaying my first work block");
     await expect(highest.getByTestId("proof-then")).toHaveText("I start a 10-minute timer on the smallest executable task");
+    await expect(highest.getByTestId("proof-recover")).toHaveText("The timer is running within 10 minutes");
     await expect(page.getByTestId("sprint-items-toggle")).toHaveText("▸ Other impediments (0) · Execution cues (1)");
     await page.getByTestId("sprint-items-toggle").click();
     await expect(page.getByTestId("sprint-items").getByText("Ask how much this pays")).toBeVisible();
+    await expect(page.getByTestId("sprint-items").getByText("WHEN I schedule anything")).toBeVisible();
+    // F6: the Today Add-cue picker's create row is a WHEN + REMIND pair too.
+    await page.getByRole("button", { name: "Add cue" }).click();
+    const picker = page.getByRole("dialog");
+    const createInPicker = picker.getByRole("button", { name: "Create" });
+    await picker.getByLabel("REMIND").fill("Close the laptop at nine");
+    await expect(createInPicker).toHaveAttribute("aria-disabled", "true");
+    await picker.getByLabel("WHEN", { exact: true }).fill("the clock shows 9 pm");
+    await expect(createInPicker).toHaveAttribute("aria-disabled", "false");
+    await createInPicker.click();
+    await expect(picker.getByRole("radio", { name: /Close the laptop at nine/ })).toHaveAttribute("aria-checked", "true");
+    await picker.getByRole("button", { name: "Add to sprint" }).click();
+    await expect(page.getByTestId("sprint-items-toggle")).toHaveText("▾ Other impediments (0) · Execution cues (2)");
+    await expect(page.getByTestId("sprint-items").getByText("WHEN the clock shows 9 pm")).toBeVisible();
     await page.getByTestId("sprint-items-toggle").click();
 
     // F3: the 14-day plan on Today. The sprint started custom; day 1 is locked (it is
@@ -293,7 +319,12 @@ test.describe("golden path", () => {
     await page.goto("/vision/impediments");
     await expect(page.locator("[data-sidebar]").getByText("Impediments")).toBeVisible();
     const item = page.getByTestId("library-item").filter({ hasText: "Starting late" });
-    await expect(item.getByText("In sprint history")).toBeVisible();
+    // F6: the card shows the five labelled parts and the three-state usage line.
+    await expect(item.getByText("In an active sprint")).toBeVisible();
+    await expect(item.locator("[data-part=situation]")).toHaveText("Starting late");
+    await expect(item.locator("[data-part=interferes]")).toHaveText("what it does to your day");
+    await expect(item.locator("[data-part=recovered]")).toHaveText("The timer is running within 10 minutes");
+    await expect(page.getByTestId("library-count")).toHaveText("1 · 0 archived");
     await item.getByRole("button", { name: "Archive" }).click();
     await expect(item.getByRole("alert")).toContainText("Archive is blocked");
     // The first violated rule is reported: with one impediment, rule 4 fires before rule 5.
@@ -305,10 +336,19 @@ test.describe("golden path", () => {
 
     // An unused cue can be deleted; a used one only archived (rule 19).
     await page.goto("/vision/cues");
-    await page.getByLabel("Name").fill("Temporary cue");
-    await page.getByRole("button", { name: "Add", exact: true }).click();
+    // F6: the library Add form needs WHEN and REMIND; the hint names both until they are filled.
+    const addCue = page.getByTestId("library-add");
+    const addButton = page.getByRole("button", { name: "Add", exact: true });
+    await addCue.getByLabel("REMIND").fill("Temporary cue");
+    await expect(addButton).toHaveAttribute("aria-disabled", "true");
+    await expect(addCue.getByText("WHEN and REMIND are both needed.")).toBeVisible();
+    await addCue.getByLabel("WHEN", { exact: true }).fill("I open the calendar");
+    await expect(addButton).toHaveAttribute("aria-disabled", "false");
+    await addButton.click();
     const temp = page.getByTestId("library-item").filter({ hasText: "Temporary cue" });
     await expect(temp.getByText("Unused")).toBeVisible();
+    await expect(temp.locator("[data-part=when]")).toHaveText("I open the calendar");
+    await expect(temp.locator("[data-part=remind]")).toHaveText("Temporary cue");
     await temp.getByRole("button", { name: "Delete" }).click();
     await expect(temp).toHaveCount(0);
     const used = page.getByTestId("library-item").filter({ hasText: "Ask how much this pays" });

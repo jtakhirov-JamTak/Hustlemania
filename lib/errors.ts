@@ -31,7 +31,7 @@ const MESSAGES: Record<string, string> = {
   no_impediments: "A sprint needs at least one impediment.",
   too_many_impediments: "A sprint carries at most five impediments.",
   no_highest_impediment: "Designate one of the impediments as the highest.",
-  proof_point_required: "The highest impediment needs both a WHEN and a THEN.",
+  proof_point_required: "The highest impediment needs a WHEN, a THEN and a RECOVERED WHEN.",
   item_not_found: "That item could not be found in your library.",
   item_archived: "That item is archived. Restore it first.",
   item_out_of_scope: "That item's scope does not cover this area.",
@@ -53,6 +53,9 @@ const MESSAGES: Record<string, string> = {
 
 export const GENERIC_SAVE_ERROR = "That did not save. Your input is still here — try again.";
 
+/** Rule 22 on the Impediments page: a proof edit that would leave the highest of an active sprint incomplete. */
+export const HIGHEST_PROOF_EDIT_ERROR = "This is the highest impediment of an active sprint: WHEN, THEN and RECOVERED WHEN are all required.";
+
 export function friendlyError(message: string | undefined | null): string {
   if (!message) return GENERIC_SAVE_ERROR;
   for (const [code, copy] of Object.entries(MESSAGES)) {
@@ -71,7 +74,7 @@ export function blockedReason(reason: string): string {
     case "no_highest_impediment":
       return "this is its highest impediment";
     case "proof_point_required":
-      return "its highest impediment would lack a WHEN → THEN";
+      return "its highest impediment would lack a WHEN, a THEN or a RECOVERED WHEN";
     default:
       return "it would become invalid";
   }

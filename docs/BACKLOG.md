@@ -12,7 +12,14 @@
 - **Inline styles remain in the components the redesign rewrites** (`TodayView`,
   `CloseFlow`, `LibraryPage`, `NewSprintWizard`, `VisionForm` and the Today cards, ~280
   of them): each moves to classes when its feature (F6–F9) replaces the component. The
-  shell moved on 2026-09-07. `app/global-error.tsx` keeps its inline styles for good:
+  shell moved on 2026-09-07. F6 rewrote `LibraryPage` on 2026-09-07 but kept its inline
+  styles (not in the F6 acceptance list); the move to classes is still owed.
+- **Golden path failed once on a fresh dev server (2026-09-07, F6 build):** the first
+  `npm run test:e2e` after editing `lib/data.ts` showed the app's error boundary ("This
+  page could not load") on `/sprints/health` right after sign-in — the empty-state path,
+  which none of the F6 changes touch. It did not reproduce on any of five later runs and
+  the cause was not identified. `playwright.config.ts` already notes fresh-start
+  flakiness; if it recurs, capture the web-server stderr (`DEBUG=pw:webserver`). `app/global-error.tsx` keeps its inline styles for good:
   it renders without the root layout, so no stylesheet reaches it.
 - **Audit LOW lists not swept**: textareas `rows={2}`, `autoCapitalize` / `enterKeyHint`,
   the date only in a hover `title` on the day strip, 64/78px numerals against a
@@ -75,18 +82,18 @@ The ranked backlog itself is `docs/audits/full-audit-2026-09-05.md` (47 findings
   migration. `supabase/migrations/0006_tasks.sql`, `components/today/TasksCard.tsx`.
 - **Archived tasks remain writable on an open day** — a bulk update by `sprint_day_id`
   also flips archived rows. No UI path does this; decide the semantics with History /
-  Insights (F7 / F9).
+  Insights (old F7 / F9 → F11 / F13).
 
 ## Found during F5 (2026-09-05), not fixed there
 
-- **The streak must stop at the closure date once F6 adds early completion.**
+- **The streak must stop at the closure date once F10 (was F6) adds early completion.**
   `sprint_streak_at` walks every day with date ≤ today; after "Complete Sprint" on day 9
-  the cancelled days 10–14 would read as missed and the streak as 0. F6 owns this in the
+  the cancelled days 10–14 would read as missed and the streak as 0. F10 (was F6) owns this in the
   migration that adds the closure timestamp (DECISIONS, F5 entry).
 - **A backfill offers the day's own items but not the day's own intention or tasks**:
   the dialog closes a missed day with Actual, hurt/helped and notes; the Intention and
   Tasks cards keep showing today's day. Reading a past day in full is the History view
-  (F7/F9).
+  (old F7/F9 → F11/F13).
 - **`sprint_invalid_reason` null-default bug is still open** — 0007 does not touch that
   function either.
 - **A torn-down request leaves sibling loader rejections unhandled.** The area page and
@@ -112,7 +119,7 @@ The ranked backlog itself is `docs/audits/full-audit-2026-09-05.md` (47 findings
 - **`sprint_invalid_reason` null-default bug is still open** — 0006 does not touch that
   function either.
 - **Tasks have no reader yet beyond Today**: Insights (task completion vs result) and
-  History arrive with F7 / F9; `archived_at` rows are kept for them and filtered out of
+  History arrive with old F7 / F9 (→ F11 / F13); `archived_at` rows are kept for them and filtered out of
   `loadTasks`.
 - **Emptying a task's text and blurring restores the saved text silently** (the × is the
   remove). Intended, but there is no hint saying so.
@@ -142,7 +149,7 @@ The ranked backlog itself is `docs/audits/full-audit-2026-09-05.md` (47 findings
   a kind and an item). The migration was already on disk when found and the write guard
   blocks editing it; fix with `coalesce(…, false)` in the next migration that touches
   the function.
-- **Scope filter semantics undefined in the SPEC**: the "Wealth" chip lists only
+- ~~**Scope filter semantics undefined in the SPEC**~~ Settled in F6 (2026-09-07): exact scope per chip. Was: the "Wealth" chip lists only
   `scope = wealth`, not `global + wealth`. Decide and write it into F2 or the library
   page copy.
 - **e2e covers the single-selection close only**; the "Which hurt most?" radio path was
