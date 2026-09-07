@@ -6,6 +6,33 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-07 — SPEC review before F6: two reads, no P0, F6 amended, stubs annotated
+
+**Decision.** Before building F6 the user asked for an end-to-end adversarial review of
+the re-baselined SPEC. Two independent passes (the session's tie-out and a
+`staff-reviewer` agent) are merged in `docs/audits/spec-review-2026-09-07.md` (24
+findings, dispositions applied). F6 was amended: `start_sprint`'s inline-proof guard
+fires on any of the three parts; `set_highest_impediment` coalesces per column; rule 22
+raises only when a proof column changed; the two remaining 0004 trigger functions join
+the pin list; the day-row snapshot of RECOVERED WHEN moves to F7 (which rewrites
+`close_day` anyway); the cue column is `cue_when` (user's call over `trigger`, which
+was verified to work in PL/pgSQL); scope chips filter on the exact scope. F7–F11 stubs
+carry dated review notes; F10 absorbs the single-sprint calculations and F5's
+closure/streak items; F8 sheds the Vision and Insights sidebars.
+
+**Why.** The postmortem (F10) rendered cards whose calculations sat in F11; the focus
+cue had no consumer; "version" had no definition; the renumbering had orphaned three
+F5 follow-ups; the F5 stale-body failure mode applied to six redefinitions in F6, now
+four. Version is the proof text tuple on the day snapshot, not a counter: both change
+on every edit, and the tuple needs no column.
+
+**Gate.** The amended F6 entry was approved 2026-09-07; the user chose to build it in a
+fresh session rather than continue (one human stop on the F6 row).
+
+**Not verified.** The hosted project (never migrated per the 2026-09-05 entry).
+
+---
+
 ## 2026-09-07 — Enabling pass: the shell's styles are classes, Tailwind is gone, and "no visible change" is a pixel diff
 
 **Decision.** Before the v8 redesign lands (SPEC F6–F9), the parts of the UI that survive
@@ -248,7 +275,7 @@ must stop at the closure date, or a sprint completed on day 9 reads a streak of 
 11. That is F6's change to make, in the migration that adds the closure timestamp.
 Until F6 exists a sprint stays `active` after day 14, and Backfill stays available on
 the plan grid for exactly as long as `close_day` accepts it (PRD §9: "while the Sprint
-remains open") — the UI and the DB agree on what "open" means, and F6 closes both at
+remains open") — the UI and the DB agree on what "open" means, and F6 (renumbered F10 on 2026-09-06) closes both at
 once.
 
 **Rejected.** A stored `streak` column on `sprints` (second copy, rule 18 becomes a

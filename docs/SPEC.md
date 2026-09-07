@@ -177,7 +177,7 @@ so the journal is built once with its final close questions.
 - **Human steps before F1 (external; not build-time gates):** create the Hustlemania
   Supabase project (free tier, separate from `pure-eq`), turn off "Allow new users to
   sign up", create the owner user in the dashboard, and put the keys in `.env`. Vercel
-  project creation happens at F10.
+  project creation happens at F14 (was F10).
 - **UI.**
   - Primary action: enter Actual and Close Day, reached after a morning "Today I
     will" intention · desktop-first, both viewports · states: empty, loading, error
@@ -203,7 +203,7 @@ so the journal is built once with its final close questions.
   - **Today structure (user's order, using the prototype's cards):**
     1. Header row: area tag + date, outcome as h1 32px; right: "Day N / 14" 30px +
        streak. 14-day strip (D#, weekday, date; green/red bar once closed; today
-       accent-bordered; weekends faint); start/end dates; "End sprint early" link (F6).
+       accent-bordered; weekends faint); start/end dates; "End sprint early" link (F10, was F6).
     2. Target hero card: label, number 92px, unit; 3-up stats (Cumulative · Goal
        locked · Remaining with "n days left · x a day"); Usage-of-funds pills (money).
     3. Daily Intention card ("Today I will…", textarea, autosave; pre-planned text if
@@ -221,7 +221,7 @@ so the journal is built once with its final close questions.
        + most-useful radio + optional notes → "Close the day" → result screen (actual
        78px green/red, 14-segment strip, streak / cumulative / tomorrow's target,
        "Back to today"). After close: "Day closed · locked", "<actual> against
-       <target>" in green/red, celebration line, "Complete sprint" band at goal (F6).
+       <target>" in green/red, celebration line, "Complete sprint" band at goal (F10, was F6).
     9. 14-day plan card (F3): 7×2 day cells with target/actual, Same/Custom chips,
        Planned · Goal · delta line.
     Sidebar rows: area name; right meta "Day N/14" / "Locked" / "Review"; muted
@@ -445,7 +445,7 @@ so the journal is built once with its final close questions.
   - No grace/repair path exists (rule 18): backfilling a missed day leaves streak
     unchanged (test).
   - No backfill after sprint closure (test: closed sprint → `close_day` errors).
-- **Non-goals.** Reminders (F9).
+- **Non-goals.** Reminders (F13, was F9).
 - **Risks.** Streak drift vs calendar — all logic in SQL, tested with fixed clocks.
 - **Evaluator.** none.
 - **As built (2026-09-05, no evaluator trigger).**
@@ -465,7 +465,7 @@ so the journal is built once with its final close questions.
   - Streak rule as coded: among days with date ≤ today in the sprint's zone, drop today's
     day if it is still open, then count the trailing run of `closed_on_time = true`. A
     missed day and a backfilled day both end the run; a still-open today neither counts
-    nor breaks. Decision and the F6 caveat (cancelled days after early completion) in
+    nor breaks. Decision and the F10 (was F6) caveat (cancelled days after early completion) in
     DECISIONS.
   - UI: streak label under "Day N / 14" (`streakLabel`: "No streak" / "1-day streak" /
     "N-day streak") and as a third line on the sprint's sidebar entry, both from one
@@ -481,7 +481,7 @@ so the journal is built once with its final close questions.
     close submitted after midnight reports truthfully. `closeDayAction` returns the
     streak from `close_day` and, if only the follow-up read fails, says the day is closed
     and offers Reload instead of Retry. Backfill stays available after day 14 for as
-    long as `close_day` accepts it (F6 closes both; DECISIONS).
+    long as `close_day` accepts it (F10, was F6, closes both; DECISIONS).
   - Full review (2026-09-05, /full-review after green): 0 CRITICAL, 0 HIGH, 8 MEDIUM,
     13 LOW; all eight MEDIUM fixed — result-screen truth from the row, backfill after day
     14, tap target, wider rule-18 scan plus trigger list, closed-but-not-refreshed
@@ -506,13 +506,144 @@ so the journal is built once with its final close questions.
     false`; horizontal overflow 0. Phone layout covered by the Playwright phone project.
 
 ### F6 — Libraries v2: cue trigger, RECOVERED WHEN, relabelled editors
-*Stub (2026-09-06). Filled by `/interview`. Scope: `docs/RECONCILIATION-2026-09-06.md`
-rows B5 B6 B7 C2 C3 C11 D5.* Cue = WHEN (trigger, required on every create path;
-existing rows null) → REMIND (name). Impediment = SITUATION (name) → INTERFERES
-(explanation) → WHEN → THEN → RECOVERED WHEN; the Highest Impediment must carry all
-three (rule 6 and the rule-22 trigger extend to `proof_recover`; `start_sprint` and
-`set_highest_impediment` validate it; the day snapshot gains it). Quality guidance and
-helper examples on both editors. Additive migration; no evaluator trigger.
+*Specified 2026-09-07 by `/interview` (feature mode); amended the same day after the
+end-to-end spec review (`docs/audits/spec-review-2026-09-07.md`); **approved by the user
+2026-09-07 as amended, to be built in the next session** (user's call; the F6 metric row
+stays open from 17:17Z). Scope:
+`docs/RECONCILIATION-2026-09-06.md` rows B5 B6 B7 C2 C3 C11 D5; its Decisions section is
+authoritative. In-session calls (2026-09-07): cue WHEN required on Edit as well as on
+every create path · the library Add form stays full (user's call; departs from the v8
+README's single-input Add row) · no `note` column (`explanation` is the cue's optional
+note and the impediment's INTERFERES) · usage line gets the README's three states ·
+the cue column is named `cue_when`, not `trigger` (user's call after the review) · the
+day-row snapshot of RECOVERED WHEN moves to F7, which rewrites `close_day` anyway.*
+
+- **Behavior.** A cue is a WHEN (`cue_when`) → REMIND (the name) pair, both required
+  wherever a cue is created or edited: the Cues page, the wizard's inline create, and
+  the Today "Add cue" picker. Cues saved before this feature keep a null WHEN and show
+  the italic prompt "add the moment this should fire" until edited. An impediment is
+  SITUATION (name) → INTERFERES (explanation) → WHEN → THEN → RECOVERED WHEN, only the
+  name required at creation; the Highest Impediment of a sprint must carry all three
+  proof parts, at setup, whenever the highest changes, and whenever its proof is
+  edited (rule 6 extended). Both editors carry brief quality guidance and helper
+  examples (docx §"Impediments and Execution Cues").
+- **Acceptance criteria.**
+  - Migration `supabase/migrations/0009_libraries_v2.sql`, additive: `cues.cue_when
+    text`, `impediments.proof_recover text`. `authenticated` gains INSERT/UPDATE on
+    both. The before-insert/update triggers trim and nullif the new columns. DB test
+    asserts the columns via `information_schema` and the grants via
+    `information_schema.column_privileges`. No `sprint_days` change in F6 (F7 adds the
+    `proof_recover` snapshot when it rewrites `close_day`).
+  - Every function the migration redefines is rebuilt from its **latest** definer —
+    `start_sprint` (0005), `set_highest_impediment` and `sprint_invalid_reason` (0008),
+    `impediments_before_update`, `cues_before_update`, `library_item_before_insert`
+    (0004) — and a pin test scans `pg_proc` for one marker per body that only the
+    latest version has (`p_targets` and `p_intentions` in `start_sprint`, the 0008
+    null-safe `coalesce` in `sprint_invalid_reason`, `p_proof_when` in
+    `set_highest_impediment`), so a stale copy turns red.
+  - `start_sprint` gains `p_proof_recover text default null` after `p_proof_then`;
+    the F5 signature is dropped. The inline-proof write fires when **any** of the
+    three parameters is non-blank and coalesces per column, so an impediment already
+    carrying WHEN + THEN started with only `p_proof_recover` starts (test). Rule 6: a
+    highest whose `proof_recover` is null after trim raises `proof_point_required`
+    (test: WHEN and THEN present, RECOVERED blank → rejected; all three → starts and
+    the impediment row carries them).
+  - `set_highest_impediment` gains `p_proof_recover`; each given part is written with
+    coalesce, so a call passing only the recover keeps WHEN and THEN (test); a null
+    recover on the chosen impediment raises `proof_point_required`; a rejected call
+    writes nothing.
+  - `sprint_invalid_reason` returns `proof_point_required` when the highest's
+    `proof_recover` is null, so `archive_item` / `set_item_scope` report it.
+  - Rule 22 extended and narrowed: `impediments_before_update` raises only when a
+    proof column **changed** and any of `proof_when`, `proof_then`, `proof_recover` is
+    null afterwards while the row is highest in an active sprint. Tests: clearing any
+    part → rejected; editing text → allowed; `move_item` and `set_item_scope` on a
+    highest whose recover is still null → allowed (rank and scope are not proof).
+  - Falsifiability, live mutations each turning a test red: rule-22 recover clause
+    removed · recover check removed from `start_sprint` · the inline-proof guard
+    restored to "WHEN or THEN only" · coalesce replaced by assignment in
+    `set_highest_impediment` · `cues.cue_when` grant removed · a redefined function
+    restored from its older body (pin test).
+  - `lib/data.ts` `LibraryItem` gains `cue_when`, `proof_recover`, `used` and
+    `active`; `used` / `active` come from one RLS-scoped SQL view
+    `library_item_usage(kind, item_id, used, active)` read in parallel with the item
+    query, which stays one round trip and never fetches membership rows.
+    `lib/errors.ts` messages for `proof_point_required` and the blocked-reason text
+    name all three parts.
+  - Cues page: card shows **WHEN** `{cue_when}` (italic prompt when null) · **REMIND**
+    `{name}` · optional note; Add and Edit have WHEN + REMIND + note + scope; Add and
+    Save are `aria-disabled` with the hint "WHEN and REMIND are both needed." while
+    either is blank. Impediments page: card shows **SITUATION · INTERFERES · WHEN ·
+    THEN · RECOVERED** with italic placeholders ("what it does to your day", "not
+    set"); Add and Edit carry the five inputs plus scope; only SITUATION gates the
+    button; a DB `proof_point_required` rejection renders as "This is the highest
+    impediment of an active sprint: WHEN, THEN and RECOVERED WHEN are all required."
+    Card title reads `n · m archived`; blurb and example line per the README; usage
+    line reads "In an active sprint" / "In sprint history" / "Unused". Scope chips
+    filter on the exact scope (Global is its own chip; "Wealth" lists `wealth` only),
+    settling the F2 backlog item.
+  - Guidance copy on both editors (a line under the editor plus an "Examples"
+    disclosure), verbatim below under UI. Impediment examples cover a missing skill, a
+    practical constraint, and avoidance/forgetting.
+  - Wizard step 4: the cue inline-create row has WHEN + REMIND, Create disabled until
+    both are filled; `ProofInputs` shows WHEN / THEN / RECOVERED WHEN and Start stays
+    blocked with "The highest impediment needs WHEN → THEN and a recovery criterion."
+    until a highest lacking any part has all three. Today: the Add-cue picker's
+    create row has WHEN + REMIND; "Change the highest" / "Edit proof point" show the
+    three inputs with the hint "WHEN, THEN and the recovery criterion are all
+    required."; the Highest card renders `RECOVERED WHEN …` (`data-testid`
+    `proof-recover`) or "Recovery criterion not set — add it under Edit proof point."
+    Selection rows in the wizard and the Today pickers (fed by `loadActiveLibrary`)
+    show cues as `WHEN {cue_when}` and impediments as `WHEN … · THEN … · RECOVERED …`;
+    the close dialog's rows (fed by `day_offered_items`) are unchanged until F7.
+  - e2e golden path (desktop + phone): Start blocked until the cue WHEN and the
+    RECOVERED WHEN are filled; the Today card shows the recover text; the library
+    pages show the new labels; the Temporary-cue step fills WHEN + REMIND.
+    `npm run verify` green.
+- **Non-goals.** `sprint_days.proof_recover` and the `close_day` / immutability-trigger
+  rewrite (F7) · `day_offered_items` return shape (F7) · observation-level snapshots
+  (F7) · a `note` column · a `proof_version` counter (version = the proof text tuple
+  snapshotted on the day row, decided 2026-09-07) · the README's single-input Add row
+  · Dusk (F8) and the Vision sidebar (F9) · backfilling RECOVERED WHEN on pre-existing
+  highest rows · mental rehearsal prompt (BACKLOG) · DB-level NOT NULL on
+  `cues.cue_when` (D5 keeps it nullable; the requirement is UI-only and each create
+  path carries its own check) · the "prevention" footer sentence (whether a
+  preventive response can be recorded is F7's call).
+- **Risks.** (1) A redefined function copied from a stale body drops a later column
+  or check — the F5 failure; mitigation: the pin test above and the per-function
+  "latest definer" list. (2) A create path misses the WHEN requirement, which the DB
+  cannot catch by decision; mitigation: one e2e assertion per path (library Add,
+  wizard, Today picker) and the Edit rule. (3) `getByLabel("WHEN")` becomes ambiguous
+  once the wizard has a cue WHEN and a proof WHEN; mitigation: locators scoped to
+  `wizard-cues` / `wizard-highest`. (4) The hosted project has never received a
+  migration (DECISIONS 2026-09-05: `db push` is a later step), so no legacy highest
+  exists anywhere; 0009 ships with the first push.
+- **Evaluator.** none — additive nullable columns on existing tables, no table
+  created, no row touched, no auth/RLS change (triggers unchanged in policy).
+- **UI.** Primary action: keep the library complete — add, complete under Edit, rank.
+  Viewport: both, desktop-first (Chrome at 1138px against the artboard; phone via the
+  Playwright phone project). States: empty library · incomplete item (cue without
+  WHEN, impediment without RECOVERED, highest card without a recovery criterion) ·
+  error/blocked (rule 22 rejection, blocked archive/scope, disabled primary with
+  accent hint). Mockup: `docs/mockups/ui-v2/handoff_sprint_ui_v8/Sprint App v8
+  Libraries.dc.html` + README "Libraries" (mockup of record; no in-stack throwaway).
+  Departures: full Add form; guidance copy not drawn. Guidance copy:
+  - Cue line: "A good cue names a moment you will recognise (WHEN) and a reminder,
+    question or action specific enough to act on right there (REMIND)." Example:
+    `WHEN I schedule anything → remind: ask "How much does this pay?"`
+  - Impediment line: "Name a situation you will recognise when it happens, what it
+    does to your day, and a response that is specific and feasible in that moment.
+    RECOVERED WHEN is what you would observe, within a time window, to know you are
+    back on track." Examples (disclosure): *Missing skill* — SITUATION I don't know how
+    to start the pitch deck · INTERFERES I open email instead · WHEN I catch myself
+    opening email before the deck · THEN write the three worst slides in 15 minutes ·
+    RECOVERED WHEN three slides exist before noon. *Practical constraint* — SITUATION
+    the gym closes before I finish work · INTERFERES sessions get skipped · WHEN it is
+    5 pm and I am still at my desk · THEN 20 minutes of bodyweight work at home ·
+    RECOVERED WHEN the session is logged by 9 pm. *Avoidance / forgetting* — SITUATION
+    starting late · INTERFERES the first block slips to noon · WHEN I notice delaying
+    · THEN a 10-minute timer on the smallest task · RECOVERED WHEN the timer is
+    running within 10 minutes.
 
 ### F7 — Day observations: what showed up, what was used, did the response run
 *Stub (2026-09-06). Filled by `/interview`. Scope: rows B4 B12 C1 C7 D3 D11.* Close
@@ -531,6 +662,23 @@ evaluator runs. "Set up tomorrow" block after a close (Remove / Add over the exi
 membership functions; rules 3–4 still enforced by the DB). Evaluator: user-data tables
 + destructive migration.
 
+*Review notes 2026-09-07 (`docs/audits/spec-review-2026-09-07.md`), binding on the
+F7 interview:* the migration adds `sprint_days.proof_recover` and rewrites
+`close_day` and the immutability trigger to snapshot it (moved here from F6);
+**version** = the (WHEN, THEN, RECOVERED) text tuple snapshotted on the day row at
+close, and observation rows snapshot item wording only (name, plus `cue_when` for
+cues) — no counter. The **focus cue** is `sprint_cues.is_focus` (partial unique per
+sprint, same shape as `is_highest`); its daily answer is the per-cue use row (one
+scale: yes / no / unsure / unanswered), asked first in step 2; removing it from the
+sprint follows the highest's rules; its consumer is F11's FOCUS tag. The
+**prevention** question (may a THEN be recorded as run when the Highest did not
+occur?) is decided here, with the follow-through denominator stated either way. In a
+multi-pick group any pick answers the whole group; untouched = unanswered. Snapshots
+are as-of-close, not as-of-date (backfill), stated in the entry. The table drop
+raises if either legacy table holds rows. `day_offered_items` gains `cue_when` and
+`proof_recover` (drop + recreate, grants re-applied). "Set up tomorrow" (B12 / C7,
+pure UI) moves to F8.
+
 ### F8 — Journal restyle: timeline, rail, Dusk, night mode
 *Stub (2026-09-06). Filled by `/interview`; the v8 handoff has no dark palette, so
 Claude derives night-mode tokens from Dusk and the user approves them inside that
@@ -545,6 +693,13 @@ sprints · Reviews with % of goal on finished rows); palette **Dusk** (accent
 sprint early and Replace vision. Moves the e2e pins (hero 92→64, highest name 22→16,
 title sizes) with the spec, not around them. No evaluator trigger.
 
+*Review notes 2026-09-07:* F8 = the journal (timeline, rail, Today card states,
+"Set up tomorrow" from F7) and the **Sprints** sidebar only. The Vision tab and its
+sidebar move to F9, the Insights sidebar to F11; the rail's Complete sprint / End
+sprint early and the Review gate card arrive with F10, the two-tap component with
+its first consumer. The rail's cue card shows `WHEN {cue_when}` under the name (no
+note column exists).
+
 ### F9 — Vision v2: one vision, three annual steps, obstacle link, dated reviews
 *Stub (2026-09-06). Filled by `/interview`. Scope: rows B8 C4 D1 D6 D7.* **One vision
 total** (user, 2026-09-06; overrides PRD §2 — rule 2 becomes "a sprint requires the
@@ -558,6 +713,16 @@ three cards · Library card · Sprints behind this vision). Reviews go to a
 `vision_reviews` table (date, still-true / needs-changes, evidence note); nothing
 overwritten. Evaluator: user-data table.
 
+*Review notes 2026-09-07:* step 3 requires all three parts (WHEN, THEN, RECOVERED
+WHEN), matching rule 6/22 as extended in F6 — an obstacle that is an active sprint's
+highest would otherwise be rejected by the trigger; vision edits reach sprints by
+reference exactly as library edits do (closed days keep their snapshot). The obstacle
+link is guarded: `archive_item` and `set_item_scope` refuse to archive or narrow the
+vision's obstacle. The migration is **data-transforming** (per-Area visions collapse
+to one active; the rest archived) → evaluator. The direct INSERT grant on `visions`
+is revoked once the atomic function exists. Includes the Vision tab and sidebar
+restyle (from F8).
+
 ### F10 — Sprint completion, End Early, postmortem, kit, next-sprint gate (was F6)
 *Re-scoped 2026-09-06 (rows B10 B17 C6); the text below is the v1 entry and is
 rewritten by `/interview`.* Adds to v1: Complete sprint in the rail's Celebration card;
@@ -567,6 +732,16 @@ Partly / Didn't) + one lesson + moved-the-vision + carry-forward per item (Keep 
 Promote to highest / Drop; Keep / test more / Drop) stored as the Area's kit, which
 pre-fills the next New Sprint's step 4; the lesson is pinned on Day 1 of the next
 sprint in that Area.
+*Review notes 2026-09-07:* F10 also owns, from F5's decisions (recorded there as
+"F6", the old number): the closure timestamp, `sprint_streak_at` stopping at the
+closure date (cancelled days are neither missed nor counted), and backfill closing
+with the sprint. The **single-sprint insight calculations** (one SQL function per
+card: impediment impact, response follow-through, response recovery, cue usefulness,
+with the C5 rules) are built here, since the postmortem renders the cards; F11 adds
+the cross-sprint view. The postmortem reads the highest's proof from the sprint's
+last closed day snapshot, not live from `impediments`. Kit pre-fill filters archived
+items (rule 24). Review gate card, Celebration-card actions and the two-tap component
+arrive here.
 - **Behavior (v1).** Reaching the Goal enables Complete Sprint (not automatic). End Sprint
   Early is always available. Both cancel future days (not counted as missed), set the
   status, show Celebration on success, and open the Review, which must be completed
@@ -602,6 +777,15 @@ denominators; closed, non-cancelled days only; cross-sprint lists each sprint's 
 comparison grouped by item + version + Area, never pooled; "n ≥ 3 does not establish
 reliability" stated; associations, never causes. Finished-sprint sidebar rows carry
 Met / Under and % of goal (the §1 measurement). Task completion vs result → BACKLOG.
+*Review notes 2026-09-07:* the single-sprint calculations are F10's; F11 = the
+Across-sprints view (per-sprint comparisons grouped by item + version + Area, where
+version is the proof text tuple on the day snapshot), Suggested kit, How to read
+this, and the Insights sidebar (moved from F8) whose finished-sprint rows carry Met /
+Under, % of goal and the completion type (normal / early / ended early, the Part 1
+measurement). Card copy is rewritten for median attainment (the README strings are
+for on-target rate) and the recovery card compares with vs without the response
+(D3b / C5), not only "after the response ran". The FOCUS tag marks the focus cue on
+the Cue usefulness card, pinned first.
 - **Behavior (v1).** Insights tab: Health, Wealth, Relationships, All Areas, Sprint History.
   Per area and overall: % of Goal per sprint, impediment/cue frequency on lowest- vs
   highest-result days, most damaging / most useful items, task completion vs result.
@@ -726,31 +910,33 @@ recommendations in `docs/RECONCILIATION-2026-09-06.md`):
 
 ## 6. Stack, auth/security model, shared entities
 - Next.js 16 App Router (current release at build time; "middleware" is `proxy.ts`
-  in 16), TypeScript, Tailwind; Supabase (Postgres 17, Auth, RLS);
+  in 16), TypeScript, plain CSS (Tailwind dropped 2026-09-07); Supabase (Postgres 17, Auth, RLS);
   Vercel Hobby; Resend free tier for reminders; Vitest + Playwright; local stack via
   `npx supabase start` (Docker); migrations in `supabase/migrations/`, forward-only.
 - Auth: Supabase magic link, signups disabled, users exist only via dashboard seed
-  (owner) or admin invite (F8). Session from `@supabase/ssr` cookies; middleware
+  (owner) or admin invite (F12). Session from `@supabase/ssr` cookies; middleware
   redirects unauthenticated `/sprints|/vision|/insights`. Service role key only in
   server routes for invites; never in client code.
 - Authorization: RLS default-deny on every table, `user_id = auth.uid()`; circle
-  reads through `is_circle_mate()` helper and the `circle_feed` view (F8). Invariants
+  reads through `is_circle_mate()` helper and the `circle_feed` view (F12). Invariants
   live in DB functions and triggers (`start_sprint`, `close_day`, `save_targets`,
   `archive_item`, status-transition trigger, immutability trigger).
 - Entities: `visions`, `sprints`, `sprint_days`, `tasks`, `cues`, `impediments`,
-  `sprint_cues`, `sprint_impediments`, `day_cue_helped`, `day_impediment_hurt`,
-  `reviews`, `profiles`, `circles`, `circle_members`, `reminder_log`. All user-scoped
+  `sprint_cues` (with `is_focus`, F7), `sprint_impediments`, the F7 day-observation
+  tables (replacing `day_cue_helped` / `day_impediment_hurt`, dropped in F7),
+  `vision_reviews` (F9), `reviews` (F10), `profiles`, `circles`, `circle_members`
+  (F12), `reminder_log` (F13). All user-scoped
   tables: `user_id` FK cascade, `created_at`, `updated_at` trigger, `archived_at`
   where archive exists, indexes on owner FK and filter columns.
 
 ## 7. Risks (pre-mortem: this spec failed because…)
 1. **RLS or a trigger had a hole and a member saw or altered another's record.**
    Mitigation: every policy and trigger has an individual break-and-confirm test;
-   evaluator on F1 and F8.
+   evaluator on F1 and F12.
 2. **Day/streak logic disagreed with the calendar and the owner stopped trusting it.**
    Mitigation: all date logic in SQL functions using the sprint tz, table-tested
    with fixed clocks including DST; no date math in React.
-3. **F1–F10 never finished because each feature grew.** Mitigation: acceptance
+3. **F1–F14 never finished because each feature grew.** Mitigation: acceptance
    criteria above are the whole feature; anything else goes to BACKLOG; one open
    metric row at a time makes drift visible.
 
@@ -770,5 +956,5 @@ recommendations in `docs/RECONCILIATION-2026-09-06.md`):
   `app/(app)/sprints/[area]/page.tsx` (Today) · `app/(app)/sprints/new` ·
   `lib/supabase/{server,client}.ts` · `lib/sprintDay.ts` · tests under `tests/db`,
   `tests/unit`, `e2e/`.
-- F2–F10 each add one migration `000N_<feature>.sql`, their pages under `app/(app)/`,
+- F2–F14 each add one migration `000N_<feature>.sql`, their pages under `app/(app)/`,
   and their tests; never edit an applied migration.

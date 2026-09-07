@@ -113,6 +113,13 @@ run data → close flow → screen, so the restyle is built once, with its final
 | F13 | Evening reminder | old F9 | yes |
 | F14 | Pre-release | old F10 | yes |
 
+Amended 2026-09-07 after the spec review (`docs/audits/spec-review-2026-09-07.md`):
+the single-sprint calculations (C5) move from F11 into F10, since the postmortem
+renders the cards; F8 keeps the journal and the Sprints sidebar only (Vision tab and
+sidebar → F9, Insights sidebar → F11); "Set up tomorrow" (B12 / C7) moves from F7
+to F8; the day-row snapshot of RECOVERED WHEN moves from F6 to F7; the cue column is
+`cue_when`.
+
 Alternative considered: restyle first (F8 before F6/F7). Rejected because the Today
 card's "reviewing" state renders the new question set; building it on the old
 questions and swapping later is one screen built twice.
