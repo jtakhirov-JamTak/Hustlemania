@@ -159,6 +159,15 @@ export async function removeSprintItem(sprintId: string, kind: ItemKind, itemId:
   return {};
 }
 
+/** F7: moves the sprint's focus cue to another of its cues; the DB keeps exactly one. */
+export async function setFocusCue(sprintId: string, cueId: string): Promise<Result> {
+  const supabase = await createClient();
+  const res = await supabase.rpc("set_focus_cue", { p_sprint_id: sprintId, p_cue_id: cueId });
+  if (res.error) return failed("setFocusCue", res.error, { sprintId, cueId });
+  revalidatePath("/sprints", "layout");
+  return {};
+}
+
 /**
  * Designates the Highest Impediment. A Proof Point supplied with it is written by the
  * same DB function, so a rejected designation changes nothing in the library.

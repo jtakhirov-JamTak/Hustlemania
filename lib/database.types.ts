@@ -73,41 +73,50 @@ export type Database = {
         }
         Relationships: []
       }
-      day_cue_helped: {
+      day_cue_observations: {
         Row: {
           created_at: string
           cue_id: string
+          cue_when: string | null
           id: string
-          is_most_useful: boolean
+          name: string
           sprint_day_id: string
+          used: string
           user_id: string
+          was_focus: boolean
         }
         Insert: {
           created_at?: string
           cue_id: string
+          cue_when?: string | null
           id?: string
-          is_most_useful?: boolean
+          name: string
           sprint_day_id: string
+          used: string
           user_id: string
+          was_focus?: boolean
         }
         Update: {
           created_at?: string
           cue_id?: string
+          cue_when?: string | null
           id?: string
-          is_most_useful?: boolean
+          name?: string
           sprint_day_id?: string
+          used?: string
           user_id?: string
+          was_focus?: boolean
         }
         Relationships: [
           {
-            foreignKeyName: "day_cue_helped_cue_id_fkey"
+            foreignKeyName: "day_cue_observations_cue_id_fkey"
             columns: ["cue_id"]
             isOneToOne: false
             referencedRelation: "cues"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "day_cue_helped_sprint_day_id_fkey"
+            foreignKeyName: "day_cue_observations_sprint_day_id_fkey"
             columns: ["sprint_day_id"]
             isOneToOne: false
             referencedRelation: "sprint_days"
@@ -115,41 +124,47 @@ export type Database = {
           },
         ]
       }
-      day_impediment_hurt: {
+      day_impediment_observations: {
         Row: {
           created_at: string
           id: string
           impediment_id: string
-          is_most_damaging: boolean
+          name: string
+          occurred: string
           sprint_day_id: string
           user_id: string
+          was_highest: boolean
         }
         Insert: {
           created_at?: string
           id?: string
           impediment_id: string
-          is_most_damaging?: boolean
+          name: string
+          occurred: string
           sprint_day_id: string
           user_id: string
+          was_highest?: boolean
         }
         Update: {
           created_at?: string
           id?: string
           impediment_id?: string
-          is_most_damaging?: boolean
+          name?: string
+          occurred?: string
           sprint_day_id?: string
           user_id?: string
+          was_highest?: boolean
         }
         Relationships: [
           {
-            foreignKeyName: "day_impediment_hurt_impediment_id_fkey"
+            foreignKeyName: "day_impediment_observations_impediment_id_fkey"
             columns: ["impediment_id"]
             isOneToOne: false
             referencedRelation: "impediments"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "day_impediment_hurt_sprint_day_id_fkey"
+            foreignKeyName: "day_impediment_observations_sprint_day_id_fkey"
             columns: ["sprint_day_id"]
             isOneToOne: false
             referencedRelation: "sprint_days"
@@ -207,6 +222,7 @@ export type Database = {
           added_at: string
           cue_id: string
           id: string
+          is_focus: boolean
           removed_at: string | null
           sprint_id: string
           user_id: string
@@ -215,6 +231,7 @@ export type Database = {
           added_at?: string
           cue_id: string
           id?: string
+          is_focus?: boolean
           removed_at?: string | null
           sprint_id: string
           user_id: string
@@ -223,6 +240,7 @@ export type Database = {
           added_at?: string
           cue_id?: string
           id?: string
+          is_focus?: boolean
           removed_at?: string | null
           sprint_id?: string
           user_id?: string
@@ -254,10 +272,14 @@ export type Database = {
           day_index: number
           highest_impediment_id: string | null
           id: string
+          impact: string | null
           intention: string | null
           notes: string | null
+          proof_recover: string | null
           proof_then: string | null
           proof_when: string | null
+          recovered: string | null
+          response: string | null
           sprint_id: string
           target: number
           updated_at: string
@@ -272,10 +294,14 @@ export type Database = {
           day_index: number
           highest_impediment_id?: string | null
           id?: string
+          impact?: string | null
           intention?: string | null
           notes?: string | null
+          proof_recover?: string | null
           proof_then?: string | null
           proof_when?: string | null
+          recovered?: string | null
+          response?: string | null
           sprint_id: string
           target: number
           updated_at?: string
@@ -290,10 +316,14 @@ export type Database = {
           day_index?: number
           highest_impediment_id?: string | null
           id?: string
+          impact?: string | null
           intention?: string | null
           notes?: string | null
+          proof_recover?: string | null
           proof_then?: string | null
           proof_when?: string | null
+          recovered?: string | null
+          response?: string | null
           sprint_id?: string
           target?: number
           updated_at?: string
@@ -540,11 +570,12 @@ export type Database = {
       close_day: {
         Args: {
           p_actual: number
-          p_helped?: string[]
-          p_hurt?: string[]
-          p_most_damaging?: string
-          p_most_useful?: string
+          p_cues?: Json
+          p_impact?: string
+          p_impediments?: Json
           p_notes?: string
+          p_recovered?: string
+          p_response?: string
           p_sprint_day_id: string
         }
         Returns: number
@@ -552,10 +583,13 @@ export type Database = {
       day_offered_items: {
         Args: { p_sprint_day_id: string }
         Returns: {
+          cue_when: string
           explanation: string
+          is_focus: boolean
           item_id: string
           kind: string
           name: string
+          proof_recover: string
           proof_then: string
           proof_when: string
           rank: number
@@ -580,6 +614,10 @@ export type Database = {
       }
       save_targets: {
         Args: { p_sprint_id: string; p_targets: number[] }
+        Returns: undefined
+      }
+      set_focus_cue: {
+        Args: { p_cue_id: string; p_sprint_id: string }
         Returns: undefined
       }
       set_highest_impediment: {
@@ -619,6 +657,7 @@ export type Database = {
           p_confidence: number
           p_cue_ids: string[]
           p_currency: string
+          p_focus_cue_id: string
           p_highest_impediment_id: string
           p_impediment_ids: string[]
           p_intention?: string

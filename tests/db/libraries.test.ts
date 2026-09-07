@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { TransactionSql } from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { zoneOffUtcDate } from "../support/zones";
 import {
@@ -7,6 +10,7 @@ import {
   expectRpcError,
   insertCue,
   insertImpediment,
+  insertSprintRows,
   insertVision,
   moneySprintArgs,
   rpc,
@@ -49,10 +53,10 @@ describe("F2 RLS isolation", () => {
     await rpc(a, "close_day", {
       p_sprint_day_id: day1,
       p_actual: 100,
-      p_hurt: [impId],
-      p_most_damaging: impId,
-      p_helped: [cueId],
-      p_most_useful: cueId,
+      p_impediments: [{ item_id: impId, answer: "yes" }],
+      p_cues: [{ item_id: cueId, answer: "yes" }],
+      p_response: "yes",
+      p_recovered: "no",
     });
   });
 
@@ -61,9 +65,9 @@ describe("F2 RLS isolation", () => {
     await deleteTestUser(b);
   });
 
-  const TABLES = ["cues", "impediments", "sprint_cues", "sprint_impediments", "day_impediment_hurt", "day_cue_helped"] as const;
+  const TABLES = ["cues", "impediments", "sprint_cues", "sprint_impediments", "day_impediment_observations", "day_cue_observations"] as const;
 
-  it("the owner sees one row in every F2 table", async () => {
+  it("the owner sees one row in every F2 and F7 table", async () => {
     for (const t of TABLES) {
       const res = await a.client.from(t).select("id");
       expect(res.error, t).toBeNull();
@@ -329,6 +333,9 @@ describe("library rules and sprint membership", () => {
   });
 
   it("archive_item removes the item from every affected sprint and archives it, atomically", async () => {
+    // F7: cue A has been the focus since the start; the focus cannot be archived, so move it first.
+    expect((await rpc<ArchiveResult>(u, "archive_item", { p_kind: "cue", p_item_id: cueA })).failing![0].reason).toBe("no_focus_cue");
+    await rpc(u, "set_focus_cue", { p_sprint_id: sprintId, p_cue_id: cueB });
     const res = await rpc<ArchiveResult>(u, "archive_item", { p_kind: "cue", p_item_id: cueA });
     expect(res).toEqual({ ok: true, removed_from: 1 });
     const [cue] = await sql<{ archived_at: Date | null }[]>`select archived_at from public.cues where id = ${cueA}`;
@@ -369,8 +376,11 @@ describe("library rules and sprint membership", () => {
     // Widening back to global: nothing affected.
     expect(await rpc<ArchiveResult>(u, "set_item_scope", { p_kind: "cue", p_item_id: cueB, p_scope: "global" })).toEqual({ ok: true, removed_from: 0 });
 
-    // With a second cue in the sprint, narrowing removes cueB from it atomically.
+    // With a second cue in the sprint, narrowing removes cueB from it atomically — once
+    // the focus (F7) has moved off it; the focus cue is refused with no_focus_cue.
     await rpc(u, "add_sprint_item", { p_sprint_id: sprintId, p_kind: "cue", p_item_id: cueA });
+    expect((await rpc<ArchiveResult>(u, "set_item_scope", { p_kind: "cue", p_item_id: cueB, p_scope: "health" })).failing![0].reason).toBe("no_focus_cue");
+    await rpc(u, "set_focus_cue", { p_sprint_id: sprintId, p_cue_id: cueA });
     expect(await rpc<ArchiveResult>(u, "set_item_scope", { p_kind: "cue", p_item_id: cueB, p_scope: "health" })).toEqual({ ok: true, removed_from: 1 });
     const [b] = await sql<{ scope: string }[]>`select scope from public.cues where id = ${cueB}`;
     expect(b.scope).toBe("health");
@@ -483,9 +493,10 @@ describe("library rules and sprint membership", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Day Close: offered items (rule 23, in the sprint's zone), selections, snapshot.
+// Day Close (F7): offered items (rule 23, in the sprint's zone), observations, the
+// Highest's answers, snapshots, immutability.
 // ---------------------------------------------------------------------------
-describe("close_day with hurt/helped selections", () => {
+describe("close_day with day observations (F7)", () => {
   // A zone whose calendar date differs from UTC's right now (tests/support/zones), so a
   // UTC-based ::date in day_offered_items would put memberships on the wrong day.
   const KTZ = zoneOffUtcDate();
@@ -507,12 +518,14 @@ describe("close_day with hurt/helped selections", () => {
     cueRemoved = await insertCue(u, "Cue removed today");
     impHighest = await insertImpediment(u, "Highest", PROOF);
     impRemoved = await insertImpediment(u, "Removed today");
+    await u.client.from("cues").update({ cue_when: "I open the calendar" }).eq("id", cueA);
     sprintId = await startSprint(
       u,
       moneySprintArgs({
         p_area: "health",
         p_tz: KTZ,
         p_cue_ids: [cueA, cueRemoved],
+        p_focus_cue_id: cueA,
         p_impediment_ids: [impHighest, impRemoved],
         p_highest_impediment_id: impHighest,
         p_start_date: today,
@@ -531,11 +544,17 @@ describe("close_day with hurt/helped selections", () => {
     await deleteTestUser(u);
   });
 
-  it("offers the items whose membership overlapped the day, later removal notwithstanding", async () => {
+  type Offered = { kind: string; item_id: string; name: string; cue_when: string | null; proof_recover: string | null; is_focus: boolean };
+
+  it("offers the items whose membership overlapped the day, later removal notwithstanding, with the F6 columns and the focus flag", async () => {
     const res = await u.client.rpc("day_offered_items", { p_sprint_day_id: day1 });
     expect(res.error).toBeNull();
-    const ids = (res.data as { kind: string; item_id: string }[]).map((r) => `${r.kind}:${r.item_id}`).sort();
+    const rows = res.data as Offered[];
+    const ids = rows.map((r) => `${r.kind}:${r.item_id}`).sort();
     expect(ids).toEqual([`cue:${cueA}`, `cue:${cueRemoved}`, `impediment:${impHighest}`, `impediment:${impRemoved}`].sort());
+    expect(rows.find((r) => r.item_id === cueA)).toMatchObject({ cue_when: "I open the calendar", is_focus: true, proof_recover: null });
+    expect(rows.find((r) => r.item_id === cueRemoved)).toMatchObject({ is_focus: false });
+    expect(rows.find((r) => r.item_id === impHighest)).toMatchObject({ proof_recover: PROOF.proofRecover, is_focus: false, cue_when: null });
   });
 
   it("membership boundaries are evaluated at midnight in the sprint's zone (table test)", async () => {
@@ -570,75 +589,107 @@ describe("close_day with hurt/helped selections", () => {
     await sql`delete from public.sprint_cues where cue_id = ${probe}`;
   });
 
-  it("rejects selections outside the offered set and missing most-damaging / most-useful picks", async () => {
+  const yes = (item_id: string) => ({ item_id, answer: "yes" });
+  const no = (item_id: string) => ({ item_id, answer: "no" });
+
+  it("rejects answers off the scale, duplicates, non-arrays, and items this day never offered", async () => {
     const stranger = await insertImpediment(u, "Never in sprint");
     const strangerCue = await insertCue(u, "Never in sprint");
     const base = { p_sprint_day_id: day1, p_actual: 100 };
-    await expectRpcError(u, "close_day", { ...base, p_hurt: [stranger], p_most_damaging: stranger }, "item_not_offered");
-    await expectRpcError(u, "close_day", { ...base, p_helped: [strangerCue], p_most_useful: strangerCue }, "item_not_offered");
-    await expectRpcError(u, "close_day", { ...base, p_hurt: [impHighest] }, "most_damaging_required");
-    await expectRpcError(u, "close_day", { ...base, p_hurt: [impHighest], p_most_damaging: impRemoved }, "most_damaging_required");
-    await expectRpcError(u, "close_day", { ...base, p_most_damaging: impHighest }, "most_damaging_required");
-    await expectRpcError(u, "close_day", { ...base, p_helped: [cueA] }, "most_useful_required");
-    await expectRpcError(u, "close_day", { ...base, p_helped: [cueA], p_most_useful: cueRemoved }, "most_useful_required");
+    await expectRpcError(u, "close_day", { ...base, p_impediments: [{ item_id: impHighest, answer: "maybe" }] }, "invalid_answer");
+    await expectRpcError(u, "close_day", { ...base, p_cues: [{ item_id: cueA }] }, "invalid_answer");
+    await expectRpcError(u, "close_day", { ...base, p_cues: { item_id: cueA, answer: "yes" } }, "invalid_answer");
+    await expectRpcError(u, "close_day", { ...base, p_impediments: [yes(impHighest), no(impHighest)] }, "duplicate_item");
+    await expectRpcError(u, "close_day", { ...base, p_cues: [yes(cueA), yes(cueA)] }, "duplicate_item");
+    await expectRpcError(u, "close_day", { ...base, p_impediments: [yes(stranger)] }, "item_not_offered");
+    await expectRpcError(u, "close_day", { ...base, p_cues: [yes(strangerCue)] }, "item_not_offered");
+    const [row] = await sql<{ closed_at: Date | null }[]>`select closed_at from public.sprint_days where id = ${day1}`;
+    expect(row.closed_at).toBeNull();
+    const [n] = await sql<{ n: number }[]>`select count(*)::int as n from public.day_impediment_observations where sprint_day_id = ${day1}`;
+    expect(n.n).toBe(0);
+  });
+
+  it("requires the response and the recovery exactly when the highest occurred, and refuses them otherwise", async () => {
+    const base = { p_sprint_day_id: day1, p_actual: 100, p_impediments: [yes(impHighest)] };
+    await expectRpcError(u, "close_day", base, "response_required");
+    await expectRpcError(u, "close_day", { ...base, p_response: "yes" }, "recovered_required");
+    await expectRpcError(u, "close_day", { ...base, p_response: "sometimes", p_recovered: "yes" }, "invalid_answer");
+    await expectRpcError(u, "close_day", { ...base, p_response: "yes", p_recovered: "partially" }, "invalid_answer");
+    await expectRpcError(u, "close_day", { ...base, p_response: "yes", p_recovered: "yes", p_impact: "huge" }, "invalid_answer");
+    // Not occurred, unsure, or never answered: the three questions do not apply.
+    await expectRpcError(u, "close_day", { ...base, p_impediments: [no(impHighest)], p_response: "yes", p_recovered: "yes" }, "response_not_applicable");
+    await expectRpcError(u, "close_day", { ...base, p_impediments: [{ item_id: impHighest, answer: "unsure" }], p_recovered: "yes" }, "response_not_applicable");
+    await expectRpcError(u, "close_day", { ...base, p_impediments: [], p_impact: "some" }, "response_not_applicable");
     const [row] = await sql<{ closed_at: Date | null }[]>`select closed_at from public.sprint_days where id = ${day1}`;
     expect(row.closed_at).toBeNull();
   });
 
-  it("closes with hurt/helped rows and a snapshot of the highest impediment that survives later edits", async () => {
+  it("closes with one row per offered item, `unanswered` for the untouched group, and snapshots that survive later edits", async () => {
     await rpc(u, "close_day", {
       p_sprint_day_id: day1,
       p_actual: 100,
       p_notes: "ok",
-      p_hurt: [impHighest, impRemoved],
-      p_most_damaging: impRemoved,
-      p_helped: [cueRemoved],
-      p_most_useful: cueRemoved,
+      p_impediments: [yes(impHighest)],
+      p_response: "partially",
+      p_recovered: "no",
+      p_impact: "some",
     });
-    const hurt = await u.client.from("day_impediment_hurt").select("impediment_id, is_most_damaging").eq("sprint_day_id", day1);
-    expect(hurt.data!.sort((a, b) => a.impediment_id.localeCompare(b.impediment_id))).toEqual(
-      [
-        { impediment_id: impHighest, is_most_damaging: false },
-        { impediment_id: impRemoved, is_most_damaging: true },
-      ].sort((a, b) => a.impediment_id.localeCompare(b.impediment_id)),
-    );
-    const helped = await u.client.from("day_cue_helped").select("cue_id, is_most_useful").eq("sprint_day_id", day1);
-    expect(helped.data).toEqual([{ cue_id: cueRemoved, is_most_useful: true }]);
+    const imps = await u.client.from("day_impediment_observations").select("impediment_id, name, occurred, was_highest").eq("sprint_day_id", day1).order("name");
+    expect(imps.error).toBeNull();
+    expect(imps.data).toEqual([
+      { impediment_id: impHighest, name: "Highest", occurred: "yes", was_highest: true },
+      { impediment_id: impRemoved, name: "Removed today", occurred: "unanswered", was_highest: false },
+    ]);
+    const cues = await u.client.from("day_cue_observations").select("cue_id, name, cue_when, used, was_focus").eq("sprint_day_id", day1).order("name");
+    expect(cues.error).toBeNull();
+    expect(cues.data).toEqual([
+      { cue_id: cueA, name: "Cue A", cue_when: "I open the calendar", used: "unanswered", was_focus: true },
+      { cue_id: cueRemoved, name: "Cue removed today", cue_when: null, used: "unanswered", was_focus: false },
+    ]);
 
-    const [snap] = await sql<{ highest_impediment_id: string; proof_when: string; proof_then: string }[]>`
-      select highest_impediment_id, proof_when, proof_then from public.sprint_days where id = ${day1}`;
-    expect(snap).toEqual({ highest_impediment_id: impHighest, proof_when: PROOF.proofWhen, proof_then: PROOF.proofThen });
+    const snapshot = () => sql<{ highest_impediment_id: string; proof_when: string; proof_then: string; proof_recover: string; response: string; recovered: string; impact: string }[]>`
+      select highest_impediment_id, proof_when, proof_then, proof_recover, response, recovered, impact from public.sprint_days where id = ${day1}`;
+    const expected = {
+      highest_impediment_id: impHighest,
+      proof_when: PROOF.proofWhen,
+      proof_then: PROOF.proofThen,
+      proof_recover: PROOF.proofRecover,
+      response: "partially",
+      recovered: "no",
+      impact: "some",
+    };
+    expect((await snapshot())[0]).toEqual(expected);
 
-    await u.client.from("impediments").update({ proof_when: "Edited after the close" }).eq("id", impHighest);
-    const [after] = await sql<{ proof_when: string }[]>`select proof_when from public.sprint_days where id = ${day1}`;
-    expect(after.proof_when).toBe(PROOF.proofWhen);
+    // Later library edits reach neither the day row nor the observation rows.
+    await u.client.from("impediments").update({ proof_when: "Edited after the close", proof_recover: "Edited too", name: "Renamed" }).eq("id", impHighest);
+    await u.client.from("cues").update({ name: "Cue A renamed", cue_when: "edited" }).eq("id", cueA);
+    expect((await snapshot())[0]).toEqual(expected);
+    const [imp] = await sql<{ name: string }[]>`select name from public.day_impediment_observations where sprint_day_id = ${day1} and impediment_id = ${impHighest}`;
+    expect(imp.name).toBe("Highest");
+    const [cue] = await sql<{ name: string; cue_when: string }[]>`select name, cue_when from public.day_cue_observations where sprint_day_id = ${day1} and cue_id = ${cueA}`;
+    expect(cue).toEqual({ name: "Cue A", cue_when: "I open the calendar" });
   });
 
-  it("a closed day's selections and snapshot are immutable", async () => {
-    await expect(sql`update public.day_impediment_hurt set is_most_damaging = false where sprint_day_id = ${day1}`).rejects.toThrow(/day_closed/);
-    await expect(sql`update public.day_cue_helped set is_most_useful = false where sprint_day_id = ${day1}`).rejects.toThrow(/day_closed/);
-    await expect(sql`update public.sprint_days set proof_when = 'x' where id = ${day1}`).rejects.toThrow(/day_closed/);
-    await expect(sql`update public.sprint_days set highest_impediment_id = null where id = ${day1}`).rejects.toThrow(/day_closed/);
-    const ins = await u.client.from("day_cue_helped").insert({ sprint_day_id: day1, user_id: u.id, cue_id: cueA });
+  it("a closed day's observations and answers are immutable; the API role cannot write the tables", async () => {
+    await expect(sql`update public.day_impediment_observations set occurred = 'no' where sprint_day_id = ${day1}`).rejects.toThrow(/day_closed/);
+    await expect(sql`update public.day_cue_observations set used = 'yes' where sprint_day_id = ${day1}`).rejects.toThrow(/day_closed/);
+    for (const [column, value] of [
+      ["proof_recover", "'x'"],
+      ["response", "'yes'"],
+      ["recovered", "'yes'"],
+      ["impact", "'a_lot'"],
+    ]) {
+      await expect(sql.unsafe(`update public.sprint_days set ${column} = ${value} where id = '${day1}'`), column).rejects.toThrow(/day_closed/);
+    }
+    const ins = await u.client.from("day_cue_observations").insert({ sprint_day_id: day1, user_id: u.id, cue_id: cueA, name: "x", used: "yes" });
     expect(ins.error!.code).toBe("42501");
-    const del = await u.client.from("day_impediment_hurt").delete().eq("sprint_day_id", day1);
+    const upd = await u.client.from("day_impediment_observations").update({ occurred: "no" }).eq("sprint_day_id", day1);
+    expect(upd.error!.code).toBe("42501");
+    const del = await u.client.from("day_impediment_observations").delete().eq("sprint_day_id", day1);
     expect(del.error!.code).toBe("42501");
   });
 
-  it("'None today' on both steps is valid and records no selection rows", async () => {
-    // Day 2 is in the future in the sprint zone unless the clock has rolled over; close it only if allowed.
-    const res = await u.client.rpc("close_day", { p_sprint_day_id: day2, p_actual: 0 });
-    if (res.error) {
-      expect(res.error.message).toMatch(/day_in_future/);
-      return;
-    }
-    const hurt = await u.client.from("day_impediment_hurt").select("id").eq("sprint_day_id", day2);
-    const helped = await u.client.from("day_cue_helped").select("id").eq("sprint_day_id", day2);
-    expect(hurt.data).toEqual([]);
-    expect(helped.data).toEqual([]);
-  });
-
-  it("deleting the user cascades through every F2 table without an FK error", async () => {
+  it("deleting the user cascades through every F2 and F7 table without an FK error", async () => {
     const victim = await createTestUser("lib-cascade");
     const items = await seedItems(victim);
     await insertVision(victim, "wealth");
@@ -647,18 +698,234 @@ describe("close_day with hurt/helped selections", () => {
     await rpc(victim, "close_day", {
       p_sprint_day_id: d.id,
       p_actual: 1,
-      p_hurt: items.p_impediment_ids,
-      p_most_damaging: items.p_highest_impediment_id,
-      p_helped: items.p_cue_ids,
-      p_most_useful: items.p_cue_ids[0],
+      p_impediments: [yes(items.p_highest_impediment_id)],
+      p_cues: [yes(items.p_cue_ids[0])],
+      p_response: "yes",
+      p_recovered: "yes",
     });
     await deleteTestUser(victim);
     const [left] = await sql<{ n: number }[]>`
       select (select count(*) from public.cues where user_id = ${victim.id})
            + (select count(*) from public.impediments where user_id = ${victim.id})
            + (select count(*) from public.sprint_cues where user_id = ${victim.id})
-           + (select count(*) from public.day_cue_helped where user_id = ${victim.id}) as n`;
+           + (select count(*) from public.day_cue_observations where user_id = ${victim.id})
+           + (select count(*) from public.day_impediment_observations where user_id = ${victim.id}) as n`;
     expect(Number(left.n)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F7 — the focus cue: required at start, one per sprint, moved with set_focus_cue,
+// refused by remove / archive / scope through sprint_invalid_reason.
+// ---------------------------------------------------------------------------
+describe("F7 focus cue", () => {
+  let u: TestUser;
+  let today: string;
+  let cueA: string;
+  let cueB: string;
+  let cueC: string;
+  let imp: string;
+  let sprintId: string;
+  let day1: string;
+
+  const focusOf = async () =>
+    (await sql<{ cue_id: string }[]>`select cue_id from public.sprint_cues where sprint_id = ${sprintId} and is_focus and removed_at is null`).map((r) => r.cue_id);
+
+  beforeAll(async () => {
+    u = await createTestUser("lib-focus");
+    today = await dbTodayIn(TZ);
+    await insertVision(u, "wealth");
+    cueA = await insertCue(u, "Cue A");
+    cueB = await insertCue(u, "Cue B");
+    cueC = await insertCue(u, "Cue C, never in the sprint");
+    imp = await insertImpediment(u, "Highest", PROOF);
+  });
+
+  afterAll(async () => {
+    await deleteTestUser(u);
+  });
+
+  it("start_sprint refuses a focus outside the cues, or none at all, and writes nothing", async () => {
+    const args = moneySprintArgs({ p_cue_ids: [cueA, cueB], p_impediment_ids: [imp], p_highest_impediment_id: imp, p_start_date: today });
+    await expectRpcError(u, "start_sprint", { ...args, p_focus_cue_id: cueC }, "no_focus_cue");
+    await expectRpcError(u, "start_sprint", { ...args, p_focus_cue_id: null }, "no_focus_cue");
+    const [n] = await sql<{ n: number }[]>`select count(*)::int as n from public.sprints where user_id = ${u.id}`;
+    expect(n.n).toBe(0);
+  });
+
+  it("starts with the focus flag on exactly the chosen cue", async () => {
+    sprintId = await startSprint(u, moneySprintArgs({ p_cue_ids: [cueA, cueB], p_focus_cue_id: cueB, p_impediment_ids: [imp], p_highest_impediment_id: imp, p_start_date: today }));
+    expect(await focusOf()).toEqual([cueB]);
+    const [d] = await sql<{ id: string }[]>`select id from public.sprint_days where sprint_id = ${sprintId} and day_index = 1`;
+    day1 = d.id;
+  });
+
+  it("the partial unique index and the check keep one active focus per sprint", async () => {
+    await expect(sql`update public.sprint_cues set is_focus = true where sprint_id = ${sprintId} and cue_id = ${cueA}`).rejects.toThrow(/sprint_cues_one_focus/);
+    await expect(sql`update public.sprint_cues set removed_at = now() where sprint_id = ${sprintId} and is_focus`).rejects.toThrow(/sprint_cues_focus_active_check/);
+    expect(await focusOf()).toEqual([cueB]);
+  });
+
+  it("set_focus_cue moves the flag atomically and refuses a non-member or a stranger", async () => {
+    await rpc(u, "set_focus_cue", { p_sprint_id: sprintId, p_cue_id: cueA });
+    expect(await focusOf()).toEqual([cueA]);
+    await expectRpcError(u, "set_focus_cue", { p_sprint_id: sprintId, p_cue_id: cueC }, "not_in_sprint");
+    expect(await focusOf()).toEqual([cueA]);
+    const other = await createTestUser("lib-focus-other");
+    try {
+      await expectRpcError(other, "set_focus_cue", { p_sprint_id: sprintId, p_cue_id: cueA }, "sprint_not_found");
+    } finally {
+      await deleteTestUser(other);
+    }
+  });
+
+  it("the focus cue cannot be removed, archived or narrowed while a non-focus cue can", async () => {
+    await expectRpcError(u, "remove_sprint_item", { p_sprint_id: sprintId, p_kind: "cue", p_item_id: cueA }, "no_focus_cue");
+    const archived = await rpc<ArchiveResult>(u, "archive_item", { p_kind: "cue", p_item_id: cueA });
+    expect(archived.ok).toBe(false);
+    expect(archived.failing!.map((f) => f.reason)).toEqual(["no_focus_cue"]);
+    const scoped = await rpc<ArchiveResult>(u, "set_item_scope", { p_kind: "cue", p_item_id: cueA, p_scope: "health" });
+    expect(scoped.ok).toBe(false);
+    expect(scoped.failing!.map((f) => f.reason)).toEqual(["no_focus_cue"]);
+    const [row] = await sql<{ archived_at: Date | null; scope: string }[]>`select archived_at, scope from public.cues where id = ${cueA}`;
+    expect(row).toEqual({ archived_at: null, scope: "global" });
+    // The other cue is still free to go, and to come back.
+    await rpc(u, "remove_sprint_item", { p_sprint_id: sprintId, p_kind: "cue", p_item_id: cueB });
+    await rpc(u, "add_sprint_item", { p_sprint_id: sprintId, p_kind: "cue", p_item_id: cueB });
+    expect(await focusOf()).toEqual([cueA]);
+  });
+
+  it("None on both groups writes a `no` row per offered item and leaves the Highest's answers null", async () => {
+    await rpc(u, "close_day", {
+      p_sprint_day_id: day1,
+      p_actual: 10,
+      p_impediments: [{ item_id: imp, answer: "no" }],
+      p_cues: [
+        { item_id: cueA, answer: "no" },
+        { item_id: cueB, answer: "no" },
+      ],
+    });
+    const cues = await sql<{ cue_id: string; used: string; was_focus: boolean }[]>`
+      select cue_id, used, was_focus from public.day_cue_observations where sprint_day_id = ${day1} order by was_focus desc`;
+    expect(cues).toEqual([
+      { cue_id: cueA, used: "no", was_focus: true },
+      { cue_id: cueB, used: "no", was_focus: false },
+    ]);
+    const [day] = await sql<{ response: string | null; recovered: string | null; impact: string | null; highest_impediment_id: string }[]>`
+      select response, recovered, impact, highest_impediment_id from public.sprint_days where id = ${day1}`;
+    expect(day).toEqual({ response: null, recovered: null, impact: null, highest_impediment_id: imp });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F7 — legacy days and the migration's guards.
+// ---------------------------------------------------------------------------
+describe("F7 legacy days and 0010 guards", () => {
+  let u: TestUser;
+  let sprintId: string;
+  let dayIds: string[];
+  let cue: string;
+  let imp: string;
+
+  beforeAll(async () => {
+    u = await createTestUser("lib-legacy");
+    // A past-dated sprint (days 1 and 2 already missed) whose memberships date from
+    // its first day, so both days offer the items.
+    const [d] = await sql<{ start: string }[]>`select to_char((now() at time zone 'UTC')::date - 2, 'YYYY-MM-DD') as start`;
+    const seeded = await insertSprintRows(u, { startDate: d.start, tz: "UTC" });
+    sprintId = seeded.sprintId;
+    dayIds = seeded.dayIds;
+    cue = await insertCue(u, "Legacy cue");
+    imp = await insertImpediment(u, "Legacy highest", PROOF);
+    await sql`insert into public.sprint_cues (sprint_id, user_id, cue_id, is_focus, added_at) values (${sprintId}, ${u.id}, ${cue}, true, ${d.start}::date)`;
+    await sql`insert into public.sprint_impediments (sprint_id, user_id, impediment_id, is_highest, added_at) values (${sprintId}, ${u.id}, ${imp}, true, ${d.start}::date)`;
+  });
+
+  afterAll(async () => {
+    await deleteTestUser(u);
+  });
+
+  it("a day closed with no observation rows is missing, and the next day still closes normally", async () => {
+    await rpc(u, "close_day", { p_sprint_day_id: dayIds[0], p_actual: 5, p_cues: [{ item_id: cue, answer: "yes" }] });
+    // Stage the pre-0010 shape: rows deleted as the superuser (no API role can).
+    await sql`delete from public.day_cue_observations where sprint_day_id = ${dayIds[0]}`;
+    await sql`delete from public.day_impediment_observations where sprint_day_id = ${dayIds[0]}`;
+    const [missing] = await sql<{ closed: boolean; n: number }[]>`
+      select closed_at is not null as closed,
+             (select count(*)::int from public.day_cue_observations where sprint_day_id = ${dayIds[0]})
+             + (select count(*)::int from public.day_impediment_observations where sprint_day_id = ${dayIds[0]}) as n
+      from public.sprint_days where id = ${dayIds[0]}`;
+    expect(missing).toEqual({ closed: true, n: 0 });
+    const streak = await rpc<number>(u, "close_day", { p_sprint_day_id: dayIds[1], p_actual: 5, p_impediments: [{ item_id: imp, answer: "unsure" }] });
+    expect(streak).toBe(0);
+    const [rows] = await sql<{ n: number }[]>`
+      select count(*)::int as n from public.day_impediment_observations where sprint_day_id = ${dayIds[1]} and occurred = 'unsure' and was_highest`;
+    expect(rows.n).toBe(1);
+  });
+
+  it("0010 dropped the hurt / helped tables and created the two observation tables with exactly these columns", async () => {
+    const tables = await sql<{ table_name: string }[]>`
+      select table_name from information_schema.tables
+      where table_schema = 'public' and table_name in ('day_impediment_hurt', 'day_cue_helped', 'day_impediment_observations', 'day_cue_observations')
+      order by table_name`;
+    expect(tables.map((t) => t.table_name)).toEqual(["day_cue_observations", "day_impediment_observations"]);
+    const cols = await sql<{ table_name: string; column_name: string; data_type: string; is_nullable: string }[]>`
+      select table_name, column_name, data_type, is_nullable from information_schema.columns
+      where table_schema = 'public' and table_name in ('day_impediment_observations', 'day_cue_observations')
+      order by table_name, ordinal_position`;
+    expect(cols).toEqual([
+      { table_name: "day_cue_observations", column_name: "id", data_type: "uuid", is_nullable: "NO" },
+      { table_name: "day_cue_observations", column_name: "sprint_day_id", data_type: "uuid", is_nullable: "NO" },
+      { table_name: "day_cue_observations", column_name: "user_id", data_type: "uuid", is_nullable: "NO" },
+      { table_name: "day_cue_observations", column_name: "cue_id", data_type: "uuid", is_nullable: "NO" },
+      { table_name: "day_cue_observations", column_name: "name", data_type: "text", is_nullable: "NO" },
+      { table_name: "day_cue_observations", column_name: "cue_when", data_type: "text", is_nullable: "YES" },
+      { table_name: "day_cue_observations", column_name: "used", data_type: "text", is_nullable: "NO" },
+      { table_name: "day_cue_observations", column_name: "was_focus", data_type: "boolean", is_nullable: "NO" },
+      { table_name: "day_cue_observations", column_name: "created_at", data_type: "timestamp with time zone", is_nullable: "NO" },
+      { table_name: "day_impediment_observations", column_name: "id", data_type: "uuid", is_nullable: "NO" },
+      { table_name: "day_impediment_observations", column_name: "sprint_day_id", data_type: "uuid", is_nullable: "NO" },
+      { table_name: "day_impediment_observations", column_name: "user_id", data_type: "uuid", is_nullable: "NO" },
+      { table_name: "day_impediment_observations", column_name: "impediment_id", data_type: "uuid", is_nullable: "NO" },
+      { table_name: "day_impediment_observations", column_name: "name", data_type: "text", is_nullable: "NO" },
+      { table_name: "day_impediment_observations", column_name: "occurred", data_type: "text", is_nullable: "NO" },
+      { table_name: "day_impediment_observations", column_name: "was_highest", data_type: "boolean", is_nullable: "NO" },
+      { table_name: "day_impediment_observations", column_name: "created_at", data_type: "timestamp with time zone", is_nullable: "NO" },
+    ]);
+    const days = await sql<{ column_name: string }[]>`
+      select column_name from information_schema.columns
+      where table_schema = 'public' and table_name = 'sprint_days' and column_name in ('proof_recover', 'response', 'recovered', 'impact')
+      order by column_name`;
+    expect(days.map((d) => d.column_name)).toEqual(["impact", "proof_recover", "recovered", "response"]);
+  });
+
+  it("the migration's guards raise on a legacy selection row and on an active sprint (its own text, in a rolled-back transaction)", async () => {
+    const migration = readFileSync(join(process.cwd(), "supabase", "migrations", "0010_day_observations.sql"), "utf8");
+    const guard = migration.slice(migration.indexOf("do $$"), migration.indexOf("$$;", migration.indexOf("do $$")) + 3);
+    expect(guard).toContain("legacy_selections_present");
+    expect(guard).toContain("focus_backfill_required");
+    const ROLLBACK = new Error("rollback");
+    const run = async (stage: (tx: TransactionSql) => Promise<void>) => {
+      let raised = "";
+      await sql
+        .begin(async (tx) => {
+          await tx`create table public.day_impediment_hurt (id int)`;
+          await tx`create table public.day_cue_helped (id int)`;
+          await stage(tx);
+          await tx.unsafe(guard).catch((e: Error) => {
+            raised = e.message;
+          });
+          throw ROLLBACK;
+        })
+        .catch((e) => {
+          if (e !== ROLLBACK) throw e;
+        });
+      return raised;
+    };
+    // This suite's own active sprints trip the second guard, so the first must fire before it.
+    expect(await run(async (tx) => { await tx`insert into public.day_cue_helped values (1)`; })).toMatch(/legacy_selections_present/);
+    expect(await run(async () => {})).toMatch(/focus_backfill_required/);
+    expect(await run(async (tx) => { await tx`update public.sprints set status = 'ended_early' where status = 'active'`; })).toBe("");
   });
 });
 
@@ -722,9 +989,10 @@ describe("F6 libraries v2", () => {
       { table_name: "impediments", column_name: "proof_recover", privilege_type: "SELECT" },
       { table_name: "impediments", column_name: "proof_recover", privilege_type: "UPDATE" },
     ]);
+    // The day-row snapshot of RECOVERED WHEN arrived with 0010 (F7), not here.
     const [days] = await sql<{ n: number }[]>`
       select count(*)::int as n from information_schema.columns where table_schema = 'public' and table_name = 'sprint_days' and column_name = 'proof_recover'`;
-    expect(days.n).toBe(0);
+    expect(days.n).toBe(1);
   });
 
   it("pin: every redefined function carries the marker only its latest definer has", async () => {
@@ -751,6 +1019,16 @@ describe("F6 libraries v2", () => {
     }
     expect(src("cues_before_update")).toMatch(/cue_when/);
     expect(src("library_item_before_insert")).toMatch(/cue_when/);
+    // 0010 (F7): each rebuilt body carries a marker only that version has, and the
+    // 0007 lock and streak return survive inside close_day and the trigger.
+    expect(src("start_sprint")).toMatch(/p_focus_cue_id/);
+    expect(src("sprint_invalid_reason")).toMatch(/no_focus_cue/);
+    expect(src("close_day")).toMatch(/p_impediments/);
+    expect(src("close_day")).toMatch(/closed_on_time = v_today <= v_day\.date/);
+    expect(src("close_day")).toMatch(/sprint_streak_at/);
+    expect(src("sprint_days_immutable_after_close")).toMatch(/new\.impact/);
+    expect(src("sprint_days_immutable_after_close")).toMatch(/new\.closed_on_time/);
+    expect(src("day_offered_items")).toMatch(/is_focus/);
   });
 
   it("cue_when is trimmed and blank becomes null on insert and update; a cue may be saved without one (D5)", async () => {

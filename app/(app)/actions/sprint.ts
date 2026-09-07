@@ -25,6 +25,8 @@ export type StartSprintInput = {
   tz: string;
   startDate: string;
   cueIds: string[];
+  /** F7: one of cueIds; its use is asked first at every Day Close. */
+  focusCueId: string | null;
   impedimentIds: string[];
   highestImpedimentId: string | null;
   proofWhen: string | null;
@@ -40,6 +42,7 @@ export type StartSprintInput = {
 export async function startSprintAction(input: StartSprintInput): Promise<{ error: string }> {
   if (!isAreaKey(input.area)) return { error: "Unknown area." };
   if (!input.highestImpedimentId) return { error: friendlyError("no_highest_impediment") };
+  if (!input.focusCueId || !input.cueIds.includes(input.focusCueId)) return { error: friendlyError("no_focus_cue") };
   if (input.targets) {
     const bad = validTargets(input.targets);
     if (bad) return { error: bad };
@@ -65,6 +68,7 @@ export async function startSprintAction(input: StartSprintInput): Promise<{ erro
     p_cue_ids: input.cueIds,
     p_impediment_ids: input.impedimentIds,
     p_highest_impediment_id: input.highestImpedimentId,
+    p_focus_cue_id: input.focusCueId,
     p_proof_when: input.proofWhen?.trim() || undefined,
     p_proof_then: input.proofThen?.trim() || undefined,
     p_proof_recover: input.proofRecover?.trim() || undefined,

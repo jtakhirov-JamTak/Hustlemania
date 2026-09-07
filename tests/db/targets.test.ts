@@ -122,7 +122,7 @@ describe("F3 targets: save_targets, locking, ownership", () => {
     it("closing a day below target changes no future target (rule 13)", async () => {
       const before = await targetsOf(sprintId);
       const [d1] = await sql<{ id: string }[]>`select id from public.sprint_days where sprint_id = ${sprintId} and day_index = 1`;
-      await rpc(u, "close_day", { p_sprint_day_id: d1.id, p_actual: 0, p_notes: null, p_hurt: [], p_helped: [] });
+      await rpc(u, "close_day", { p_sprint_day_id: d1.id, p_actual: 0, p_notes: null });
       expect(await targetsOf(sprintId)).toEqual(before);
     });
 

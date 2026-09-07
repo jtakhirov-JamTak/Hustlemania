@@ -646,38 +646,205 @@ day-row snapshot of RECOVERED WHEN moves to F7, which rewrites `close_day` anywa
     running within 10 minutes.
 
 ### F7 — Day observations: what showed up, what was used, did the response run
-*Stub (2026-09-06). Filled by `/interview`. Scope: rows B4 B12 C1 C7 D3 D11.* Close
-step 2 becomes observations: per offered impediment occurred yes / no / unsure /
-unanswered; per offered cue used yes / no / unsure / unanswered; for the Highest:
-response ran yes / no / partially / unsure, recovered yes / no / unsure (asked whenever
-the Highest occurred), impact nothing / some / a lot / unsure (optional). One
-user-selected **focus cue** per sprint whose use is tracked daily. Per-item tri-state
-rows in the DB; README pills render them. First occurrence of the day is the one
-assessed, and the question says so. Item wording and proof-point version snapshotted
-with the observation. Days closed before this exist stay "missing": never block a
-close, never count as negative. `day_offered_items` remains the one owner of who is
-asked. The hurt/helped tables `day_impediment_hurt` and `day_cue_helped` are
-**dropped** (user, 2026-09-06; no real sprint exists) — a destructive migration, so the
-evaluator runs. "Set up tomorrow" block after a close (Remove / Add over the existing
-membership functions; rules 3–4 still enforced by the DB). Evaluator: user-data tables
-+ destructive migration.
+*Specified 2026-09-07 by `/interview` (feature mode). Scope:
+`docs/RECONCILIATION-2026-09-06.md` rows B4 B12 C1 C7 D3 D11; its Decisions section is
+authoritative, and the 2026-09-07 review notes kept below are binding. In-session
+calls (2026-09-07): the response is asked only when the Highest occurred (README flow;
+the docx's "preventive use without occurrence" is not recorded) · response **and**
+recovery are required whenever the Highest occurred; impact optional; Occurrence and
+Use groups never block (untouched = unanswered) · the Highest's three answers are
+columns on the day row beside its snapshot · the focus cue is required, exactly one,
+created inline or picked from the library, changeable from Today, editable on the Cues
+page — the migration does **not** backfill it: the local stack is reset and starts
+blank (user's call), and 0010 raises if an active sprint lacks a focus · the closed
+card's summary line and the inline Today reviewing state stay with F8.*
 
-*Review notes 2026-09-07 (`docs/audits/spec-review-2026-09-07.md`), binding on the
-F7 interview:* the migration adds `sprint_days.proof_recover` and rewrites
-`close_day` and the immutability trigger to snapshot it (moved here from F6);
-**version** = the (WHEN, THEN, RECOVERED) text tuple snapshotted on the day row at
-close, and observation rows snapshot item wording only (name, plus `cue_when` for
-cues) — no counter. The **focus cue** is `sprint_cues.is_focus` (partial unique per
-sprint, same shape as `is_highest`); its daily answer is the per-cue use row (one
-scale: yes / no / unsure / unanswered), asked first in step 2; removing it from the
-sprint follows the highest's rules; its consumer is F11's FOCUS tag. The
-**prevention** question (may a THEN be recorded as run when the Highest did not
-occur?) is decided here, with the follow-through denominator stated either way. In a
-multi-pick group any pick answers the whole group; untouched = unanswered. Snapshots
-are as-of-close, not as-of-date (backfill), stated in the entry. The table drop
-raises if either legacy table holds rows. `day_offered_items` gains `cue_when` and
-`proof_recover` (drop + recreate, grants re-applied). "Set up tomorrow" (B12 / C7,
-pure UI) moves to F8.
+*Review notes 2026-09-07 (`docs/audits/spec-review-2026-09-07.md`), binding:* the
+migration adds `sprint_days.proof_recover` and rewrites `close_day` and the
+immutability trigger to snapshot it (moved here from F6); **version** = the (WHEN,
+THEN, RECOVERED) text tuple snapshotted on the day row at close, and observation rows
+snapshot item wording only (name, plus `cue_when` for cues) — no counter. The **focus
+cue** is `sprint_cues.is_focus` (partial unique per sprint, same shape as
+`is_highest`); its daily answer is the per-cue use row (one scale: yes / no / unsure /
+unanswered), asked first in step 2; removing it from the sprint follows the highest's
+rules; its consumer is F11's FOCUS tag. In a multi-pick group any pick answers the
+whole group; untouched = unanswered. Snapshots are as-of-close, not as-of-date
+(backfill). The table drop raises if either legacy table holds rows.
+`day_offered_items` gains `cue_when` and `proof_recover` (drop + recreate, grants
+re-applied). "Set up tomorrow" (B12 / C7, pure UI) moves to F8.
+
+- **Behavior.** Closing a day is still two steps, but step 1 is the actual alone and
+  step 2 is "What happened on Day n?": which cues you used (the focus cue first, tagged
+  FOCUS), which obstacles showed up, and — only when the Highest showed up — did you
+  run the response, did you recover, and how much it cost. Every group offers None and
+  Unsure; a group you never touch is stored as unanswered, which is distinct from No,
+  Unsure and not-asked. The first time the Highest showed up is the one to judge, and
+  the question says so. Each sprint carries one focus cue, chosen in the wizard (or
+  created there) and changeable from Today; the day's observations remember which cue
+  was focus and which impediment was highest, and the wording each item had, so later
+  library edits never rewrite history. The old "hurt / helped" questions are gone.
+- **Acceptance criteria.**
+  - Migration `supabase/migrations/0010_day_observations.sql`. Preconditions raised
+    before any structural change, so the migration never leaves invalid state behind:
+    `legacy_selections_present` if `day_impediment_hurt` or `day_cue_helped` holds a
+    row; `focus_backfill_required` if any `status = 'active'` sprint exists (none can
+    carry a focus yet). No statement in 0010 deletes or rewrites a user row; the blank
+    start is `supabase db reset` on the local stack. The hosted project has never been
+    migrated (DECISIONS 2026-09-05) and is not touched by this feature.
+  - `sprint_cues.is_focus boolean not null default false`; partial unique index
+    `sprint_cues_one_focus (sprint_id) where is_focus`; check `not is_focus or
+    removed_at is null`. DB test: two focus rows in one sprint rejected by the index;
+    a direct `removed_at` on the focus row rejected by the check.
+  - `sprint_days` gains `proof_recover text`, `response text` (check in `yes`, `no`,
+    `partially`, `unsure`), `recovered text` (`yes`, `no`, `unsure`), `impact text`
+    (`nothing`, `some`, `a_lot`, `unsure`), all nullable; null means not asked (the
+    Highest did not occur, or a day closed before 0010). Checks: `(response is null)
+    = (recovered is null)`; `impact is null or response is not null`; `response is
+    null or closed_at is not null`. `sprint_days_immutable_after_close` is rebuilt
+    from its **0007** body plus the four columns; test: each of the four rejected with
+    `day_closed` on a closed day.
+  - Tables `day_impediment_observations` (`id`, `sprint_day_id` → `sprint_days`
+    cascade, `user_id` → `auth.users` cascade, `impediment_id` → `impediments`,
+    `name text not null` — private user text, snapshot, `occurred text not null`
+    check in `yes` / `no` / `unsure` / `unanswered`, `was_highest boolean not null`,
+    `created_at`; unique `(sprint_day_id, impediment_id)`) and `day_cue_observations`
+    (same shape with `cue_id` → `cues`, `name`, `cue_when text` snapshot, `used`
+    on the same scale, `was_focus boolean not null`). Rows are immutable (UPDATE
+    trigger reusing `day_selection_immutable()`; DELETE unblocked so the account
+    cascade works, as 0004 recorded); no `updated_at` on immutable rows, stated in
+    the migration comment. RLS enabled in the same statement block: SELECT
+    `user_id = auth.uid()`; no INSERT / UPDATE / DELETE policy or grant to
+    `authenticated` — the only writer is `close_day`. Indexes on `user_id`,
+    `impediment_id` / `cue_id`. Tests: cross-user SELECT returns no rows; a direct
+    INSERT as `authenticated` is denied; an UPDATE as the owner raises `day_closed`.
+  - `day_impediment_hurt` and `day_cue_helped` are dropped (with their triggers,
+    policies and indexes); `information_schema` test asserts both absent and both new
+    tables present with the exact column list.
+  - `day_offered_items` is dropped and recreated returning `(kind, item_id, name,
+    explanation, cue_when, proof_when, proof_then, proof_recover, is_focus, rank)`;
+    same date-range rule, same SECURITY INVOKER; grants re-applied and the grants test
+    still lists it. `is_focus` is the flag as of the call (as-of-close rule).
+  - `close_day` is dropped and recreated as `close_day(p_sprint_day_id uuid, p_actual
+    bigint, p_notes text default null, p_impediments jsonb default '[]', p_cues jsonb
+    default '[]', p_response text default null, p_recovered text default null,
+    p_impact text default null) returns integer`, rebuilt from its **0007** body (the
+    lock, the future/backfill logic, `closed_on_time`, the streak return are
+    unchanged). `p_impediments` / `p_cues` are arrays of `{ "item_id", "answer" }`
+    with `answer` in `yes` / `no` / `unsure`. Rules, each with a DB test: an item not
+    in `day_offered_items` → `item_not_offered`; an answer outside the scale →
+    `invalid_answer`; the same item twice → `duplicate_item` (0004 silently deduped;
+    BACKLOG); every offered item **absent** from the array is written as `unanswered`
+    (test: an empty array yields one `unanswered` row per offered item); the Highest
+    is the active `is_highest` member at close, its row carries `was_highest`, the
+    focus cue's row `was_focus`; `name` and `cue_when` are copied from the library
+    rows at close. If the Highest's answer is `yes`: `p_response` and `p_recovered`
+    are required (`response_required`, `recovered_required`), `p_impact` optional,
+    each validated against its scale; otherwise all three must be null
+    (`response_not_applicable`). The day row's snapshot gains `proof_recover`
+    alongside `proof_when` / `proof_then` (test: edit the impediment's three parts
+    after the close; the day row still reads the close-time text). Grants: revoke
+    from `public, anon`; execute to `authenticated, service_role`; the grants test's
+    anon probe uses the new signature.
+  - Legacy: a day closed with no observation rows is "missing", never "unanswered";
+    no function in 0010 derives an answer from an absent row, and a later day of the
+    same sprint closes normally (test: rows deleted as superuser on day 1, day 2
+    closes green).
+  - `start_sprint` gains `p_focus_cue_id uuid` after `p_highest_impediment_id`
+    (before the defaulted parameters); the 0009 signature is dropped. Rebuilt from
+    its **0009** body: `no_focus_cue` unless `p_focus_cue_id = any(p_cue_ids)`; the
+    membership insert writes `is_focus`. `sprint_invalid_reason` (from **0009**)
+    returns `no_focus_cue` when no active cue is focus after the exclusion, placed
+    after the cue-count checks, so `remove_sprint_item`, `archive_item` and
+    `set_item_scope` refuse the focus cue through the existing single owner (tests:
+    remove → `no_focus_cue`; archive of the focus cue blocked with that reason; a
+    non-focus cue still removable while two remain). New `set_focus_cue(p_sprint_id,
+    p_cue_id)` SECURITY DEFINER: owner, active sprint, active member
+    (`not_in_sprint`), flag moved atomically (test: exactly one `is_focus` row
+    after the call; a removed cue rejected). Grants list gains `set_focus_cue`.
+  - Pin test extended with one 0010 marker per rebuilt body: `p_focus_cue_id` in
+    `start_sprint`, `no_focus_cue` in `sprint_invalid_reason`, `p_impediments` in
+    `close_day`, `new.impact` in `sprint_days_immutable_after_close`, `is_focus` in
+    `day_offered_items`; the 0004–0009 markers stay.
+  - Falsifiability, live mutations each turning a named test red: the
+    `unanswered` fill removed from `close_day` · `response_required` check removed ·
+    `was_highest` written as `false` · the observation SELECT policy widened to
+    `true` · the UPDATE trigger dropped from one observation table · `no_focus_cue`
+    removed from `sprint_invalid_reason` · the partial unique focus index dropped ·
+    the drop guard removed (test seeds a legacy row in a transaction and expects the
+    guard's `raise` text).
+  - `lib/database.types.ts` regenerated from the local stack. `lib/data.ts`:
+    `OfferedItems` carries the new columns and `is_focus`; `SprintItems.cues` gains
+    `is_focus`. `lib/errors.ts` maps the new codes (`no_focus_cue`,
+    `response_required`, `recovered_required`, `response_not_applicable`,
+    `invalid_answer`, `duplicate_item`), drops `most_damaging_required` /
+    `most_useful_required`, and `blockedReason("no_focus_cue")` reads "this is its
+    focus cue". `closeDayAction` takes `{ actual, notes, impediments, cues, response,
+    recovered, impact }` and mirrors the DB's required/not-applicable rules before
+    the RPC.
+  - Close dialog (`components/today/CloseFlow.tsx`), both today and backfill: step 1
+    is the actual only (`Close day n · step 1 of 2`, hint "Enter the actual, zero
+    included."); step 2 heading "What happened on Day n?" with "None and Unsure are
+    truthful answers." Groups in order, each a pill row (`role="group"`,
+    `aria-pressed` pills, testids `use-group`, `occurrence-group`, `response-group`,
+    `recovery-group`, `impact-group`): **USE** "Which cues did you use?" — every
+    offered cue, focus first with a FOCUS tag, plus None · Unsure; **OCCURRENCE**
+    "Which obstacles showed up?" sub "Highest: {name}" — every offered impediment plus
+    None · Unsure; shown only when the Highest is picked: **RESPONSE · {highest}**
+    "Did you run the response?" sub "THEN {then} · judge the first time it showed up
+    today" — Yes · No · Partially · Unsure; **RECOVERY** "Did you recover?" sub
+    "Recovered when {recover}" — Yes · No · Unsure; **IMPACT** "How much did it cost
+    today?" sub "Your read, not the number" — Nothing · Some · A lot · Unsure; then
+    the optional note. Pill semantics: tapping an item marks it yes and the rest of
+    the group no; None = all no; Unsure = all unsure; untouched = every item
+    unanswered and nothing sent for that group. The primary is `aria-disabled` with
+    the accent hint "Did the response run?" then "Did you recover?" until both are
+    answered when the Highest is picked; DB rejections render in the error bar. A
+    backfill still fetches that day's offered items before the dialog opens.
+  - Wizard step 4 (`components/NewSprintWizard.tsx`): a "Focus cue" radiogroup
+    (testid `wizard-focus`) over the picked cues, prefilled to the first pick, kept
+    valid as picks change; an inline-created cue is picked and, if first, focus. Start
+    blocked with "Pick the focus cue." only if the focus is not among the picks.
+    Today (`components/today/SprintItemsRow.tsx`): the focus row carries a FOCUS tag
+    (testid `focus-tag`), other cue rows a "Set as focus" link calling
+    `setFocusCue`, and Remove is absent on the focus row.
+  - e2e golden path (desktop + phone): the wizard starts with the default focus and
+    Today shows the FOCUS tag on that cue; "Set as focus" moves the tag; the close
+    walks step 1 → step 2, picks the Highest as occurred, sees the primary blocked
+    with "Did the response run?", answers response and recovery, closes; the admin
+    read asserts the day row's `response` / `recovered` / `proof_recover` and one
+    observation row per offered item with `was_highest` / `was_focus` set and the
+    untouched cue group `unanswered`. The backfill path closes with None + None and
+    asserts `no` rows. Horizontal overflow 0 at 390px. `npm run verify` green.
+- **Non-goals.** The closed card's summary line, the inline Today reviewing state
+  and "Set up tomorrow" (F8) · any reader of the observations beyond the tests (F10
+  and F11) · preventive response runs (decided against) · a per-item impact or
+  most-damaging pick · snapshotting `explanation` · a `proof_version` counter ·
+  backfilling a focus on existing sprints (blank start) · a `updated_at` on
+  immutable observation rows · `db push` to the hosted project.
+- **Risks.** (1) A rebuilt function copied from a stale body drops a later check —
+  the F5 failure; mitigation: the per-function "rebuilt from" list above and the pin
+  markers. (2) UI and DB disagree on what "untouched" means, so a group the user
+  never opened lands as `no`; mitigation: the DB fills `unanswered` for absent items
+  and the e2e asserts it on the untouched cue group. (3) The `start_sprint`
+  signature change breaks every test seed and the wizard action at once; mitigation:
+  `tests/db/helpers.ts` and `tests/support/sprints.ts` own the arguments, the grants
+  test pins the new signature. (4) 0010's guards refuse to apply on a stack that
+  still holds sprints; intended — the local stack is reset, and the hosted project is
+  empty.
+- **Evaluator.** yes — two tables that hold user data are created, two are dropped
+  (destructive), RLS policies added. One run for the feature.
+- **UI.** Primary action: log what happened, then close. Viewport: both,
+  desktop-first (Chrome at desktop width against the artboard's "What happened"
+  modal; phone via the Playwright phone project). States: error / blocked (accent
+  hint beside the disabled primary; DB rejections in the error bar) · loading (a
+  backfill's offered items fetched before the dialog opens). Empty cannot occur
+  (rules 3–4 hold on every sprint date). Mockup: `docs/mockups/ui-v2/handoff_sprint_ui_v8/Sprint
+  App v8 Libraries.dc.html` + README "Day Close — shared question set" (mockup of
+  record; no in-stack throwaway). Departures: the USE group precedes OCCURRENCE (the
+  focus cue is asked first, per the review note) · RESPONSE offers Partially ·
+  RECOVERY is asked whenever the Highest showed, not only after a Yes · the result
+  screen is unchanged (summary line with F8) · the focus radio in the wizard and the
+  FOCUS tag / "Set as focus" on Today are not drawn in the artboard.
 
 ### F8 — Journal restyle: timeline, rail, Dusk, night mode
 *Stub (2026-09-06). Filled by `/interview`; the v8 handoff has no dark palette, so

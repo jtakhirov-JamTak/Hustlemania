@@ -44,6 +44,8 @@ type Draft = {
   proofThen: string;
   proofRecover: string;
   cueIds: string[];
+  /** F7: one of cueIds; follows the picks so it is never stale. */
+  focusId: string | null;
   aligned: boolean;
 };
 
@@ -84,9 +86,12 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
     proofThen: "",
     proofRecover: "",
     cueIds: [],
+    focusId: null,
     aligned: false,
   });
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
+  // F7: the focus cue is one of the picked cues; it defaults to the first pick and moves when that pick goes.
+  const setCues = (next: string[]) => setD((p) => ({ ...p, cueIds: next, focusId: p.focusId && next.includes(p.focusId) ? p.focusId : (next[0] ?? null) }));
   const heading = useRef<HTMLHeadingElement>(null);
   const mounted = useRef(false);
   useEffect(() => {
@@ -174,6 +179,8 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
           ? "The highest impediment needs WHEN → THEN and a recovery criterion."
           : d.cueIds.length === 0
             ? "Select 1–3 execution cues."
+            : !d.focusId || !d.cueIds.includes(d.focusId)
+              ? "Pick the focus cue."
             : !d.aligned
               ? "Confirm the outcome advances the vision."
               : null,
@@ -199,6 +206,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
       intentions: d.intentions.some((t) => t.trim()) ? d.intentions : null,
       targets: d.mode === "custom" ? targets : null,
       cueIds: d.cueIds,
+      focusCueId: d.focusId,
       impedimentIds: d.impedimentIds,
       highestImpedimentId: d.highestId,
       proofWhen: highestNeedsProof ? d.proofWhen : null,
@@ -245,7 +253,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
       setLibrary((l) => ({ ...l, cues: [...l.cues, item] }));
       setNewCue("");
       setNewCueWhen("");
-      if (d.cueIds.length < 3) set("cueIds", [...d.cueIds, item.id]);
+      if (d.cueIds.length < 3) setCues([...d.cueIds, item.id]);
     } else {
       setLibrary((l) => ({ ...l, impediments: [...l.impediments, item] }));
       setNewImp("");
@@ -287,7 +295,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
                     className={`chip ${d.area === a.key ? "chip-on" : ""}`}
                     aria-pressed={d.area === a.key}
                     disabled={disabled}
-                    onClick={() => setD((p) => ({ ...p, area: a.key, impedimentIds: [], highestId: null, cueIds: [] }))}
+                    onClick={() => setD((p) => ({ ...p, area: a.key, impedimentIds: [], highestId: null, cueIds: [], focusId: null }))}
                     title={!a.hasVision ? "No 1-year vision yet" : a.hasSprint ? "A sprint is already active here" : undefined}
                   >
                     {a.name}
@@ -556,10 +564,27 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary }:
                     label={c.name}
                     sub={cueSummary(c) ?? c.explanation}
                     tag={c.scope === "global" ? "Global" : null}
-                    onPick={() => set("cueIds", d.cueIds.includes(c.id) ? d.cueIds.filter((x) => x !== c.id) : [...d.cueIds, c.id])}
+                    onPick={() => setCues(d.cueIds.includes(c.id) ? d.cueIds.filter((x) => x !== c.id) : [...d.cueIds, c.id])}
                   />
                 ))}
               </div>
+              {d.cueIds.length > 0 ? (
+                <div style={{ marginTop: 12 }} data-testid="wizard-focus">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                    <span id="focus-label" style={{ fontSize: 13, fontWeight: 600 }}>
+                      Focus cue
+                    </span>
+                    <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Its use is asked first at every Day Close.</span>
+                  </div>
+                  <div role="radiogroup" aria-labelledby="focus-label" style={{ marginTop: 6 }}>
+                    {cueOptions
+                      .filter((c) => d.cueIds.includes(c.id))
+                      .map((c) => (
+                        <OptionRow key={c.id} single on={d.focusId === c.id} label={c.name} onPick={() => set("focusId", c.id)} />
+                      ))}
+                  </div>
+                </div>
+              ) : null}
               <div className="label-accent" id="new-cue-label" style={{ marginTop: 12 }}>
                 Create a new execution cue
               </div>

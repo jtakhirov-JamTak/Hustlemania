@@ -6,6 +6,44 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-07 — F7 day observations: answers replace judgments, the focus cue is required, the local stack starts blank
+
+**Decision.** Day Close records what happened (per-item occurred / used on a yes / no /
+unsure / unanswered scale; for the Highest: response yes / no / partially / unsure,
+recovered, optional impact) in two new immutable tables plus four columns on the day
+row, and `day_impediment_hurt` / `day_cue_helped` are dropped. In-session calls at the
+F7 interview: the response is asked only when the Highest occurred (README flow; the
+docx's preventive-use reading rejected — a THEN run before its WHEN is not the
+response); response **and** recovery required whenever it occurred, impact optional,
+the multi-pick groups never block (untouched = unanswered, stored as such); the
+Highest's three answers live on `sprint_days` beside its snapshot, not on the
+observation row; the focus cue is required, exactly one per sprint, picked or created
+in the wizard (prefilled to the first pick) and moved from Today, enforced through
+`sprint_invalid_reason` so remove / archive / scope refuse it like the highest; no
+backfill of a focus onto existing sprints — the user chose to start blank, so 0010
+raises `focus_backfill_required` on any active sprint and `legacy_selections_present`
+on any legacy row, and the local stack was reset.
+
+**Why.** F10 / F11 need denominators that distinguish "asked and answered no" from
+"never asked" from "not applicable"; only stored tri-state rows give that. Requiring
+recovery whenever the Highest occurred is what feeds the with-vs-without-response
+comparison (D3b / C5); Unsure is one tap. Columns on the day row keep the postmortem's
+"showed up on 4 logged days · response ran 2 of 3 answered" a single read.
+
+**Numbers.** DB 203 (was 191; F7 adds 12 across three describes plus the pin markers),
+unit 54, e2e 8 on desktop + phone; eight live mutations each turned its named test red
+(unanswered fill, response_required, was_highest, the SELECT policy, the UPDATE
+trigger, no_focus_cue, the partial unique index, the migration guard). Chrome desktop
+check of the Today cue rows (FOCUS tag, Set as focus) and the close dialog's two steps
+against the v8 artboard; the close from Chrome wrote the expected five rows.
+
+**Departures from the artboard, recorded in the SPEC entry.** USE precedes OCCURRENCE
+(the focus cue is asked first); Partially; recovery asked whenever the Highest showed;
+the result screen unchanged (summary line with F8); the wizard focus radio and the
+FOCUS tag on Today are not drawn.
+
+---
+
 ## 2026-09-07 — SPEC review before F6: two reads, no P0, F6 amended, stubs annotated
 
 **Decision.** Before building F6 the user asked for an end-to-end adversarial review of

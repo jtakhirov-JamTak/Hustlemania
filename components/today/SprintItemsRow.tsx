@@ -2,7 +2,7 @@
 
 import { ErrorBar } from "@/components/ErrorBar";
 import { useState, useTransition } from "react";
-import { addSprintItem, createItem, removeSprintItem } from "@/app/(app)/actions/library";
+import { addSprintItem, createItem, removeSprintItem, setFocusCue } from "@/app/(app)/actions/library";
 import { ItemPicker } from "@/components/ItemPicker";
 import { callAction } from "@/lib/callAction";
 import { cueSummary, proofSummary, type ItemKind, type LibraryItem, type SprintItems } from "@/lib/data";
@@ -11,6 +11,8 @@ import { cueSummary, proofSummary, type ItemKind, type LibraryItem, type SprintI
  * "▸ Other impediments (n) · Execution cues (n)", expanding to two cards with Remove /
  * Add. Add opens the picker over the eligible library items not yet in the sprint,
  * with inline creation (saved to the library, global scope; a cue needs its WHEN).
+ * The focus cue (F7) is tagged; "Set as focus" moves it, and it has no Remove — the
+ * DB refuses that with no_focus_cue anyway.
  */
 export function SprintItemsRow({
   sprintId,
@@ -38,6 +40,14 @@ export function SprintItemsRow({
     });
   }
 
+  function setFocus(id: string) {
+    setError(null);
+    start(async () => {
+      const res = await callAction(() => setFocusCue(sprintId, id));
+      if (res.error) setError(res.error);
+    });
+  }
+
   return (
     <section style={{ marginTop: 20 }} data-testid="sprint-items">
       <button type="button" className="disclosure" aria-expanded={open} onClick={() => setOpen((o) => !o)} style={{ fontSize: 13 }} data-testid="sprint-items-toggle">
@@ -52,10 +62,9 @@ export function SprintItemsRow({
             <ItemsCard
               title="Other impediments"
               count={`${items.impediments.length} of 5 in sprint`}
-              rows={others.map((i) => ({ id: i.id, name: i.name, sub: proofSummary(i) ?? i.explanation }))}
+              rows={others.map((i) => ({ id: i.id, name: i.name, sub: proofSummary(i) ?? i.explanation, tag: null, removable: !locked }))}
               addLabel="Add impediment"
               canAdd={!locked && items.impediments.length < 5}
-              canRemove={!locked}
               pending={pending}
               onRemove={(id) => remove("impediment", id)}
               onAdd={() => setAdding("impediment")}
@@ -64,10 +73,16 @@ export function SprintItemsRow({
             <ItemsCard
               title="Execution cues"
               count={`${items.cues.length} of 3 in sprint`}
-              rows={items.cues.map((c) => ({ id: c.id, name: c.name, sub: cueSummary(c) ?? c.explanation }))}
+              rows={items.cues.map((c) => ({
+                id: c.id,
+                name: c.name,
+                sub: cueSummary(c) ?? c.explanation,
+                tag: c.is_focus ? "FOCUS" : null,
+                removable: !locked && items.cues.length > 1 && !c.is_focus,
+                action: !locked && !c.is_focus ? { label: "Set as focus", onClick: () => setFocus(c.id) } : undefined,
+              }))}
               addLabel="Add cue"
               canAdd={!locked && items.cues.length < 3}
-              canRemove={!locked && items.cues.length > 1}
               pending={pending}
               onRemove={(id) => remove("cue", id)}
               onAdd={() => setAdding("cue")}
@@ -94,7 +109,6 @@ function ItemsCard({
   rows,
   addLabel,
   canAdd,
-  canRemove,
   pending,
   onRemove,
   onAdd,
@@ -102,10 +116,9 @@ function ItemsCard({
 }: {
   title: string;
   count: string;
-  rows: { id: string; name: string; sub: string | null }[];
+  rows: { id: string; name: string; sub: string | null; tag: string | null; removable: boolean; action?: { label: string; onClick: () => void } }[];
   addLabel: string;
   canAdd: boolean;
-  canRemove: boolean;
   pending: boolean;
   onRemove: (id: string) => void;
   onAdd: () => void;
@@ -121,12 +134,26 @@ function ItemsCard({
       {rows.map((r) => (
         <div key={r.id} style={{ padding: "11px 0", borderTop: "1px solid var(--divider)" }} data-testid="sprint-item" data-item-id={r.id}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-            <span style={{ fontSize: 14, lineHeight: 1.4 }}>{r.name}</span>
-            {canRemove ? (
-              <button type="button" className="link-quiet" style={{ fontSize: 11.5, whiteSpace: "nowrap" }} disabled={pending} onClick={() => onRemove(r.id)} aria-label={`Remove ${r.name}`}>
-                Remove
-              </button>
-            ) : null}
+            <span style={{ fontSize: 14, lineHeight: 1.4, display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              {r.name}
+              {r.tag ? (
+                <span className="option-tag" data-testid="focus-tag">
+                  {r.tag}
+                </span>
+              ) : null}
+            </span>
+            <span style={{ display: "inline-flex", gap: 12, flex: "none" }}>
+              {r.action ? (
+                <button type="button" className="link-quiet" style={{ fontSize: 11.5, whiteSpace: "nowrap", color: "var(--accent-ink)" }} disabled={pending} onClick={r.action.onClick} aria-label={`${r.action.label}: ${r.name}`}>
+                  {r.action.label}
+                </button>
+              ) : null}
+              {r.removable ? (
+                <button type="button" className="link-quiet" style={{ fontSize: 11.5, whiteSpace: "nowrap" }} disabled={pending} onClick={() => onRemove(r.id)} aria-label={`Remove ${r.name}`}>
+                  Remove
+                </button>
+              ) : null}
+            </span>
           </div>
           {r.sub ? <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3, lineHeight: 1.45 }}>{r.sub}</div> : null}
         </div>

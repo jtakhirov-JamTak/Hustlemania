@@ -221,14 +221,14 @@ export async function loadLibraryCounts(supabase: Client): Promise<{ cues: numbe
 }
 
 export type SprintItems = {
-  cues: LibraryItem[];
+  cues: (LibraryItem & { is_focus: boolean })[];
   impediments: (LibraryItem & { is_highest: boolean })[];
 };
 
 /** The sprint's current members (active memberships only), each with its library row. */
 export async function loadSprintItems(supabase: Client, sprintId: string): Promise<SprintItems> {
   const [cues, imps] = await Promise.all([
-    supabase.from("sprint_cues").select("cue_id, cues(*)").eq("sprint_id", sprintId).is("removed_at", null),
+    supabase.from("sprint_cues").select("cue_id, is_focus, cues(*)").eq("sprint_id", sprintId).is("removed_at", null),
     supabase.from("sprint_impediments").select("impediment_id, is_highest, impediments(*)").eq("sprint_id", sprintId).is("removed_at", null),
   ]);
   if (cues.error) throw new Error(`sprint_cues: ${cues.error.message}`);
@@ -240,7 +240,7 @@ export async function loadSprintItems(supabase: Client, sprintId: string): Promi
   return {
     cues: cues.data
       .filter((m) => m.cues)
-      .map((m) => toItem("cue", m.cues as Cue, IN_SPRINT))
+      .map((m) => ({ ...toItem("cue", m.cues as Cue, IN_SPRINT), is_focus: m.is_focus }))
       .sort(byRank),
     impediments: imps.data
       .filter((m) => m.impediments)
@@ -251,7 +251,8 @@ export async function loadSprintItems(supabase: Client, sprintId: string): Promi
 
 const byRank = (a: LibraryItem, b: LibraryItem) => a.rank - b.rank || a.name.localeCompare(b.name);
 
-export type OfferedItems = { cues: LibraryItem[]; impediments: LibraryItem[] };
+/** What Day Close asks about: the focus cue is asked first, so the flag rides along. */
+export type OfferedItems = { cues: (LibraryItem & { is_focus: boolean })[]; impediments: LibraryItem[] };
 
 /** What Day Close offers for this day (rule 23), straight from the DB function the close uses. */
 export async function loadDayOfferedItems(supabase: Client, dayId: string): Promise<OfferedItems> {
@@ -265,17 +266,16 @@ export async function loadDayOfferedItems(supabase: Client, dayId: string): Prom
     scope: "global" as ItemScope,
     rank: r.rank,
     archived_at: null,
-    // F7 extends day_offered_items with the F6 columns; until then the close dialog
-    // renders the rows it always has.
-    cue_when: null,
+    cue_when: r.cue_when,
     proof_when: r.proof_when,
     proof_then: r.proof_then,
-    proof_recover: null,
+    proof_recover: r.proof_recover,
+    is_focus: r.is_focus,
     used: true,
     active: true,
   }));
   return {
-    cues: rows.filter((r) => r.kind === "cue").sort(byRank),
+    cues: rows.filter((r) => r.kind === "cue").sort((a, b) => Number(b.is_focus) - Number(a.is_focus) || byRank(a, b)),
     impediments: rows.filter((r) => r.kind === "impediment").sort(byRank),
   };
 }

@@ -111,6 +111,10 @@ describe("locks: sprint after start, day after close", () => {
       ["notes", "'rewritten'"],
       ["closed_at", "null"],
       ["target", "target + 1"],
+      ["proof_recover", "'x'"],
+      ["response", "'yes'"],
+      ["recovered", "'yes'"],
+      ["impact", "'some'"],
     ])("rejects direct UPDATE of %s on the closed row (postgres role) and leaves it unchanged", async (column, value) => {
       const [before] = await sql`select * from public.sprint_days where id = ${day1}`;
       await expect(sql.unsafe(`update public.sprint_days set ${column} = ${value} where id = '${day1}'`)).rejects.toThrow(/day_closed/);

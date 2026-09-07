@@ -139,6 +139,7 @@ export function TodayView({
         goal={goal}
         day={day}
         offered={offered}
+        highestId={items.impediments.find((i) => i.is_highest)?.id ?? null}
         canClose={canClose}
         cannotCloseReason={cannotCloseReason}
         tz={sprint.tz}
@@ -151,6 +152,7 @@ export function TodayView({
         goal={goal}
         initialMode={sprint.target_mode === "custom" ? "custom" : "same"}
         days={days}
+        highestId={items.impediments.find((i) => i.is_highest)?.id ?? null}
         todayInSprintTz={todayInSprintTz}
         sprintOver={sprintOver}
       />

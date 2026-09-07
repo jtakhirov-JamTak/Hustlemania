@@ -160,6 +160,7 @@ describe("public schema access model", () => {
       "remove_sprint_item",
       "restore_item",
       "save_targets",
+      "set_focus_cue",
       "set_highest_impediment",
       "set_item_scope",
       "sprint_streaks",
@@ -169,8 +170,8 @@ describe("public schema access model", () => {
 
   it("anon cannot execute the write functions", async () => {
     const [row] = await sql<{ start: boolean; close: boolean }[]>`
-      select has_function_privilege('anon', 'public.start_sprint(text,text,text,text,text,bigint,int,text,text,text,jsonb,text,date,uuid[],uuid[],uuid,text,text,text,text,bigint[],text[])', 'execute') as "start",
-             has_function_privilege('anon', 'public.close_day(uuid,bigint,text,uuid[],uuid,uuid[],uuid)', 'execute') as close`;
+      select has_function_privilege('anon', 'public.start_sprint(text,text,text,text,text,bigint,int,text,text,text,jsonb,text,date,uuid[],uuid[],uuid,uuid,text,text,text,text,bigint[],text[])', 'execute') as "start",
+             has_function_privilege('anon', 'public.close_day(uuid,bigint,text,jsonb,jsonb,text,text,text)', 'execute') as close`;
     expect(row).toEqual({ start: false, close: false });
   });
 

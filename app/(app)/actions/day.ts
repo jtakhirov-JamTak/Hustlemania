@@ -19,13 +19,24 @@ export async function saveIntention(dayId: string, text: string): Promise<Result
   return {};
 }
 
+export type Answer = "yes" | "no" | "unsure";
+export type ResponseAnswer = "yes" | "no" | "partially" | "unsure";
+export type ImpactAnswer = "nothing" | "some" | "a_lot" | "unsure";
+
+/**
+ * F7 observations. An item absent from `impediments` / `cues` is stored as unanswered
+ * by the DB; the three Highest answers apply only when the Highest's own answer is yes.
+ */
 export type CloseDayInput = {
   actual: number;
   notes: string;
-  hurt: string[];
-  mostDamaging: string | null;
-  helped: string[];
-  mostUseful: string | null;
+  impediments: { id: string; answer: Answer }[];
+  cues: { id: string; answer: Answer }[];
+  response: ResponseAnswer | null;
+  recovered: Answer | null;
+  impact: ImpactAnswer | null;
+  /** The sprint's highest impediment as rendered, so the rule can be checked before the round trip. */
+  highestId: string | null;
 };
 
 export type CloseDayResult = Result<{ days: SprintDay[]; streak: number }> & {
@@ -39,17 +50,20 @@ export type CloseDayResult = Result<{ days: SprintDay[]; streak: number }> & {
  */
 export async function closeDayAction(dayId: string, sprintId: string, input: CloseDayInput): Promise<CloseDayResult> {
   if (!Number.isInteger(input.actual) || input.actual < 0) return { error: friendlyError("invalid_actual") };
-  if (input.hurt.length > 0 && !input.mostDamaging) return { error: friendlyError("most_damaging_required") };
-  if (input.helped.length > 0 && !input.mostUseful) return { error: friendlyError("most_useful_required") };
+  const occurred = input.highestId !== null && input.impediments.some((i) => i.id === input.highestId && i.answer === "yes");
+  if (occurred && !input.response) return { error: friendlyError("response_required") };
+  if (occurred && !input.recovered) return { error: friendlyError("recovered_required") };
+  if (!occurred && (input.response || input.recovered || input.impact)) return { error: friendlyError("response_not_applicable") };
   const supabase = await createClient();
   const res = await supabase.rpc("close_day", {
     p_sprint_day_id: dayId,
     p_actual: input.actual,
     p_notes: input.notes.trim() || undefined,
-    p_hurt: input.hurt,
-    p_most_damaging: input.hurt.length > 0 ? (input.mostDamaging ?? undefined) : undefined,
-    p_helped: input.helped,
-    p_most_useful: input.helped.length > 0 ? (input.mostUseful ?? undefined) : undefined,
+    p_impediments: input.impediments.map((i) => ({ item_id: i.id, answer: i.answer })),
+    p_cues: input.cues.map((c) => ({ item_id: c.id, answer: c.answer })),
+    p_response: occurred ? (input.response ?? undefined) : undefined,
+    p_recovered: occurred ? (input.recovered ?? undefined) : undefined,
+    p_impact: occurred ? (input.impact ?? undefined) : undefined,
   });
   if (res.error) return failed("closeDay", res.error, { dayId, sprintId });
   revalidatePath("/sprints", "layout");

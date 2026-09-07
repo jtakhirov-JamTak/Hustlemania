@@ -448,6 +448,14 @@ a {
   color: var(--ink);
 }
 
+/* Day Close answers (F7): a row of chips, one group per question. */
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .chip:disabled {
   color: var(--muted);
   cursor: not-allowed;

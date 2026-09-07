@@ -25,6 +25,7 @@ export function PlanCard({
   goal,
   initialMode,
   days: initialDays,
+  highestId,
   todayInSprintTz,
   sprintOver,
 }: {
@@ -33,6 +34,8 @@ export function PlanCard({
   goal: number;
   initialMode: "same" | "custom";
   days: SprintDay[];
+  /** F7: the sprint's highest impediment, for the backfill dialog's response questions. */
+  highestId: string | null;
   todayInSprintTz: string;
   /** The 14-day window has passed: the plan is read-only. Backfill stays available while the DB accepts it. */
   sprintOver: boolean;
@@ -160,6 +163,7 @@ export function PlanCard({
           goal={goal}
           day={backfill.day}
           offered={backfill.offered}
+          highestId={highestId}
           backfill
           onCancel={() => setBackfill(null)}
           onDone={(outcome) => {

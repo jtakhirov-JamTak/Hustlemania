@@ -2,6 +2,31 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## Found during F7 (2026-09-07), not fixed there
+
+- **Evaluator allowlist lacks `docker`** (eval-04, P2-4): the prescribed `docker exec … psql`
+  inspection was refused, so catalog details (policies, triggers) were verified from the
+  migration source and the DB suite only; variable assignment and an `echo` containing
+  `->` were refused too. Adding `docker exec supabase_db_Hustlemania psql` to the
+  user-level `shell_guard.py` evaluator allowlist is the human's move (DECISIONS,
+  handoff B2).
+- **eval-04 seeded two users and a sprint through the API and left them**; the stack was
+  reset afterwards in the same session, so nothing remains, but future evaluations
+  should expect a `db:reset` before and after.
+- **`CloseFlow`, `NewSprintWizard` and `SprintItemsRow` keep their inline styles** after
+  the F7 rewrite of step 2 (not in the F7 acceptance list, same call as F6); the pill
+  rows reuse `.chip` / `.chip-on` and one new `.pill-row`. The move to classes stays
+  owed to F8 (Today card states) and F9 (wizard).
+- **Step 2 scrolls inside the modal at 763px** once the Highest is picked (five groups
+  plus the note); the footer stays pinned. Acceptable, but F8's inline Today card should
+  not inherit a scroll box.
+- **The wizard's focus radio and Today's FOCUS tag / "Set as focus" are not in the v8
+  artboard**; F8 (rail cue card) and F9 should draw them rather than keep the
+  improvised rows.
+- **`friendlyError` matches codes by substring in insertion order**: a new code that
+  contains an older one (none today) would map to the older copy. Consider exact-token
+  matching when the table grows again.
+
 ## Found during audit remediation phases 4–6 (2026-09-06), not fixed there
 
 - **#43 wizard split by step.** `components/NewSprintWizard.tsx` is ~600 lines across
@@ -60,15 +85,13 @@ The ranked backlog itself is `docs/audits/full-audit-2026-09-05.md` (47 findings
 
 ## Hustlemania — from eval-02 (F2, 2026-09-05), all P2
 
-- **Close dialog stays mounted under the result screen** — two `role="dialog"
-  aria-modal="true"` elements at once; assistive tech sees two modals. Unmount
-  `CloseDialog` when `result` is set. `components/today/CloseCard.tsx`.
-- **Most-damaging / most-useful radio only appears at ≥2 selections**; a single
-  selection is auto-assigned. Functionally equivalent to the SPEC ("radio when ≥1
-  chosen"), but the auto-pick also persists when a second item is added, so the first
-  pick stays "most damaging" unless the user changes it. `CloseCard.tsx`.
-- **Duplicate ids in `p_cue_ids` / `p_hurt` are silently de-duplicated** rather than
-  rejected. Observation only. `supabase/migrations/0004_libraries.sql`.
+- ~~**Close dialog stays mounted under the result screen**~~ `CloseFlow` renders either
+  the dialog or the result screen since the F5 rewrite; re-checked in F7.
+- ~~**Most-damaging / most-useful radio only appears at ≥2 selections**~~ The hurt /
+  helped questions and their radios were dropped in F7.
+- ~~**Duplicate ids in `p_cue_ids` / `p_hurt` are silently de-duplicated** rather than
+  rejected.~~ `close_day` rejects a repeated item with `duplicate_item` since F7 (0010);
+  `start_sprint` still de-duplicates `p_cue_ids` / `p_impediment_ids`.
 
 ## Hustlemania — from eval-03 (F4, 2026-09-05), all P2
 
@@ -152,8 +175,8 @@ The ranked backlog itself is `docs/audits/full-audit-2026-09-05.md` (47 findings
 - ~~**Scope filter semantics undefined in the SPEC**~~ Settled in F6 (2026-09-07): exact scope per chip. Was: the "Wealth" chip lists only
   `scope = wealth`, not `global + wealth`. Decide and write it into F2 or the library
   page copy.
-- **e2e covers the single-selection close only**; the "Which hurt most?" radio path was
-  exercised by the evaluator's manual run and by the DB suite, not `golden-path.spec.ts`.
+- ~~**e2e covers the single-selection close only**~~ Superseded by F7: the golden path
+  walks the observation groups, the response questions and the untouched-group case.
 - **Harness, not app:** Claude in Chrome would not resize the window below desktop
   width (390×844 requested, 1280 kept), so the phone check rests on the Playwright phone
   project; `Page.captureScreenshot` timed out on most first attempts after an

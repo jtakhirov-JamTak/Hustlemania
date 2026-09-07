@@ -12,6 +12,8 @@ type Props = {
   goal: number;
   day: SprintDay;
   offered: OfferedItems;
+  /** F7: the sprint's highest impediment; decides whether the response questions are asked. */
+  highestId: string | null;
   canClose: boolean;
   cannotCloseReason?: string;
   tz: string;
@@ -53,7 +55,7 @@ export function CloseCard(props: Props) {
           <div style={{ maxWidth: "42ch" }}>
             <h2 className="card-title">Close the day</h2>
             <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>
-              Actual result first, then what hurt and what helped. Close before 11:59 PM {props.tz.replace("_", " ")} — a truthful zero counts.
+              Actual result first, then what happened: which cues you used, what showed up. Close before 11:59 PM {props.tz.replace("_", " ")} — a truthful zero counts.
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -99,6 +101,7 @@ export function CloseCard(props: Props) {
           goal={props.goal}
           day={day}
           offered={props.offered}
+          highestId={props.highestId}
           backfill={false}
           onCancel={() => setOpen(false)}
           onDone={() => {

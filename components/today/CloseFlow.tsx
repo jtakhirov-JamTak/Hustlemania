@@ -2,9 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { closeDayAction } from "@/app/(app)/actions/day";
+import { closeDayAction, type Answer, type ImpactAnswer, type ResponseAnswer } from "@/app/(app)/actions/day";
 import { Modal } from "@/components/Modal";
-import { OptionRow } from "@/components/OptionRow";
 import { callAction } from "@/lib/callAction";
 import type { OfferedItems, SprintDay } from "@/lib/data";
 import { formatAmount, formatNumber, toBaseUnits, unitLabel, type Measured } from "@/lib/format";
@@ -22,6 +21,7 @@ export function CloseFlow({
   goal,
   day,
   offered,
+  highestId,
   backfill,
   onCancel,
   onDone,
@@ -31,6 +31,8 @@ export function CloseFlow({
   goal: number;
   day: SprintDay;
   offered: OfferedItems;
+  /** The sprint's highest impediment: its occurrence opens the response questions (F7). */
+  highestId: string | null;
   /** The day's date has passed in the sprint's zone: the pre-close copy says so. */
   backfill: boolean;
   onCancel: () => void;
@@ -50,11 +52,36 @@ export function CloseFlow({
       />
     );
   }
-  return <CloseDialog sprintId={sprintId} measured={measured} day={day} offered={offered} backfill={backfill} onCancel={onCancel} onClosed={setOutcome} />;
+  return (
+    <CloseDialog sprintId={sprintId} measured={measured} day={day} offered={offered} highestId={highestId} backfill={backfill} onCancel={onCancel} onClosed={setOutcome} />
+  );
 }
 
-function toggle(list: string[], id: string): string[] {
-  return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+/**
+ * One multi-pick group (F7): tapping an item marks it yes and the rest no; None marks
+ * every item no; Unsure marks every item unsure; a group never touched sends nothing,
+ * and the DB stores every offered item as unanswered.
+ */
+type Group = { mode: "untouched" | "picked" | "none" | "unsure"; picked: string[] };
+const UNTOUCHED: Group = { mode: "untouched", picked: [] };
+
+function answersOf(group: Group, ids: string[]): { id: string; answer: Answer }[] {
+  switch (group.mode) {
+    case "untouched":
+      return [];
+    case "none":
+      return ids.map((id) => ({ id, answer: "no" }));
+    case "unsure":
+      return ids.map((id) => ({ id, answer: "unsure" }));
+    case "picked":
+      return ids.map((id) => ({ id, answer: group.picked.includes(id) ? "yes" : "no" }));
+  }
+}
+
+function pick(group: Group, id: string): Group {
+  if (group.mode !== "picked") return { mode: "picked", picked: [id] };
+  const picked = group.picked.includes(id) ? group.picked.filter((x) => x !== id) : [...group.picked, id];
+  return picked.length === 0 ? UNTOUCHED : { mode: "picked", picked };
 }
 
 function CloseDialog(props: {
@@ -62,6 +89,7 @@ function CloseDialog(props: {
   measured: Measured;
   day: SprintDay;
   offered: OfferedItems;
+  highestId: string | null;
   backfill: boolean;
   onCancel: () => void;
   onClosed: (outcome: CloseOutcome) => void;
@@ -72,12 +100,11 @@ function CloseDialog(props: {
   const [whole, setWhole] = useState("");
   const [hours, setHours] = useState("");
   const [minutes, setMinutes] = useState("");
-  const [hurt, setHurt] = useState<string[]>([]);
-  const [hurtNone, setHurtNone] = useState(false);
-  const [mostDamaging, setMostDamaging] = useState<string | null>(null);
-  const [helped, setHelped] = useState<string[]>([]);
-  const [helpedNone, setHelpedNone] = useState(false);
-  const [mostUseful, setMostUseful] = useState<string | null>(null);
+  const [cues, setCues] = useState<Group>(UNTOUCHED);
+  const [imps, setImps] = useState<Group>(UNTOUCHED);
+  const [response, setResponse] = useState<ResponseAnswer | null>(null);
+  const [recovered, setRecovered] = useState<Answer | null>(null);
+  const [impact, setImpact] = useState<ImpactAnswer | null>(null);
   const [notes, setNotes] = useState("");
   // `closed` means the day did close and only the refresh failed: no retry, reload instead.
   const [error, setError] = useState<{ text: string; closed: boolean } | null>(null);
@@ -101,23 +128,24 @@ function CloseDialog(props: {
         ? null
         : toBaseUnits(measured.measurement, { whole: Number(whole) });
   const actualValid = value !== null && Number.isInteger(value) && value >= 0 && (measured.measurement !== "hours" || Number(minutes || 0) < 60);
+  const step1Hint = actualValid ? null : "Enter the actual, zero included.";
 
-  // Step 1 is complete when the actual is valid and the hurt question is answered:
-  // either "None today", or at least one impediment plus the most damaging one.
-  const hurtAnswered = hurtNone || hurt.length > 0;
-  const damagingOk = hurt.length === 0 || (mostDamaging !== null && hurt.includes(mostDamaging));
-  const step1Hint = !actualValid
-    ? "Enter the actual, zero included."
-    : !hurtAnswered
-      ? "Say which impediments hurt, or none."
-      : !damagingOk
-        ? "Pick the one that hurt most."
-        : null;
-  const helpedAnswered = helpedNone || helped.length > 0;
-  const usefulOk = helped.length === 0 || (mostUseful !== null && helped.includes(mostUseful));
-  const step2Hint = !helpedAnswered ? "Say which cues helped, or none." : !usefulOk ? "Pick the one that helped most." : null;
+  // The highest impediment, as this day offers it; its occurrence opens the response questions.
+  const highest = offered.impediments.find((i) => i.id === props.highestId) ?? null;
+  const highestOccurred = highest !== null && imps.mode === "picked" && imps.picked.includes(highest.id);
+  const step2Hint = !highestOccurred ? null : !response ? "Did the response run?" : !recovered ? "Did you recover?" : null;
   const hint = step === 1 ? step1Hint : step2Hint;
   const closeBlocked = Boolean(step2Hint) || pending || error?.closed === true;
+
+  function setImpediments(next: Group) {
+    setImps(next);
+    // The three questions apply only while the highest is picked; drop stale answers otherwise.
+    if (!(highest && next.mode === "picked" && next.picked.includes(highest.id))) {
+      setResponse(null);
+      setRecovered(null);
+      setImpact(null);
+    }
+  }
 
   function submit() {
     if (closeBlocked || step1Hint || value === null) return;
@@ -126,10 +154,12 @@ function CloseDialog(props: {
         closeDayAction(day.id, props.sprintId, {
           actual: value,
           notes,
-          hurt,
-          mostDamaging: hurt.length > 0 ? mostDamaging : null,
-          helped,
-          mostUseful: helped.length > 0 ? mostUseful : null,
+          impediments: answersOf(imps, offered.impediments.map((i) => i.id)),
+          cues: answersOf(cues, offered.cues.map((c) => c.id)),
+          response: highestOccurred ? response : null,
+          recovered: highestOccurred ? recovered : null,
+          impact: highestOccurred ? impact : null,
+          highestId: highest?.id ?? null,
         }),
       );
       if (res.error !== undefined) {
@@ -139,11 +169,6 @@ function CloseDialog(props: {
       props.onClosed(res);
     });
   }
-
-  const hurtItems = offered.impediments;
-  const helpedItems = offered.cues;
-  const hurtPicked = hurtItems.filter((i) => hurt.includes(i.id));
-  const helpedPicked = helpedItems.filter((c) => helped.includes(c.id));
 
   return (
     <Modal labelledBy="close-title" onDismiss={props.onCancel} initialFocus={first} maxWidth={620}>
@@ -205,93 +230,79 @@ function CloseDialog(props: {
                   </label>
                 )}
               </div>
-
-              <div style={{ marginTop: 22 }} data-testid="hurt-section">
-                <h3 id="hurt-title" style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
-                  Which impediments hurt today?
-                </h3>
-                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>None is a truthful answer.</div>
-                <div role="group" aria-labelledby="hurt-title" style={{ marginTop: 6 }}>
-                  {hurtItems.map((i) => (
-                    <OptionRow
-                      key={i.id}
-                      on={hurt.includes(i.id)}
-                      label={i.name}
-                      sub={i.proof_when && i.proof_then ? `WHEN ${i.proof_when}` : null}
-                      onPick={() => {
-                        const next = toggle(hurt, i.id);
-                        setHurt(next);
-                        setHurtNone(false);
-                        if (mostDamaging && !next.includes(mostDamaging)) setMostDamaging(null);
-                        if (next.length === 1) setMostDamaging(next[0]);
-                      }}
-                    />
-                  ))}
-                  <OptionRow
-                    on={hurtNone}
-                    label="None today"
-                    onPick={() => {
-                      setHurtNone(true);
-                      setHurt([]);
-                      setMostDamaging(null);
-                    }}
-                    testId="hurt-none"
-                  />
-                </div>
-                {hurt.length > 1 ? (
-                  <div style={{ marginTop: 14 }} role="radiogroup" aria-labelledby="hurt-most-title">
-                    <div id="hurt-most-title" style={{ fontSize: 13, fontWeight: 600 }}>
-                      Which hurt most?
-                    </div>
-                    {hurtPicked.map((i) => (
-                      <OptionRow key={i.id} single on={mostDamaging === i.id} label={i.name} onPick={() => setMostDamaging(i.id)} />
-                    ))}
-                  </div>
-                ) : null}
-              </div>
             </>
           ) : (
             <>
               <h2 id="close-title" ref={heading} tabIndex={-1} className="heading" style={{ fontSize: 26, margin: 0, outline: "none" }}>
-                Which execution cues helped?
+                What happened on Day {day.day_index}?
               </h2>
-              <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>None is a truthful answer.</div>
-              <div role="group" aria-label="Cues that helped" style={{ marginTop: 12 }} data-testid="helped-section">
-                {helpedItems.map((c) => (
-                  <OptionRow
-                    key={c.id}
-                    on={helped.includes(c.id)}
-                    label={c.name}
-                    sub={c.explanation}
-                    onPick={() => {
-                      const next = toggle(helped, c.id);
-                      setHelped(next);
-                      setHelpedNone(false);
-                      if (mostUseful && !next.includes(mostUseful)) setMostUseful(null);
-                      if (next.length === 1) setMostUseful(next[0]);
-                    }}
+              <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>None and Unsure are truthful answers.</div>
+
+              <PickGroup
+                testId="use-group"
+                kicker="Use"
+                question="Which cues did you use?"
+                items={offered.cues.map((c) => ({ id: c.id, label: c.name, tag: c.is_focus ? "FOCUS" : null }))}
+                emptyLine="No cues were in the sprint on this day."
+                group={cues}
+                onChange={setCues}
+              />
+
+              <PickGroup
+                testId="occurrence-group"
+                kicker="Occurrence"
+                question="Which obstacles showed up?"
+                sub={highest ? `Highest: ${highest.name}` : null}
+                items={offered.impediments.map((i) => ({ id: i.id, label: i.name, tag: null }))}
+                emptyLine="No impediments were in the sprint on this day."
+                group={imps}
+                onChange={setImpediments}
+              />
+
+              {highestOccurred && highest ? (
+                <>
+                  <AnswerGroup
+                    testId="response-group"
+                    kicker={`Response · ${highest.name}`}
+                    question="Did you run the response?"
+                    sub={`${highest.proof_then ? `THEN ${highest.proof_then} · ` : ""}judge the first time it showed up today`}
+                    options={[
+                      ["yes", "Yes"],
+                      ["no", "No"],
+                      ["partially", "Partially"],
+                      ["unsure", "Unsure"],
+                    ]}
+                    value={response}
+                    onChange={setResponse}
                   />
-                ))}
-                <OptionRow
-                  on={helpedNone}
-                  label="None today"
-                  onPick={() => {
-                    setHelpedNone(true);
-                    setHelped([]);
-                    setMostUseful(null);
-                  }}
-                  testId="helped-none"
-                />
-              </div>
-              {helped.length > 1 ? (
-                <div style={{ marginTop: 14 }} role="radiogroup" aria-labelledby="helped-most-title">
-                  <div id="helped-most-title" style={{ fontSize: 13, fontWeight: 600 }}>
-                    Which helped most?
-                  </div>
-                  {helpedPicked.map((c) => (
-                    <OptionRow key={c.id} single on={mostUseful === c.id} label={c.name} onPick={() => setMostUseful(c.id)} />
-                  ))}
-                </div>
+                  <AnswerGroup
+                    testId="recovery-group"
+                    kicker="Recovery"
+                    question="Did you recover?"
+                    sub={highest.proof_recover ? `Recovered when ${highest.proof_recover}` : "No recovery criterion recorded for this day"}
+                    options={[
+                      ["yes", "Yes"],
+                      ["no", "No"],
+                      ["unsure", "Unsure"],
+                    ]}
+                    value={recovered}
+                    onChange={setRecovered}
+                  />
+                  <AnswerGroup
+                    testId="impact-group"
+                    kicker={`Impact · ${highest.name}`}
+                    question="How much did it cost today?"
+                    sub="Your read, not the number"
+                    options={[
+                      ["nothing", "Nothing"],
+                      ["some", "Some"],
+                      ["a_lot", "A lot"],
+                      ["unsure", "Unsure"],
+                    ]}
+                    value={impact}
+                    onChange={setImpact}
+                  />
+                </>
               ) : null}
 
               <label style={{ display: "block", marginTop: 18 }}>
@@ -344,6 +355,108 @@ function CloseDialog(props: {
         </div>
       </form>
     </Modal>
+  );
+}
+
+function GroupHead({ kicker, question, sub, id }: { kicker: string; question: string; sub?: string | null; id: string }) {
+  return (
+    <>
+      <div className="label-accent" style={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        {kicker}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginTop: 2 }}>
+        <span id={id} style={{ fontSize: 13, fontWeight: 600 }}>
+          {question}
+        </span>
+        {sub ? <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{sub}</span> : null}
+      </div>
+    </>
+  );
+}
+
+/** A multi-pick question: item pills plus None and Unsure. */
+function PickGroup({
+  testId,
+  kicker,
+  question,
+  sub,
+  items,
+  emptyLine,
+  group,
+  onChange,
+}: {
+  testId: string;
+  kicker: string;
+  question: string;
+  sub?: string | null;
+  items: { id: string; label: string; tag: string | null }[];
+  emptyLine: string;
+  group: Group;
+  onChange: (next: Group) => void;
+}) {
+  const labelId = `${testId}-label`;
+  return (
+    <div style={{ marginTop: 16 }} data-testid={testId} data-mode={group.mode}>
+      <GroupHead kicker={kicker} question={question} sub={sub} id={labelId} />
+      {items.length === 0 ? (
+        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>{emptyLine}</div>
+      ) : (
+        <div className="pill-row" role="group" aria-labelledby={labelId}>
+          {items.map((item) => {
+            const on = group.mode === "picked" && group.picked.includes(item.id);
+            return (
+              <button key={item.id} type="button" className={`chip ${on ? "chip-on" : ""}`} aria-pressed={on} onClick={() => onChange(pick(group, item.id))}>
+                {item.label}
+                {item.tag ? (
+                  <span className="option-tag" data-testid="focus-tag" style={on ? { color: "#fff", borderColor: "rgba(255,255,255,0.6)" } : undefined}>
+                    {item.tag}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+          <button type="button" className={`chip ${group.mode === "none" ? "chip-on" : ""}`} aria-pressed={group.mode === "none"} onClick={() => onChange({ mode: "none", picked: [] })} data-testid={`${testId.replace("-group", "")}-none`}>
+            None
+          </button>
+          <button type="button" className={`chip ${group.mode === "unsure" ? "chip-on" : ""}`} aria-pressed={group.mode === "unsure"} onClick={() => onChange({ mode: "unsure", picked: [] })}>
+            Unsure
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A single-answer question on a fixed scale. */
+function AnswerGroup<T extends string>({
+  testId,
+  kicker,
+  question,
+  sub,
+  options,
+  value,
+  onChange,
+}: {
+  testId: string;
+  kicker: string;
+  question: string;
+  sub?: string | null;
+  options: [T, string][];
+  value: T | null;
+  onChange: (next: T) => void;
+}) {
+  const labelId = `${testId}-label`;
+  return (
+    <div style={{ marginTop: 16 }} data-testid={testId}>
+      <GroupHead kicker={kicker} question={question} sub={sub} id={labelId} />
+      <div className="pill-row" role="radiogroup" aria-labelledby={labelId}>
+        {options.map(([key, label]) => (
+          <button key={key} type="button" role="radio" className={`chip ${value === key ? "chip-on" : ""}`} aria-checked={value === key} onClick={() => onChange(key)}>
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

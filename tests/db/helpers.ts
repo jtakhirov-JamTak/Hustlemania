@@ -86,6 +86,8 @@ export type SprintItems = {
   p_cue_ids: string[];
   p_impediment_ids: string[];
   p_highest_impediment_id: string;
+  /** F7: defaults to the first cue in moneySprintArgs; pass null or a stranger to test the rule. */
+  p_focus_cue_id?: string | null;
 };
 
 /** One global cue and one global impediment with a complete Proof Point — the minimum start_sprint accepts. */
@@ -97,7 +99,7 @@ export async function seedItems(user: TestUser, scope = "global"): Promise<Sprin
     proofThen: "I start a 10-minute timer on the smallest executable task",
     proofRecover: "The timer is running within 10 minutes",
   });
-  return { p_cue_ids: [cue], p_impediment_ids: [imp], p_highest_impediment_id: imp };
+  return { p_cue_ids: [cue], p_focus_cue_id: cue, p_impediment_ids: [imp], p_highest_impediment_id: imp };
 }
 
 export type StartSprintArgs = SprintItems & {
@@ -137,6 +139,7 @@ export function moneySprintArgs(overrides: Partial<StartSprintArgs> & { p_start_
     p_usage_of_funds: [{ label: "Rent", amount: 280_000 }],
     p_tz: "America/Los_Angeles",
     ...overrides,
+    p_focus_cue_id: overrides.p_focus_cue_id === undefined ? (overrides.p_cue_ids[0] ?? null) : overrides.p_focus_cue_id,
   };
 }
 

@@ -36,8 +36,12 @@ const MESSAGES: Record<string, string> = {
   item_archived: "That item is archived. Restore it first.",
   item_out_of_scope: "That item's scope does not cover this area.",
   item_not_offered: "That item was not part of the sprint on this day.",
-  most_damaging_required: "Pick the one impediment that hurt most.",
-  most_useful_required: "Pick the one cue that helped most.",
+  invalid_answer: "That answer is not one of the choices.",
+  duplicate_item: "An item was answered twice.",
+  response_required: "Say whether the response ran — Unsure is a truthful answer.",
+  recovered_required: "Say whether you recovered — Unsure is a truthful answer.",
+  response_not_applicable: "The response questions only apply when the highest impediment showed up.",
+  no_focus_cue: "A sprint needs one focus cue among its execution cues.",
   already_in_sprint: "That item is already in this sprint.",
   not_in_sprint: "That item is not in this sprint.",
   invalid_scope: "Scope is Global, Health, Wealth or Relationships.",
@@ -73,6 +77,8 @@ export function blockedReason(reason: string): string {
       return "it would be left without an impediment";
     case "no_highest_impediment":
       return "this is its highest impediment";
+    case "no_focus_cue":
+      return "this is its focus cue";
     case "proof_point_required":
       return "its highest impediment would lack a WHEN, a THEN or a RECOVERED WHEN";
     default:
