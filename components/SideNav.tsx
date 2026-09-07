@@ -45,16 +45,7 @@ export function SideNavList({ items }: { items: SideItem[] }) {
  */
 export function SideNav({ title, items, children }: { title: string; items: SideItem[]; children?: React.ReactNode }) {
   return (
-    <aside
-      data-sidebar
-      style={{
-        width: 266,
-        flex: "0 0 266px",
-        borderRight: "1px solid var(--divider)",
-        padding: "20px 0 40px",
-        background: "var(--panel)",
-      }}
-    >
+    <aside data-sidebar>
       <div className="label-muted side-title">{title}</div>
       <SideNavList items={items} />
       {children}

@@ -20,8 +20,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${jakarta.variable} h-full`}>
-      <body className="min-h-full">{children}</body>
+    <html lang="en" className={jakarta.variable}>
+      <body>{children}</body>
     </html>
   );
 }

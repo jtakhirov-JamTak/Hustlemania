@@ -24,13 +24,13 @@ export default async function SprintsLayout({ children }: { children: React.Reac
     <>
       <SideNav title="Sprints" items={items}>
         <div className="side-cta">
-          <Link href="/sprints/new" className="btn btn-primary btn-block" style={{ display: "block", textDecoration: "none" }}>
+          <Link href="/sprints/new" className="btn btn-primary btn-block btn-link">
             New Sprint
           </Link>
         </div>
       </SideNav>
-      <main data-main style={{ flex: 1, minWidth: 0, padding: "30px 40px 100px" }}>
-        <div style={{ maxWidth: 940 }}>{children}</div>
+      <main className="main">
+        <div className="workspace">{children}</div>
       </main>
     </>
   );

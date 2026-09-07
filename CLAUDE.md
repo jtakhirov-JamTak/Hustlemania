@@ -149,8 +149,8 @@ layer and they do not travel together.
   fails the commit if `package.json` exists without one. It is inert until that
   clone runs `git config core.hooksPath .githooks` (README setup step 2;
   `new-app.ps1` does it for generated apps and asserts the readback).
-  **This template's own clone is not wired, so its own commits are not gated by
-  it.** Even wired, it is fast local drift control, not a trust boundary: a local
+  **This clone is wired: every commit runs the full verify (~4 min) and needs the
+    local Supabase stack up.** Even wired, it is fast local drift control, not a trust boundary: a local
   hook is bypassable, so CI is the backstop.
 
 **Installing a governance change is the human's move.** `.claude/`, `.githooks/`

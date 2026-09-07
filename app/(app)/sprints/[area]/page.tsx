@@ -23,21 +23,15 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
   if (!active) {
     const vision = await loadActiveVision(supabase, area);
     return (
-      <div className="card" style={{ padding: "28px 30px" }} data-testid="empty-state">
+      <div className="card card-page" data-testid="empty-state">
         <span className="tag tag-accent">{name}</span>
-        <h1 className="heading" style={{ fontSize: 30, margin: "12px 0 0" }}>
-          {vision ? `No sprint running in ${name}` : "No sprint can start here yet"}
-        </h1>
-        <p style={{ fontSize: 14.5, lineHeight: 1.55, color: "var(--muted)", marginTop: 10, maxWidth: "52ch" }}>
+        <h1 className="heading page-title mt-12">{vision ? `No sprint running in ${name}` : "No sprint can start here yet"}</h1>
+        <p className="lede lede-narrow">
           {vision
             ? "Pick one numeric goal that moves the vision, lock it for 14 days, and close every day with an honest actual."
             : `A sprint has to advance a 1-year vision. Write the ${name} vision first; it takes one paragraph.`}
         </p>
-        <Link
-          href={vision ? `/sprints/new?area=${area}` : `/vision/${area}`}
-          className="btn btn-primary"
-          style={{ display: "inline-block", marginTop: 18, textDecoration: "none" }}
-        >
+        <Link href={vision ? `/sprints/new?area=${area}` : `/vision/${area}`} className="btn btn-primary btn-link mt-18">
           {vision ? `Create a ${name} sprint` : `Write the ${name} vision`}
         </Link>
       </div>

@@ -60,33 +60,27 @@ export function PlanGrid({
           const backfillable = Boolean(c.missed && onBackfill);
           const status =
             c.actual !== null
-              ? { text: `actual ${formatNumber(measured, c.actual)}`, color: c.actual >= c.target ? "var(--success)" : "var(--under)", bold: false }
+              ? { text: `actual ${formatNumber(measured, c.actual)}`, tone: c.actual >= c.target ? "met" : "under" }
               : c.missed
-                ? { text: "missed", color: "var(--under)", bold: true }
+                ? { text: "missed", tone: "missed" }
                 : c.locked
-                  ? { text: "locked", color: "var(--muted)", bold: false }
+                  ? { text: "locked", tone: "locked" }
                   : null;
           const header = (
             <div className="plan-cell-head">
-              <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--accent-ink)" }}>D{c.dayIndex}</span>
-              <span style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap" }}>
+              <span className="plan-d">D{c.dayIndex}</span>
+              <span className="plan-date">
                 {SHORT_DOW[dayOfWeek(c.date)]} {dayOfMonth(c.date)}
               </span>
             </div>
           );
-          const cellStyle = {
-            border: `1px solid ${invalid ? "var(--under)" : "var(--divider)"}`,
-            borderRadius: 10,
-            padding: "8px 6px",
-            textAlign: "center" as const,
-            background: c.locked ? "var(--faint)" : "var(--panel)",
-          };
+          const cellClass = `plan-cell ${c.locked ? "plan-cell-locked" : ""} ${invalid ? "plan-cell-invalid" : ""}`;
           if (backfillable) {
             // The whole cell is the target (≥ 44 pt tall), so the label never has to be.
             return (
               <button
                 key={c.dayIndex}
-                className="plan-cell"
+                className={`${cellClass} plan-cell-backfill`}
                 type="button"
                 data-day={c.dayIndex}
                 data-locked="true"
@@ -95,19 +89,20 @@ export function PlanGrid({
                 aria-busy={backfillBusy || undefined}
                 disabled={backfillBusy}
                 onClick={() => onBackfill?.(i)}
-                style={{ ...cellStyle, display: "block", width: "100%", minHeight: 44, font: "inherit", color: "inherit", cursor: backfillBusy ? "progress" : "pointer" }}
               >
                 {header}
-                <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 4 }} data-testid={`plan-target-${c.dayIndex}`}>
+                <div className="plan-target" data-testid={`plan-target-${c.dayIndex}`}>
                   {formatNumber(measured, c.target)}
                 </div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--under)", marginTop: 2 }}>missed</div>
-                <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--accent-ink)", marginTop: 4 }}>Backfill</div>
+                <div className="plan-status" data-tone="missed">
+                  missed
+                </div>
+                <div className="plan-backfill-label">Backfill</div>
               </button>
             );
           }
           return (
-            <div key={c.dayIndex} className="plan-cell" data-day={c.dayIndex} data-locked={c.locked ? "true" : "false"} data-missed={c.missed ? "true" : undefined} style={cellStyle}>
+            <div key={c.dayIndex} className={cellClass} data-day={c.dayIndex} data-locked={c.locked ? "true" : "false"} data-missed={c.missed ? "true" : undefined}>
               {header}
               {edit ? (
                 <input
@@ -121,10 +116,10 @@ export function PlanGrid({
                 />
               ) : (
                 <>
-                  <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 4 }} data-testid={`plan-target-${c.dayIndex}`}>
+                  <div className="plan-target" data-testid={`plan-target-${c.dayIndex}`}>
                     {formatNumber(measured, c.target)}
                   </div>
-                  <div style={{ fontSize: 11, fontWeight: status?.bold ? 600 : undefined, color: status?.color ?? "var(--muted)", marginTop: 2, minHeight: 12 }}>
+                  <div className="plan-status" data-tone={status?.tone}>
                     {status?.text ?? ""}
                   </div>
                 </>
@@ -133,18 +128,14 @@ export function PlanGrid({
           );
         })}
       </div>
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12.5, marginTop: 12 }} data-testid="plan-summary">
-        <span style={{ color: "var(--muted)" }}>
-          Planned <strong style={{ fontWeight: 600, color: "var(--ink)" }}>{planned === null ? "—" : formatAmount(measured, planned)}</strong>
+      <div className="plan-summary" data-testid="plan-summary">
+        <span className="plan-summary-item">
+          Planned <strong>{planned === null ? "—" : formatAmount(measured, planned)}</strong>
         </span>
-        <span style={{ color: "var(--muted)" }}>
-          Goal · locked <strong style={{ fontWeight: 600, color: "var(--ink)" }}>{formatAmount(measured, goal)}</strong>
+        <span className="plan-summary-item">
+          Goal · locked <strong>{formatAmount(measured, goal)}</strong>
         </span>
-        <span
-          data-testid="plan-delta"
-          data-state={delta === null ? "invalid" : delta === 0 ? "balanced" : delta < 0 ? "below" : "above"}
-          style={{ fontWeight: 600, color: delta === 0 ? "var(--success)" : delta === null || delta < 0 ? "var(--under)" : "var(--ink)" }}
-        >
+        <span className="plan-delta" data-testid="plan-delta" data-state={delta === null ? "invalid" : delta === 0 ? "balanced" : delta < 0 ? "below" : "above"}>
           {delta === null
             ? "Fix the highlighted day"
             : delta === 0

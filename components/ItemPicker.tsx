@@ -63,51 +63,49 @@ export function ItemPicker({
 
   return (
     <Modal labelledBy="picker-title" onDismiss={onCancel} initialFocus={heading} maxWidth={560}>
-      <div className="dialog-head" style={{ paddingBottom: 18, borderBottom: "1px solid var(--divider)" }}>
-        <h2 id="picker-title" className="card-title" ref={heading} tabIndex={-1} style={{ outline: "none" }}>
+      <div className="dialog-head dialog-head-rule">
+        <h2 id="picker-title" className="card-title focus-quiet" ref={heading} tabIndex={-1}>
           {title}
         </h2>
-        <button type="button" className="link-quiet" aria-label="Cancel" onClick={onCancel} style={{ fontSize: 18, lineHeight: 1 }}>
+        <button type="button" className="link-quiet dialog-x" aria-label="Cancel" onClick={onCancel}>
           ×
         </button>
       </div>
-      <div className="dialog-body" style={{ paddingTop: 18 }}>
-        {blurb ? <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5 }}>{blurb}</div> : null}
-        {options.length === 0 && emptyLine ? <div style={{ fontSize: 13, color: "var(--muted)" }}>{emptyLine}</div> : null}
+      <div className="dialog-body dialog-body-rule">
+        {blurb ? <div className="dialog-blurb">{blurb}</div> : null}
+        {options.length === 0 && emptyLine ? <div className="dialog-empty">{emptyLine}</div> : null}
         <div role={single ? "radiogroup" : "group"} aria-label={title}>
           {options.map((o) => (
             <OptionRow key={o.id} on={selected.includes(o.id)} single={single} disabled={o.disabled} onPick={() => onToggle(o.id)} label={o.label} sub={o.sub} tag={o.tag} />
           ))}
         </div>
-        {proof ? <ProofInputs idPrefix="picker" when={proof.when} then={proof.then} onWhen={proof.onWhen} onThen={proof.onThen} style={{ marginTop: 14 }} /> : null}
+        {proof ? <ProofInputs idPrefix="picker" when={proof.when} then={proof.then} onWhen={proof.onWhen} onThen={proof.onThen} className="mt-14" /> : null}
         {create ? (
           <form
-            style={{ marginTop: 14 }}
+            className="mt-14"
             onSubmit={(e) => {
               e.preventDefault();
               submitCreate();
             }}
           >
-            <label htmlFor="picker-create" className="label-accent" style={{ display: "block", marginBottom: 6 }}>
+            <label htmlFor="picker-create" className="label-accent block field-label-top">
               {create.placeholder}
             </label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input id="picker-create" className="input" value={draft} onChange={(e) => setDraft(e.target.value)} style={{ flex: 1 }} />
-              <button type="submit" className="btn btn-ghost" aria-disabled={creating || !draft.trim()} style={{ padding: "6px 12px", color: "var(--accent-ink)" }}>
+            <div className="row">
+              <input id="picker-create" className="input grow" value={draft} onChange={(e) => setDraft(e.target.value)} />
+              <button type="submit" className="btn btn-ghost btn-ghost-accent" aria-disabled={creating || !draft.trim()}>
                 {creating ? "Creating…" : "Create"}
               </button>
             </div>
           </form>
         ) : null}
-        {createError || error ? (
-          <ErrorBar style={{ marginTop: 12 }}>{createError ?? error}</ErrorBar>
-        ) : null}
+        {createError || error ? <ErrorBar className="mt-12">{createError ?? error}</ErrorBar> : null}
       </div>
-      <div className="dialog-foot" style={{ borderTop: "1px solid var(--divider)" }}>
+      <div className="dialog-foot dialog-foot-rule">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>
           Cancel
         </button>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div className="actions">
           <span className="hint" id="picker-hint" aria-live="polite">
             {hint ?? ""}
           </span>

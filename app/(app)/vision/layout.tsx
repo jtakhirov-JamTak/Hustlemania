@@ -24,8 +24,8 @@ export default async function VisionLayout({ children }: { children: React.React
         </div>
         <SideNavList items={libraries} />
       </SideNav>
-      <main data-main style={{ flex: 1, minWidth: 0, padding: "30px 40px 100px" }}>
-        <div style={{ maxWidth: 940 }}>{children}</div>
+      <main className="main">
+        <div className="workspace">{children}</div>
       </main>
     </>
   );

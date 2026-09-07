@@ -6,6 +6,45 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-07 — Enabling pass: the shell's styles are classes, Tailwind is gone, and "no visible change" is a pixel diff
+
+**Decision.** Before the v8 redesign lands (SPEC F6–F9), the parts of the UI that survive
+it — the app header, tabs, sidebar, section layouts, login, the in-app error page,
+`Modal`, `ErrorBar`, `OptionRow`, `ProofInputs`, `ItemPicker`, `PlanGrid` — moved from
+inline `style={{…}}` to classes in `app/globals.css`, and Tailwind was removed
+(`tailwindcss`, `@tailwindcss/postcss`, `postcss.config.mjs`, the `@theme inline` block,
+`h-full` / `min-h-full`). Tailwind's preflight is inlined at the top of `globals.css`,
+verbatim, inside `@layer base`, so every unlayered rule keeps beating it exactly as
+before; its two `--theme()` lookups resolve to the app's own font stack. The phone
+overrides lost the `!important`s that only existed to beat inline styles; the two that
+still target inline-styled components (`[data-hero]`, `[data-cols]`) keep theirs until
+F8 rewrites those components.
+
+**Why the scope stopped at the shell.** The inventory found 372 inline styles in 30
+files; about 300 sit in components F6–F9 rewrite outright (Today cards, close flow,
+library page, wizard, vision form). Moving them to classes first would be built twice.
+The user chose "shell only + settle Tailwind" (RECONCILIATION-2026-09-06). Tailwind
+went because two utilities do not carry a dependency and the v8 handoff is plain CSS.
+
+**How "no visible change" was proven.** A temporary Playwright spec
+(`e2e/_baseline.spec.ts`) seeds a fixed user (`baseline@test.local`, so the header
+email is stable) and a day-3 sprint with two missed days, then captures 11 screens on
+desktop and phone (login, login error, Today, close step 1, plan edit, empty area,
+vision, both libraries, insights, wizard step 1) as full-page screenshots with
+`maxDiffPixels: 0`. Baseline taken before any edit and shown to reproduce on an
+unchanged tree (the first attempt was not stable: a per-run seeded email moved 466
+pixels, then the mask over it moved 36 — the fixed email fixed both). After the
+refactor all 22 snapshots matched. The check was then made to fail on purpose: one
+class padding nudged from 22px to 23px turned the desktop and phone Today captures
+red; restored, green again. The spec is deleted at the end of the pass because its
+seeded dates are relative to today and the snapshots would drift by tomorrow.
+
+**Rejected.** Keeping Tailwind for the preflight alone (the file is 220 lines, inlined
+once). A screenshot check on `test-results/today-phone.png` by eye (the diff is exact
+and covers eleven screens, not one). Moving the Today cards now (rewritten by F7/F8).
+
+---
+
 ## 2026-09-06 — Audit remediation, phases 4–6: the phone floor, native dialogs, tests that can go red
 
 Fix pass over `docs/audits/full-audit-2026-09-05.md` buckets A + B, phases 4–6 of 6

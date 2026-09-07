@@ -7,8 +7,13 @@
 - **#43 wizard split by step.** `components/NewSprintWizard.tsx` is ~600 lines across
   four steps in one component. A refactor with no behaviour change; deferred rather
   than done inside a fix pass. Actions were split by domain in phase 3.
-- **Tailwind keep or drop** (audit bucket D): still carried for `h-full` / `min-h-full`
-  and the `@theme` block. A decision, not a fix.
+- ~~**Tailwind keep or drop** (audit bucket D)~~ Dropped 2026-09-07 in the enabling
+  pass (DECISIONS); its preflight is inlined in `app/globals.css`.
+- **Inline styles remain in the components the redesign rewrites** (`TodayView`,
+  `CloseFlow`, `LibraryPage`, `NewSprintWizard`, `VisionForm` and the Today cards, ~280
+  of them): each moves to classes when its feature (F6–F9) replaces the component. The
+  shell moved on 2026-09-07. `app/global-error.tsx` keeps its inline styles for good:
+  it renders without the root layout, so no stylesheet reaches it.
 - **Audit LOW lists not swept**: textareas `rows={2}`, `autoCapitalize` / `enterKeyHint`,
   the date only in a hover `title` on the day strip, 64/78px numerals against a
   seven-figure target, `aria-label` overriding visible text on Remove buttons, the
@@ -174,3 +179,14 @@ The ranked backlog itself is `docs/audits/full-audit-2026-09-05.md` (47 findings
   `npx supabase status -o env`. It worked around them with Node scripts. Consider
   allowlisting `docker exec … psql` for DB inspection.
 
+
+## Deferred at the 2026-09-06 re-baseline (`docs/RECONCILIATION-2026-09-06.md`)
+
+- **Data export** (was F10 "Export my data"; Part 1 requirement withdrawn by the user).
+  When it returns: handler order, Zod schema equal to `information_schema`'s user-owned
+  table list, two-user leak test.
+- **Task completion vs result insight** (SPEC v1 F7): a fifth card over F4 task data.
+- **Mental rehearsal prompt** after saving a cue or impediment (docx, one sentence).
+- **Night-mode tokens**: the v8 handoff has no dark palette; Claude derives one from
+  Dusk inside the F8 interview and the user approves it there (2026-09-06).
+- **Lake / Meadow / Sand palettes** and a palette switcher: prototype knobs, not taken.

@@ -9,6 +9,7 @@ export function ProofInputs({
   onThen,
   placeholderWhen = "I notice myself…",
   placeholderThen = "I immediately…",
+  className,
   style,
 }: {
   idPrefix: string;
@@ -18,18 +19,19 @@ export function ProofInputs({
   onThen: (v: string) => void;
   placeholderWhen?: string;
   placeholderThen?: string;
+  className?: string;
   style?: React.CSSProperties;
 }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "9px 12px", alignItems: "center", ...style }}>
-      <label htmlFor={`${idPrefix}-when`} className="label-accent" style={{ fontWeight: 700 }}>
+    <div className={`proof-grid ${className ?? ""}`} style={style}>
+      <label htmlFor={`${idPrefix}-when`} className="label-accent proof-label">
         WHEN
       </label>
-      <input id={`${idPrefix}-when`} className="input" value={when} onChange={(e) => onWhen(e.target.value)} placeholder={placeholderWhen} style={{ padding: "10px 13px" }} />
-      <label htmlFor={`${idPrefix}-then`} className="label-accent" style={{ fontWeight: 700 }}>
+      <input id={`${idPrefix}-when`} className="input input-compact" value={when} onChange={(e) => onWhen(e.target.value)} placeholder={placeholderWhen} />
+      <label htmlFor={`${idPrefix}-then`} className="label-accent proof-label">
         THEN
       </label>
-      <input id={`${idPrefix}-then`} className="input" value={then} onChange={(e) => onThen(e.target.value)} placeholder={placeholderThen} style={{ padding: "10px 13px" }} />
+      <input id={`${idPrefix}-then`} className="input input-compact" value={then} onChange={(e) => onThen(e.target.value)} placeholder={placeholderThen} />
     </div>
   );
 }

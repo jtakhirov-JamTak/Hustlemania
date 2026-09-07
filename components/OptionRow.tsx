@@ -52,9 +52,9 @@ export function OptionRow({
       <span className={`option-mark ${single ? "option-mark-circle" : ""}`} aria-hidden="true">
         {on ? (single ? "●" : "✓") : ""}
       </span>
-      <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-        <span style={{ display: "block", fontSize: 14, lineHeight: 1.4 }}>{label}</span>
-        {sub ? <span style={{ display: "block", fontSize: 12, color: "var(--muted)", marginTop: 2, lineHeight: 1.4 }}>{sub}</span> : null}
+      <span className="option-body">
+        <span className="option-label">{label}</span>
+        {sub ? <span className="option-sub">{sub}</span> : null}
       </span>
       {tag ? <span className="option-tag">{tag}</span> : null}
     </button>

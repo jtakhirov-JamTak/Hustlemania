@@ -20,10 +20,8 @@ export default async function VisionAreaPage({ params }: { params: Promise<{ are
   return (
     <div>
       <span className="tag tag-accent">{areaName(area)}</span>
-      <h1 className="heading" style={{ fontSize: 38, margin: "12px 0 0", letterSpacing: "-0.03em" }}>
-        1-year vision
-      </h1>
-      <p style={{ fontSize: 14.5, lineHeight: 1.55, color: "var(--muted)", marginTop: 10, maxWidth: "58ch" }}>
+      <h1 className="heading page-title page-title-lg mt-12">1-year vision</h1>
+      <p className="lede lede-wide">
         Where is {areaName(area)} a year from now if the next few sprints land? One honest paragraph. Every sprint in this area
         has to advance it.
       </p>

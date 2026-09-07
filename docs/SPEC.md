@@ -6,6 +6,16 @@ Single source of truth for what to build. Produced by `/interview` (new-app mode
 wins and the difference is listed in Part 2 §5. The visual reference is the handoff in
 `docs/mockups/UI mockups.zip` (see Part 2, F1 UI block).
 
+**Re-baselined 2026-09-06.** The visual reference is now the v8 handoff,
+`docs/mockups/New.zip`, extracted to `docs/mockups/ui-v2/handoff_sprint_ui_v8/`:
+`README.md` is authoritative on look, `Sprint App v8 Libraries.dc.html` is the mockup of
+record, and its bundled `spec_v3.md` is byte-identical to the superseded v4 `spec.md`
+and is ignored. The v4 handoff under `docs/mockups/today/` is history. The
+Insights/Vision draft at `docs/drafts/Changes to Insights and Vision pages.docx` was
+reconciled against this spec in `docs/RECONCILIATION-2026-09-06.md`; every call from
+that session is a dated line in Part 2 §5, and F6–F9 below are stubs that `/interview`
+fills in build order. F1–F5 stay as built; where F8 changes their screens the entry says so.
+
 # Part 1 — Problem
 
 ## Outcome and measurement
@@ -32,6 +42,12 @@ Secondary: no streak, no deadline pressure, no group visibility.
 - REQUIREMENT — Day-one scope is the whole PRD: core loop, libraries with archive/scope
   rules, sprint completion + review, insights + history. No real sprint runs until all
   of it exists (user's choice; no date pressure).
+- REQUIREMENT (added 2026-09-06) — **The v8 handoff's page designs are a must**,
+  independent of the logic details reconciled in §5: the journal Sprints tab with its
+  timeline and rail, the per-tab left sidebar, the three-step Vision and its saved
+  overview, the library cards, the Insights cards and postmortem, and the dialogs, as
+  `docs/mockups/ui-v2/handoff_sprint_ui_v8/README.md` draws them. Palette Dusk plus a
+  night mode. No interview may trade the look away for a simpler build.
 - REQUIREMENT — Invite-only access, magic-link sign-in, no passwords, no open sign-up.
 - REQUIREMENT — Circles: inviting an email to a circle is the app invite. A member may
   belong to several circles. Circle members see, per active sprint: Area, current
@@ -40,7 +56,8 @@ Secondary: no streak, no deadline pressure, no group visibility.
   targets, mantra, notes stay private.
 - REQUIREMENT — One evening email reminder when today's Day is not yet closed.
 - REQUIREMENT — Insights are rule-based statistics. AI narrative is a later feature.
-- REQUIREMENT — Personal data exportable (format not an MVP blocker).
+- ~~REQUIREMENT — Personal data exportable (format not an MVP blocker).~~ Withdrawn
+  by the user 2026-09-06: no data export in v1 (BACKLOG; §5).
 - FACT — First users: <10, mostly desktop. Phone still matters for Today / Close.
 - FACT — `~/PurePath` (Vite+Express+Drizzle, 445 commits, 18 tables, rebranded "The
   Leaf") is the prior attempt. Its lessons (route-layer gates, never log bodies,
@@ -69,8 +86,9 @@ Direction approved 2026-09-05: Next.js + Supabase on Vercel (rationale in
 
 ## 1. Outcome
 Members run 14-day Sprints end to end and a meaningful share reach the locked Goal.
-**Measurement:** Sprint History (F7) lists every sprint with status and % of Goal; the
-owner reads it. No extra instrumentation: the sprint records are the data.
+**Measurement:** the finished-sprint rows in the Insights sidebar (F11) list every
+sprint with Met / Under and % of Goal; the owner reads them. No extra instrumentation:
+the sprint records are the data. (Was "Sprint History (F7)" until 2026-09-06; §5.)
 
 ## 2. Target users
 <10 people the owner knows, invited by email, mostly desktop, some phone use for Today
@@ -83,6 +101,13 @@ same migration as the table, `.error` inspected on every call, integers for amou
 `archived_at` not delete, falsifiable tests). Amounts are stored as one BIGINT
 `amount` in **base units**: money → minor units (cents; UI accepts whole units only,
 per PRD), hours → minutes, quantity → whole units.
+
+Build order after the 2026-09-06 re-baseline: F1–F5 built · enabling pass (direct
+build, no feature entry: inline styles to classes, Tailwind settled, no visible change)
+· F6 Libraries v2 · F7 Day observations · F8 Journal restyle · F9 Vision v2 · F10
+Sprint completion + postmortem (was F6) · F11 Insights v2 (was F7) · F12 Circles (was
+F8) · F13 Evening reminder (was F9) · F14 Pre-release (was F10). Data before screens,
+so the journal is built once with its final close questions.
 
 ### F1 — Walking skeleton: sign in → Vision → start Sprint → Today → Close Day
 - **Behavior.** An invited user signs in with an emailed magic link (no passwords, no
@@ -157,7 +182,9 @@ per PRD), hours → minutes, quantity → whole units.
   - Primary action: enter Actual and Close Day, reached after a morning "Today I
     will" intention · desktop-first, both viewports · states: empty, loading, error
     (inputs preserved), closed.
-  - **References:** `docs/mockups/UI mockups.zip` (Claude Design handoff). Inside:
+  - **References (v4; superseded on screen by F8 from 2026-09-06 — the values below
+    are what F1–F5 were built to and what the e2e pins until F8 moves them):**
+    `docs/mockups/UI mockups.zip` (Claude Design handoff). Inside:
     `handoff_sprint_ui/README.md` = the visual language (authoritative on look);
     `Sprint App v4.dc.html` = working prototype (mockup of record); `screens/` =
     screenshots; `spec.md` = an OLDER PRD draft, superseded by `docs/references/`;
@@ -478,8 +505,69 @@ per PRD), hours → minutes, quantity → whole units.
     result screen, and the grid after it, with the DB row reading `closed_on_time =
     false`; horizontal overflow 0. Phone layout covered by the Playwright phone project.
 
-### F6 — Sprint completion, End Early, Review, next-sprint gate
-- **Behavior.** Reaching the Goal enables Complete Sprint (not automatic). End Sprint
+### F6 — Libraries v2: cue trigger, RECOVERED WHEN, relabelled editors
+*Stub (2026-09-06). Filled by `/interview`. Scope: `docs/RECONCILIATION-2026-09-06.md`
+rows B5 B6 B7 C2 C3 C11 D5.* Cue = WHEN (trigger, required on every create path;
+existing rows null) → REMIND (name). Impediment = SITUATION (name) → INTERFERES
+(explanation) → WHEN → THEN → RECOVERED WHEN; the Highest Impediment must carry all
+three (rule 6 and the rule-22 trigger extend to `proof_recover`; `start_sprint` and
+`set_highest_impediment` validate it; the day snapshot gains it). Quality guidance and
+helper examples on both editors. Additive migration; no evaluator trigger.
+
+### F7 — Day observations: what showed up, what was used, did the response run
+*Stub (2026-09-06). Filled by `/interview`. Scope: rows B4 B12 C1 C7 D3 D11.* Close
+step 2 becomes observations: per offered impediment occurred yes / no / unsure /
+unanswered; per offered cue used yes / no / unsure / unanswered; for the Highest:
+response ran yes / no / partially / unsure, recovered yes / no / unsure (asked whenever
+the Highest occurred), impact nothing / some / a lot / unsure (optional). One
+user-selected **focus cue** per sprint whose use is tracked daily. Per-item tri-state
+rows in the DB; README pills render them. First occurrence of the day is the one
+assessed, and the question says so. Item wording and proof-point version snapshotted
+with the observation. Days closed before this exist stay "missing": never block a
+close, never count as negative. `day_offered_items` remains the one owner of who is
+asked. The hurt/helped tables `day_impediment_hurt` and `day_cue_helped` are
+**dropped** (user, 2026-09-06; no real sprint exists) — a destructive migration, so the
+evaluator runs. "Set up tomorrow" block after a close (Remove / Add over the existing
+membership functions; rules 3–4 still enforced by the DB). Evaluator: user-data tables
++ destructive migration.
+
+### F8 — Journal restyle: timeline, rail, Dusk, night mode
+*Stub (2026-09-06). Filled by `/interview`; the v8 handoff has no dark palette, so
+Claude derives night-mode tokens from Dusk and the user approves them inside that
+interview (user, 2026-09-06). Scope: rows B1 B2 B3 B11 B13 B14 B16 B18 C8 D8 D9.* Sprints tab = journal timeline (Days 1–7 collapsed → Yesterday → Today card
+→ Tomorrow → Days 11–14) with a 300px right rail (Mantra + streak, Highest, Cues,
+Celebration, Usage of funds), stacking under 1240px; target and actual 64px; page
+titles 30px; the Daily Intention is the first line of the Today card under "How do I
+intend to produce today's target?"; sidebars per the v8 README (Sprints: no New Sprint
+button; Vision: Vision `n of 3` · Execution cues · Impediments; Insights: Across
+sprints · Reviews with % of goal on finished rows); palette **Dusk** (accent
+`#5b5bd6`, ink `#1c1b2a`) plus a user-switchable **night mode**; two-tap for End
+sprint early and Replace vision. Moves the e2e pins (hero 92→64, highest name 22→16,
+title sizes) with the spec, not around them. No evaluator trigger.
+
+### F9 — Vision v2: one vision, three annual steps, obstacle link, dated reviews
+*Stub (2026-09-06). Filled by `/interview`. Scope: rows B8 C4 D1 D6 D7.* **One vision
+total** (user, 2026-09-06; overrides PRD §2 — rule 2 becomes "a sprint requires the
+vision"; `visions.area` goes). Step 1: vision text (the desired future), annual
+deadline, "What would prove it happened? (observable success criteria)" — all three
+required; personal meaning and current baseline optional. Step 2: the main obstacle
+**is** a global impediment, picked or created. Step 3: its WHEN → THEN → RECOVERED
+WHEN, saved on the impediment. Vision + new impediment saved atomically by one DB
+function. Saved overview per the README (Edit · Review vision · Replace two-tap ·
+three cards · Library card · Sprints behind this vision). Reviews go to a
+`vision_reviews` table (date, still-true / needs-changes, evidence note); nothing
+overwritten. Evaluator: user-data table.
+
+### F10 — Sprint completion, End Early, postmortem, kit, next-sprint gate (was F6)
+*Re-scoped 2026-09-06 (rows B10 B17 C6); the text below is the v1 entry and is
+rewritten by `/interview`.* Adds to v1: Complete sprint in the rail's Celebration card;
+End sprint early two-tap in its footer; a Review gate card → "Open the postmortem";
+postmortem = result card + the four insight cards + proof-point verdict (Worked /
+Partly / Didn't) + one lesson + moved-the-vision + carry-forward per item (Keep /
+Promote to highest / Drop; Keep / test more / Drop) stored as the Area's kit, which
+pre-fills the next New Sprint's step 4; the lesson is pinned on Day 1 of the next
+sprint in that Area.
+- **Behavior (v1).** Reaching the Goal enables Complete Sprint (not automatic). End Sprint
   Early is always available. Both cancel future days (not counted as missed), set the
   status, show Celebration on success, and open the Review, which must be completed
   before the next Sprint in that Area can start. Review shows the PRD §10 summary and
@@ -500,8 +588,21 @@ per PRD), hours → minutes, quantity → whole units.
   days excluded everywhere by one view `sprint_days_effective`.
 - **Evaluator.** migration creating a user-data table.
 
-### F7 — Insights and Sprint History (rule-based)
-- **Behavior.** Insights tab: Health, Wealth, Relationships, All Areas, Sprint History.
+### F11 — Insights v2: four cards, Reviews and Across sprints (was F7)
+*Re-scoped 2026-09-06 (rows B9 C5 D4 D9 D10); the text below is the v1 entry and is
+rewritten by `/interview`.* Replaces v1's area pages and history table with the four
+cards — Impediment impact · Response follow-through · Response recovery · Cue
+usefulness — in two views: Reviews (single-sprint postmortem, F10) and Across sprints
+(scope chips by Area, Suggested kit, How to read this). Metric: **median daily
+attainment** (Actual ÷ Target on positive-target days) with vs without, in the README's
+card shape. Follow-through and recovery rates; partial reported separately; recovery
+with vs without the response. Every card shows both group sizes, logging coverage over
+elapsed eligible days, backfill count; unsure and unanswered excluded from
+denominators; closed, non-cancelled days only; cross-sprint lists each sprint's own
+comparison grouped by item + version + Area, never pooled; "n ≥ 3 does not establish
+reliability" stated; associations, never causes. Finished-sprint sidebar rows carry
+Met / Under and % of goal (the §1 measurement). Task completion vs result → BACKLOG.
+- **Behavior (v1).** Insights tab: Health, Wealth, Relationships, All Areas, Sprint History.
   Per area and overall: % of Goal per sprint, impediment/cue frequency on lowest- vs
   highest-result days, most damaging / most useful items, task completion vs result.
   Findings are phrased as associations with counts ("Starting late appeared on 4 of
@@ -517,7 +618,7 @@ per PRD), hours → minutes, quantity → whole units.
   below n = 3.
 - **Evaluator.** none.
 
-### F8 — Circles: invites and accountability view
+### F12 — Circles: invites and accountability view (was F8)
 - **Behavior.** A member creates a circle and invites emails; the invite creates the
   Supabase user (admin invite) so the invite is the app invite. Members see, per
   fellow member's active sprint: Area, current streak, whether today is closed, and %
@@ -542,7 +643,7 @@ per PRD), hours → minutes, quantity → whole units.
   named helper `is_circle_mate(uid)` used by every policy; evaluator required.
 - **Evaluator.** auth/RLS · migrations creating user-data tables.
 
-### F9 — Evening email reminder
+### F13 — Evening email reminder (was F9)
 - **Behavior.** If a user has an active sprint whose today is not closed, one email
   arrives at their chosen local hour (default 20:00 in the sprint tz).
 - **Acceptance criteria.** Vercel Cron hits `/api/cron/reminders` hourly with a
@@ -554,25 +655,27 @@ per PRD), hours → minutes, quantity → whole units.
 - **Risks.** Free-tier cron granularity (hourly is within Vercel Hobby limits).
 - **Evaluator.** migration creating a user-data table.
 
-### F10 — Pre-release: export, PWA manifest, deploy
-- **Behavior.** "Export my data" downloads one JSON of everything the user owns.
-  App installable (manifest + icons; no service worker). Deployed to Vercel with the
-  Supabase production project; owner and first invitee signed in.
-- **Acceptance criteria.** Export route follows the handler order; output validated
-  against a Zod schema listing every user-owned table; a second user's data never
-  appears (test with two users). Lighthouse "installable" passes. `npm run verify`
+### F14 — Pre-release: PWA manifest, deploy (was F10; export withdrawn 2026-09-06)
+- **Behavior.** App installable (manifest + icons; no service worker). Deployed to
+  Vercel with the Supabase production project; owner and first invitee signed in.
+  ~~"Export my data" downloads one JSON of everything the user owns.~~ Withdrawn by
+  the user 2026-09-06 (BACKLOG); the Vision sidebar has no Data & export row.
+- **Acceptance criteria.** Lighthouse "installable" passes. `npm run verify`
   green; evaluator pre-release pass; `docs/RUNBOOK_RESTORE.md` written and one restore
   drill run against the local stack from a production backup file.
-- **Non-goals.** CSV/PDF export, account deletion UI (BACKLOG; `archived_at` until).
-- **Risks.** Export leaks via a missed table — schema list is generated from
-  `information_schema` in a test and must equal the export's list.
+- **Non-goals.** Data export in any format (BACKLOG), account deletion UI (BACKLOG;
+  `archived_at` until).
+- **Risks.** none beyond the restore drill.
 - **Evaluator.** pre-release.
 
 ## 4. Explicit v1 non-goals
 AI-written insights or reviews · push notifications · native apps · offline mode ·
 custom Areas · circle roles/moderation · account deletion self-service · data import
 · multi-currency formatting beyond a code · sharing Mantra, Goal amount, Actuals or
-Notes with anyone · any XP/points/labels (rule 28).
+Notes with anyone · any XP/points/labels (rule 28) · **added 2026-09-06:** data export
+· the v8 prototype's Load sample sprint and Reset all data · palettes other than Dusk
+and night · a Sprint History table · task-completion-vs-result insight · mental
+rehearsal prompt · the old hurt/helped questions.
 
 ## 5. Key assumptions and PRD deltas
 - ASSUMPTION: one time zone per sprint (from the browser at start) suffices.
@@ -590,7 +693,36 @@ Notes with anyone · any XP/points/labels (rule 28).
   Impediments).
 - DELTA vs PRD §5 storage: money stored in minor units (UI whole units only).
 - DELTA vs PRD §4: rank via move up/down, no drag-and-drop.
-- STAGED: rules 3–6 enforced from F2, rule 26 from F6; no real sprint before F10.
+- STAGED: rules 3–6 enforced from F2, rule 26 from F10; no real sprint before F14.
+
+**Re-baseline deltas, 2026-09-06** (user's calls in session; full ledger and
+recommendations in `docs/RECONCILIATION-2026-09-06.md`):
+- DELTA vs PRD §2 and rule 2: **one vision total**, not one per Area. Rule 2 reads "a
+  sprint requires the vision"; `visions.area` goes (F9). Overrides the v8 prototype's
+  own Sprints sidebar, which assumed per-Area.
+- DELTA vs SPEC v1 Today order (the 2026-09-05 line above): the Sprints tab is the v8
+  **journal** (timeline + rail); the 14-day strip, target hero with stats, collapsed
+  others/cues row and plan grid are replaced (F8). Daily Intention stays, as the first
+  line of the Today card.
+- DELTA vs PRD §8 and F2: Day Close step 2 collects **observations** (occurred / used /
+  response ran / recovered / impact, with Unsure and unanswered distinct) instead of
+  hurt/helped judgments; `day_impediment_hurt` and `day_cue_helped` are dropped (F7).
+  A **focus cue** per sprint is tracked daily.
+- DELTA vs PRD §3 and rule 6: the Highest Impediment's proof point is WHEN → THEN →
+  **RECOVERED WHEN**, all three required (F6). Cue = WHEN → REMIND, trigger required on
+  every create path (F6).
+- DELTA vs PRD §11 and F7 v1: Insights = four cards in two views on **median daily
+  attainment**; no history table — finished-sprint rows carry % of goal (F11).
+- DELTA vs PRD §10 and F6 v1: Review = postmortem with verdict, carry-forward, per-Area
+  kit pre-filling the next sprint, lesson pinned on Day 1 (F10).
+- DELTA vs PRD §2 and v8 README: Vision step 1 requires text, **annual deadline**, and
+  proof (observable success criteria); reviews are a dated table, never overwritten (F9).
+- DELTA vs v8 README: palette **Dusk**, not Lake, plus a user-switchable **night mode**
+  (dark tokens derived from Dusk by Claude, user-approved in the F8 interview); no palette switcher, Load
+  sample, or Reset; brand stays **Hustlemania**.
+- DELTA vs PRD §12 and Part 1: **no data export in v1** (F14; BACKLOG).
+- IGNORED: `spec_v3.md` in the v8 zip — identical to the superseded v4 `spec.md`.
+- BACKLOG from the drafts: task-completion-vs-result insight; mental rehearsal prompt.
 
 ## 6. Stack, auth/security model, shared entities
 - Next.js 16 App Router (current release at build time; "middleware" is `proxy.ts`
