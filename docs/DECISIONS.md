@@ -6,6 +6,56 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-08 — F9 vision v2: step 1 unlocks sprints, edits are in place, the wizard keeps its look until F10
+
+**Decision.** F9 interviewed in feature mode (`docs/SPEC.md` F9). One vision for the
+account, three annual steps. The vision row alone (text, deadline, proof) satisfies
+rule 2 — `start_sprint` checks for an active vision and nothing about the obstacle or
+rule; the overview's `n of 3` is the nudge to finish. Edit updates the active row in
+place; Replace is the only archive point and `vision_reviews` (verdict + optional
+evidence note, one row per review, no update or delete path) is the dated record. The
+New Sprint wizard changes logic and classes only — the single vision in step 1, gating
+on "an active sprint already here", the alignment copy, inline styles to classes so the
+`[data-cols]` phone override leaves `globals.css` — and the v8 dialog restyle rides
+with F10, which rewrites step 4 for the kit pre-fill anyway. Deadline must be a future
+date. Replace is allowed while a sprint runs (the sprint keeps its `vision_id`). The
+collapse migration keeps the most recently updated active vision per user and archives
+the rest. All vision writes go through SECURITY DEFINER functions (`save_vision`,
+`set_vision_obstacle`, `set_vision_rule`, `replace_vision`, `review_vision`); the direct
+INSERT and UPDATE grants on `visions` are revoked. Approved at the feature gate
+2026-09-08; the user chose a fresh session for the build.
+
+**Why.** The README's own step-1 hint says the vision unlocks every sprint, and
+requiring all three steps before the first sprint is the friction failure condition #1
+warns about. In-place edits keep one `vision_id` per sprint and avoid a lineage column
+for a once-a-year action; the review table already preserves what changed and when.
+The wizard rewrite in the same feature as a data-transforming migration and three new
+screens was the scope risk; F10 touches step 4 regardless. No user data exists yet
+(local stack starts blank, hosted project never migrated), so the collapse rule is
+chosen for correctness in principle and pinned by a test, not for any real rows.
+
+**Rejected.** Requiring obstacle and rule before the first sprint. A version row per
+text edit (lineage column, "previous visions" filling with edits, "Sprints behind this
+vision" following a chain). The full v8 wizard restyle inside F9. A required review
+note (friction on a once-a-year action). Verdict-only reviews (the draft's dated
+evidence would be lost). Extending the F6 proof trigger to forbid blanking the vision's
+obstacle rule from the library — the README draws the empty Guiding rule card, and the
+card's Add path restores it.
+
+**Mockup.** `app/mockup/vision/` — a thin page in the stack, hardcoded data, the real
+Dusk / Night toggle; views step 1 (empty and error), 2, 3, overview (review card
+open, Replace armed, previous visions unfolded, 1 of 3), loading. Captured with
+Playwright at 1440 and 390 in both palettes, zero horizontal overflow in all sixteen
+captures. Approved at the gate; moved to `docs/mockups/f9-vision/` with four
+screenshots. Additions the artboard does not draw: the deadline field, the two
+optional prompts on step 1, the review note, the "days to the deadline" line, the
+previous-vision meta line.
+
+**Numbers.** Recorded when the row closes (build in the next session; the F9 row
+opened 2026-09-08T00:16Z).
+
+---
+
 ## 2026-09-07 — F8 journal restyle: night mode is a cookie, closes end on the card, past rows stay one line
 
 **Decision.** F8 interviewed in feature mode (`docs/SPEC.md` F8). Night mode is a

@@ -1036,17 +1036,21 @@ note column exists).
   detail block.
 
 ### F9 — Vision v2: one vision, three annual steps, obstacle link, dated reviews
-*Stub (2026-09-06). Filled by `/interview`. Scope: rows B8 C4 D1 D6 D7.* **One vision
-total** (user, 2026-09-06; overrides PRD §2 — rule 2 becomes "a sprint requires the
-vision"; `visions.area` goes). Step 1: vision text (the desired future), annual
-deadline, "What would prove it happened? (observable success criteria)" — all three
-required; personal meaning and current baseline optional. Step 2: the main obstacle
-**is** a global impediment, picked or created. Step 3: its WHEN → THEN → RECOVERED
-WHEN, saved on the impediment. Vision + new impediment saved atomically by one DB
-function. Saved overview per the README (Edit · Review vision · Replace two-tap ·
-three cards · Library card · Sprints behind this vision). Reviews go to a
-`vision_reviews` table (date, still-true / needs-changes, evidence note); nothing
-overwritten. Evaluator: user-data table.
+*Specified 2026-09-08 by `/interview` (feature mode). Scope:
+`docs/RECONCILIATION-2026-09-06.md` rows B8 B16 C4 D1 D6 D7 (D1 as re-decided:
+**one vision total**). In-session calls (2026-09-08): **step 1 unlocks sprints** — the
+vision row alone satisfies rule 2; obstacle and rule can be finished later and the
+overview's `n of 3` nudges · **Edit is in place** — text, deadline and proof update the
+active row; Replace is the only archive point; `vision_reviews` is the dated record ·
+**wizard: logic and classes only** — step 1 shows the single vision and gates on "vision
+exists + no active sprint in the Area", inline styles become classes so the
+`[data-cols]` phone override goes; the v8 dialog restyle rides with F10 · **review note
+optional** — one textarea on the review card, both verdicts save a row · deadline must be
+a future date · Replace is allowed while a sprint is active (the sprint keeps its
+`vision_id`; history intact) · the collapse migration keeps the most recently updated
+active vision per user and archives the rest (no user data exists yet: the local stack
+starts blank, the hosted project has never been migrated) · primary action on the
+screen: completing the three steps.*
 
 *Review notes 2026-09-07:* step 3 requires all three parts (WHEN, THEN, RECOVERED
 WHEN), matching rule 6/22 as extended in F6 — an obstacle that is an active sprint's
@@ -1057,6 +1061,185 @@ vision's obstacle. The migration is **data-transforming** (per-Area visions coll
 to one active; the rest archived) → evaluator. The direct INSERT grant on `visions`
 is revoked once the atomic function exists. Includes the Vision tab and sidebar
 restyle (from F8).
+
+- **Behavior.** The Vision tab holds one vision for the whole account, written in
+  three annual steps: the vision text with a deadline and the proof that would show it
+  happened (optional: what it means, where you stand today) → the main obstacle, a
+  global impediment picked from the library or created on the spot → its guiding rule,
+  WHEN → THEN → RECOVERED WHEN, saved on that impediment. Saving step 1 unlocks every
+  sprint. Once the vision exists the tab shows the saved overview: the text as a
+  headline with saved / deadline / reviewed meta, Edit, Review vision, a two-tap
+  Replace, `n of 3 steps`, three summary cards, the Library card and "Sprints behind
+  this vision", with previous visions folded underneath. Review vision opens a card
+  with Still true / Needs changes and an optional evidence note; every review is a
+  dated row, never overwritten. The Sprints tab's empty cards say "Write the vision"
+  until it exists, and the New Sprint wizard shows the one vision instead of gating
+  per Area.
+- **Acceptance criteria.**
+  - **Migration `0011_vision_v2.sql`** (forward-only, applied by `db reset`):
+    `visions` gains `deadline date`, `proof text`, `meaning text`, `baseline text`,
+    `obstacle_id uuid references impediments(id)`; `area` is dropped and
+    `visions_one_active_per_area` is replaced by a partial unique index on
+    `(user_id) where archived_at is null`. Existing rows: `deadline` backfilled to
+    `created_at::date + 1 year` and set `not null`; `proof` stays nullable for
+    pre-0011 rows (the card reads "No success evidence yet"); per user, the most
+    recently updated active vision stays active and every other active one gets
+    `archived_at = now()`. Test: seed two users with two and three active per-Area
+    visions and sprints on each, run the transform, assert one active per user, the
+    newest kept, the rest archived with their `sprints.vision_id` untouched, and the
+    unique index rejects a second active insert.
+  - **`vision_reviews`** (RLS in the same migration): `id`, `user_id`, `vision_id`,
+    `verdict in ('still_true','needs_changes')`, `note text` (private user text,
+    nullable), `created_at`; SELECT own rows only; no INSERT / UPDATE / DELETE grant
+    to `authenticated`. Tests: user B selects 0 of A's reviews (and the test fails
+    with RLS disabled); an authenticated UPDATE of `verdict` on an own row errors
+    (`permission denied`) and the row is unchanged; the count of a user's rows only
+    ever grows across three `review_vision` calls.
+  - **Write path = SECURITY DEFINER functions**, identity from `auth.uid()`, `set
+    search_path = ''`, `grant execute` to `authenticated`; the direct
+    `insert (user_id, area, body)` and `update (body)` grants on `visions` are
+    revoked and the write policies dropped. `tests/db/grants.test.ts` pins the new
+    writable-column set (`visions`: none) and the callable-function set.
+    - `save_vision(p_body, p_deadline, p_proof, p_meaning, p_baseline) → uuid`:
+      inserts the active vision or updates it in place (same `id`); rejects
+      `vision_body_required`, `vision_proof_required`, `vision_deadline_past`
+      (`p_deadline <= current_date`); trims; blank optionals become null. Tests for
+      each rejection and for the edit keeping the `id` and `created_at`.
+    - `set_vision_obstacle(p_impediment_id, p_name, p_explanation) → uuid`: exactly
+      one of id / name (`obstacle_pick_or_name`); an existing impediment must be the
+      caller's, unarchived and `scope = 'global'` (`obstacle_not_global`); a new one
+      is inserted with `scope = 'global'` in the same transaction; sets
+      `visions.obstacle_id`; returns the impediment id. Test: a name that violates
+      the impediments check leaves `obstacle_id` unchanged (atomicity); an
+      Area-scoped pick is rejected.
+    - `set_vision_rule(p_when, p_then, p_recover) → void`: writes all three onto the
+      obstacle impediment; rejects any blank part (`rule_incomplete`) and
+      `no_vision_obstacle`. Test: the F6 highest-impediment trigger accepts the write
+      when the obstacle is an active sprint's highest.
+    - `replace_vision() → void`: sets `archived_at` on the active vision, rejects
+      `no_active_vision`; the obstacle impediment is untouched. Test: after Replace an
+      active sprint still references the archived row and `start_sprint` rejects
+      `no_active_vision` until `save_vision` runs again.
+    - `review_vision(p_verdict, p_note) → uuid`: inserts a row for the active vision;
+      rejects `no_active_vision` and an unknown verdict.
+    - `start_sprint` (redefined with the same signature): the vision lookup is
+      `user_id = auth.uid() and archived_at is null`, no Area; every existing
+      start_sprint test stays green with the seed helper writing one area-less
+      vision. Test: a user with only a step-1 vision (no obstacle) can start a sprint.
+    - `archive_item('impediment', id)` and `set_item_scope('impediment', id, ≠
+      'global')` raise `vision_obstacle` for the active vision's obstacle; both allowed
+      once the vision is replaced. Tests for both.
+  - **Reads** (`lib/data.ts`): `loadOverview` carries one `vision` for all areas;
+    `loadVision` returns the active vision with its obstacle (name, explanation,
+    proof parts), the latest review, the count of sprints behind it, and the archived
+    visions with their date range and sprint count; `loadVisionSprints` lists sprints
+    with `vision_id = active.id` (Day n of 14 · Starts tomorrow · Ended, plus
+    `Met|Under · actual of goal` from the sum of closed days once the end date has
+    passed).
+  - **Vision tab** (`/vision`; `/vision/[area]` removed → `/vision/health` 404s;
+    `/vision/cues` and `/vision/impediments` unchanged). Sidebar rows: **Vision**
+    (meta `n of 3`, accent until 3; sub `Reviewed {date}` | `Not reviewed yet` |
+    `Not written yet`), then Libraries: Execution cues (n), Impediments (n). No Data &
+    export.
+    *Setup* (testid `vision-setup`, `data-step` 1–3), shown when no active vision
+    exists or from Edit / a card's Edit / Add: kicker `Annual setup · Step n of 3` +
+    "Revisit once a year. Sprints are planned separately."; 30px title; three 4px
+    segments accent up to the current step with `Vision · Obstacle · Rule` beneath;
+    720px card. Step 1: textarea (`aria-label` "Vision", 16px, 4 rows), "By when?"
+    date input (`aria-label` "Deadline", min tomorrow), "What would prove it
+    happened?" input (`aria-label` "Proof"), then "What it means to you · optional"
+    and "Where you stand today · optional". Step 2: radio rows (`OptionRow`, circle)
+    for every unarchived **global** impediment, tag `has WHEN → THEN` when both are
+    set; "Or create a new impediment" / "Create the impediment" with SITUATION ·
+    INTERFERES inputs; picking clears the new-name inputs and vice versa. Step 3:
+    WHEN · THEN · RECOVERED WHEN (`ProofInputs`, pre-filled from the impediment).
+    Footer: Back (Cancel on step 1 when a vision exists; nothing on a first step 1)
+    · accent hint beside a disabled primary ("The vision unlocks every sprint." /
+    "The deadline must be in the future." / "Pick or name one obstacle." / "WHEN,
+    THEN and the recovery criterion are all required.") · **Save & continue** (Save
+    on step 3). Each step saves on continue through its function; a failed save shows
+    the error bar with Retry and keeps every input. Steps 2 and 3 are skippable
+    from the overview (Cancel), never from a first step 1.
+    *Overview* (testid `vision-overview`): kicker "One to two years from now" + meta
+    `Saved {date} · By {deadline} · Reviewed {date} | Not reviewed yet` (`Deadline
+    passed {date}` in the under colour once it has); h1 26px/600 max 34ch; actions
+    **Edit** (secondary) · **Review vision** (primary) · Replace (`TwoTap`: "Tap again
+    to archive it and start over" in red on the first tap, fires on the second,
+    disarms when focus leaves) · `n of 3 steps` (green at 3). Review card (testid
+    `vision-review`, 1.5px accent): "Does this still describe where you're headed?",
+    note `Proof you named: {proof}. {n} sprints have run behind it. {d} days to the
+    deadline.`, optional "What shows it?" textarea, **Still true · mark reviewed** ·
+    **Needs changes** (saves `needs_changes`, then opens step 1) · Cancel. Three
+    cards: Vision (sub `Proof: …` | "No success evidence yet", Edit) · Main obstacle
+    (name + INTERFERES text; empty: dashed "What most often pulls you off course?" →
+    step 2; Edit / Add) · Guiding rule (`WHEN … → THEN …`, sub `Recovered when …`;
+    empty: "One move, every time {obstacle} shows up." or "Name the obstacle first.";
+    Edit / Add → step 3 or 2). Second row: Library card (cue and impediment counts,
+    links to the library pages, "Cues and impediments are picked per sprint.") and
+    Sprints behind this vision (rows `Area · outcome · status`, tapping opens
+    `/sprints/{area}`; empty: "No sprints yet. They are planned on the Sprints
+    tab."). "Show previous visions (n)" folds archived texts as faint blocks with
+    `{from} – {to} · replaced {date} · {n} sprints ran behind it`.
+    *States:* empty (setup step 1, sidebar `0 of 3`); error (error bar + preserved
+    inputs; accent hint beside the disabled primary); loading (`loading.tsx` skeleton
+    in the overview's shapes: kicker, two title lines, two button blocks, three
+    cards; no layout shift). Copy never uses `HIT` / `MISS` (rule 28).
+  - **Sprints tab and wizard.** Sidebar sub-line "Vision not written yet" with meta
+    `Locked` on every Area until the vision exists, then `Ready` / the sprint meta;
+    the empty-area card reads "Write the vision" and links to `/vision` (testid
+    `empty-state` kept); copy: "A sprint has to advance the vision. Write it first;
+    it takes three short steps." Wizard step 1: area cards gated only by "an active
+    sprint already here"; the vision text in a faint block above them; with no vision
+    the step shows the blocked note and a link to `/vision`. Step 4's alignment row
+    reads "This outcome meaningfully advances my vision." `NewSprintWizard` carries
+    no inline `style`; the `[data-cols]` `!important` rule leaves `globals.css`.
+    Phone: no horizontal overflow at 390px on any wizard step or Vision view.
+  - **Two-tap component** (`components/TwoTap.tsx`): first consumer is Replace;
+    unit test: one click arms and does not fire, the second fires, blur disarms.
+  - **e2e** (`e2e/golden-path.spec.ts`, desktop + phone): the empty card's "Write the
+    vision" lands on `/vision`; step 1 with a past deadline shows the hint and does
+    not submit; a future deadline saves and lands on step 2; the Sprints sidebar now
+    reads `Ready`; step 2 creates a new impediment; step 3 saves the rule; the
+    overview shows `3 of 3 steps` and the obstacle card; the sprint started later
+    appears under "Sprints behind this vision"; Review → Still true stamps
+    `Reviewed {today}` in the meta and the sidebar; DB assertions: one active vision,
+    `obstacle_id` set, one `vision_reviews` row. The night-mode round trip stays.
+  - **Live mutations** (each turns a named test red, then restored): the collapse
+    keeps the oldest instead of the newest; `save_vision` accepts a past deadline;
+    `set_vision_obstacle` accepts an Area-scoped pick; `archive_item` no longer checks
+    the obstacle link; `review_vision` updates instead of inserting.
+  - Visual match against the v8 artboard (Vision tab) in Chrome at desktop width in
+    Dusk and Night: setup step 2 and the overview with the review card open; phone via
+    the Playwright phone project. `npm run verify` green.
+- **Non-goals.** The v8 wizard restyle (F10) · a vision version history (Edit is in
+  place) · review reminders or a review cadence · Met / Under on finished sprints as
+  the Insights measurement (F11 owns the rows; this card's status is the same
+  computation but F11 may restyle it) · the review link from a "Needs review" row
+  (F10) · editing an archived vision · more than one active vision · deleting a
+  review · area-scoped obstacles.
+- **Risks.** (1) The collapse migration picks the wrong survivor or strands a sprint
+  — the transform test seeds two users with sprints on the losing visions and asserts
+  every `vision_id` is unchanged. (2) A sprint's highest impediment and the vision's
+  obstacle are the same row and the two guards disagree — `set_vision_rule` writes
+  all three parts, which is exactly what the F6 trigger requires, and the test covers
+  the shared-row case. (3) Revoking the `visions` grants breaks a read or seed path
+  that wrote directly — the grants test pins the set, the seed helper moves to
+  `save_vision` through the admin client, and the e2e walks the real path.
+  (4) `/vision/[area]` links survive somewhere — grep for `/vision/health|wealth|
+  relationships` in `app/`, `components/`, `e2e/` returns nothing.
+- **Evaluator.** data-transforming migration (the collapse) · migration creating a
+  user-data table (`vision_reviews`). One run for the feature.
+- **UI.** Primary action: complete the three steps; afterwards Review vision.
+  Viewport: both, desktop-first (Chrome at desktop width against the artboard; phone
+  via Playwright screenshot and the phone e2e project). States: empty, error (inputs
+  preserved), loading. References: `docs/mockups/ui-v2/handoff_sprint_ui_v8/README.md`
+  §Vision tab and the artboard; the deadline field, the optional prompts on step 1,
+  the review note, the "days to the deadline" line and the previous-vision meta line
+  are additions the artboard does not draw. Mockup: `app/mockup/vision/` (thin page
+  in the stack, hardcoded data, `?view=step1|step1-error|step2|step3|overview|
+  overview1|loading`, `?review=1`, `?armed=1`, `?prev=1`; the real Dusk / Night
+  toggle) — captured at 1440 and 390 in both palettes with zero overflow; moved to
+  `docs/mockups/f9-vision/` with the screenshots before the build.
 
 ### F10 — Sprint completion, End Early, postmortem, kit, next-sprint gate (was F6)
 *Re-scoped 2026-09-06 (rows B10 B17 C6); the text below is the v1 entry and is

@@ -1,0 +1,438 @@
+/* F9 mockup — throwaway. Scoped under [data-mock]; nothing here reaches the app. */
+
+[data-mock] .v-wrap {
+  max-width: 960px;
+}
+
+[data-mock] .v-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+[data-mock] .v-head-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+[data-mock] .v-title {
+  margin: 8px 0 0;
+  font-size: 30px;
+  line-height: 1.15;
+}
+
+[data-mock] .v-progress {
+  display: flex;
+  gap: 5px;
+  margin-top: 18px;
+  max-width: 320px;
+}
+
+[data-mock] .v-seg {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--faint);
+}
+
+[data-mock] .v-seg-on {
+  background: var(--accent);
+}
+
+[data-mock] .v-steps {
+  display: flex;
+  gap: 18px;
+  margin-top: 8px;
+  max-width: 320px;
+}
+
+[data-mock] .v-steps span {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+[data-mock] .v-steps .v-step-on {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+[data-mock] .v-card {
+  margin-top: 22px;
+  padding: 22px 24px;
+  max-width: 720px;
+}
+
+[data-mock] .v-prompt {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+[data-mock] .v-textarea {
+  margin-top: 14px;
+  border-radius: 14px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+[data-mock] .v-field-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-top: 16px;
+}
+
+[data-mock] .v-field-label-opt {
+  color: var(--muted);
+}
+
+[data-mock] .v-field-label-opt em {
+  font-style: normal;
+  font-weight: 500;
+}
+
+[data-mock] .v-input {
+  margin-top: 8px;
+  border-radius: 14px;
+}
+
+[data-mock] .v-date {
+  max-width: 220px;
+}
+
+[data-mock] .v-note {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 10px;
+  line-height: 1.5;
+}
+
+[data-mock] .v-grid {
+  margin-top: 16px;
+}
+
+[data-mock] .v-grid .input {
+  border-radius: 14px;
+}
+
+[data-mock] .v-grid .v-strong {
+  font-weight: 600;
+}
+
+[data-mock] .v-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--divider);
+  flex-wrap: wrap;
+}
+
+[data-mock] .v-foot-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+
+[data-mock] .v-options {
+  margin-top: 14px;
+}
+
+/* Overview */
+[data-mock] .v-vision {
+  margin: 10px 0 0;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+  max-width: 34ch;
+}
+
+[data-mock] .v-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+[data-mock] .btn-secondary {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--control-border);
+  padding: 10px 17px;
+}
+
+[data-mock] .btn-secondary:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+[data-mock] .v-replace {
+  border: none;
+  background: none;
+  font-size: 12.5px;
+  padding: 0 6px;
+  color: var(--muted);
+}
+
+[data-mock] .v-replace-armed {
+  color: var(--under);
+  font-weight: 600;
+}
+
+[data-mock] .v-steps-done {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-ink);
+}
+
+[data-mock] .v-steps-done-all {
+  color: var(--success);
+}
+
+[data-mock] .v-review {
+  margin-top: 18px;
+  border: 1.5px solid var(--accent);
+  border-radius: 20px;
+  padding: 20px 22px;
+  max-width: 720px;
+}
+
+[data-mock] .v-review-q {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+[data-mock] .v-review-note {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+[data-mock] .v-review-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+[data-mock] .v-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+[data-mock] .v-cards-2 {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  margin-top: 16px;
+}
+
+[data-mock] .v-mini {
+  padding: 18px 20px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+[data-mock] .v-mini-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+[data-mock] .v-mini-action {
+  border: none;
+  background: none;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0;
+}
+
+[data-mock] .v-mini-body {
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+[data-mock] .v-mini-sub {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+[data-mock] .v-mini-empty {
+  text-align: left;
+  border: 1px dashed var(--control-border);
+  border-radius: 14px;
+  background: none;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+[data-mock] .v-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-top: 1px solid var(--divider);
+  background: none;
+  padding: 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+[data-mock] .v-row-n {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+[data-mock] .v-sprint {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-top: 1px solid var(--divider);
+  background: none;
+  padding: 12px 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+[data-mock] .v-sprint-area {
+  font-weight: 600;
+}
+
+[data-mock] .v-sprint-outcome {
+  color: var(--muted);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-mock] .v-sprint-status {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+[data-mock] .v-met {
+  color: var(--success);
+}
+
+[data-mock] .v-under {
+  color: var(--under);
+}
+
+[data-mock] .v-mini-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+[data-mock] .v-empty-line {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+[data-mock] .v-prev-toggle {
+  border: none;
+  background: none;
+  padding: 0;
+  margin-top: 18px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-ink);
+}
+
+[data-mock] .v-prev {
+  margin-top: 10px;
+  background: var(--faint);
+  border-radius: 14px;
+  padding: 13px 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 720px;
+}
+
+[data-mock] .v-prev-meta {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.5px;
+}
+
+/* Loading skeleton: the overview's shapes, no text, no layout shift. */
+[data-mock] .v-skel {
+  background: var(--faint);
+  border-radius: 8px;
+  height: 14px;
+}
+
+[data-mock] .v-skel-h1 {
+  height: 34px;
+  width: 70%;
+  margin-top: 12px;
+  border-radius: 10px;
+}
+
+[data-mock] .v-skel-btn {
+  height: 40px;
+  width: 120px;
+  border-radius: 12px;
+}
+
+/* Mockup-only view switcher */
+[data-mock] .mk-views {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 22px;
+  font-size: 11.5px;
+}
+
+[data-mock] .mk-views a {
+  color: var(--muted);
+  text-decoration: none;
+  border: 1px dashed var(--divider);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+[data-mock] .mk-views a[aria-current] {
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+
+@media (max-width: 940px) {
+  [data-mock] .v-cards,
+  [data-mock] .v-cards-2 {
+    grid-template-columns: 1fr;
+  }
+  [data-mock] .v-date {
+    max-width: none;
+  }
+}

@@ -1,0 +1,434 @@
+import { cookies } from "next/headers";
+import "./mockup.css";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { THEME_COOKIE, themeFromCookie } from "@/lib/theme";
+
+/**
+ * F9 mockup — throwaway scaffolding for the feature gate. Hardcoded vision data.
+ * `?view=step1|step1-error|step2|step3|overview|overview1|loading`, `?review=1` opens the
+ * review card, `?armed=1` arms Replace, `?prev=1` unfolds previous visions. The header's
+ * Dusk / Night toggle is the real one. Deleted once F9 is approved.
+ */
+
+type View = "step1" | "step1-error" | "step2" | "step3" | "overview" | "overview1" | "loading";
+const VIEWS: View[] = ["step1", "step1-error", "step2", "step3", "overview", "overview1", "loading"];
+
+const VISION = "I run a calm consulting practice with three retainer clients, work four days a week, and race a half marathon every spring.";
+const PROOF = "Three signed retainers and a finish-line photo";
+const OBSTACLE = { name: "Saying yes to one-off projects", interferes: "Retainer outreach slips a week, every week" };
+const RULE = {
+  when: "a one-off request lands in my inbox",
+  then: "I reply with the retainer offer or a no, within the hour",
+  recover: "I am back on the outreach list within 15 minutes",
+};
+const IMPS = [
+  { name: "Saying yes to one-off projects", tag: "has WHEN → THEN" },
+  { name: "Phone distraction", tag: "has WHEN → THEN" },
+  { name: "Starting late", tag: "" },
+];
+
+export default async function VisionMockup({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = await searchParams;
+  const theme = themeFromCookie((await cookies()).get(THEME_COOKIE)?.value);
+  const view: View = VIEWS.includes(sp.view as View) ? (sp.view as View) : "overview";
+  const review = sp.review === "1";
+  const armed = sp.armed === "1";
+  const prev = sp.prev === "1";
+  const steps: 1 | 3 = view === "overview1" ? 1 : 3;
+  const hasVision = view.startsWith("overview") || view === "step2" || view === "step3";
+
+  return (
+    <div className="page" data-mock>
+      <header className="app-header">
+        <div className="brand">
+          <span className="brand-dot" />
+          <span className="heading brand-name">Hustlemania</span>
+        </div>
+        <nav className="tabs" aria-label="Sections">
+          <a className="tab" href="#">
+            Sprints
+          </a>
+          <a className="tab tab-on" href="#">
+            Vision
+          </a>
+          <a className="tab" href="#">
+            Insights
+          </a>
+        </nav>
+        <div className="header-spacer" />
+        <ThemeToggle theme={theme} />
+        <div className="header-user">
+          <span className="header-email hide-narrow">you@example.com</span>
+          <span className="link-quiet nowrap">Sign out</span>
+        </div>
+      </header>
+
+      <div className="shell" data-shell>
+        <aside data-sidebar>
+          <div className="label-muted side-title">Vision</div>
+          <a className="side-link side-link-on" href="#" aria-current="page">
+            <span className="side-link-head">
+              <span className="side-label">Vision</span>
+              <span className={`side-meta ${hasVision && steps === 3 ? "" : "side-meta-accent"}`}>{hasVision ? `${steps} of 3` : "0 of 3"}</span>
+            </span>
+            <span className="side-sub">{hasVision ? "Reviewed Sep 7, 2026" : "Not written yet"}</span>
+          </a>
+          <div className="label-muted side-title side-title-more">Libraries</div>
+          <a className="side-link" href="#">
+            <span className="side-link-head">
+              <span className="side-label">Execution cues</span>
+              <span className="side-meta">4</span>
+            </span>
+          </a>
+          <a className="side-link" href="#">
+            <span className="side-link-head">
+              <span className="side-label">Impediments</span>
+              <span className="side-meta">5</span>
+            </span>
+          </a>
+        </aside>
+
+        <main className="main">
+          <div className="workspace v-wrap">
+            <nav className="mk-views" aria-label="Mockup views">
+              {VIEWS.map((v) => (
+                <a key={v} href={`/mockup/vision?view=${v}`} aria-current={v === view && !review && !armed && !prev ? "page" : undefined}>
+                  {v}
+                </a>
+              ))}
+              <a href="/mockup/vision?view=overview&review=1" aria-current={review ? "page" : undefined}>
+                review
+              </a>
+              <a href="/mockup/vision?view=overview&armed=1" aria-current={armed ? "page" : undefined}>
+                replace armed
+              </a>
+              <a href="/mockup/vision?view=overview&prev=1" aria-current={prev ? "page" : undefined}>
+                previous
+              </a>
+            </nav>
+
+            {view === "loading" ? <Loading /> : null}
+            {view === "step1" || view === "step1-error" ? <Step1 error={view === "step1-error"} /> : null}
+            {view === "step2" ? <Step2 /> : null}
+            {view === "step3" ? <Step3 /> : null}
+            {view === "overview" || view === "overview1" ? <Overview steps={steps} review={review} armed={armed} prev={prev} /> : null}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function StepFrame({
+  n,
+  title,
+  children,
+  hint,
+  back,
+  primary,
+}: {
+  n: 1 | 2 | 3;
+  title: string;
+  children: React.ReactNode;
+  hint: string;
+  back: string | null;
+  primary: string;
+}) {
+  const names = ["Vision", "Obstacle", "Rule"];
+  return (
+    <>
+      <div className="v-head">
+        <div className="label-accent">Annual setup · Step {n} of 3</div>
+        <span className="v-head-meta">Revisit once a year. Sprints are planned separately.</span>
+      </div>
+      <h1 className="heading v-title">{title}</h1>
+      <div className="v-progress" aria-label={`Step ${n} of 3`}>
+        {[1, 2, 3].map((i) => (
+          <span key={i} className={`v-seg ${i <= n ? "v-seg-on" : ""}`} />
+        ))}
+      </div>
+      <div className="v-steps">
+        {names.map((s, i) => (
+          <span key={s} className={i + 1 === n ? "v-step-on" : ""}>
+            {s}
+          </span>
+        ))}
+      </div>
+      <div className="card v-card">
+        {children}
+        <div className="v-foot">
+          {back ? (
+            <button type="button" className="btn btn-ghost">
+              {back}
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="v-foot-actions">
+            <span className="hint">{hint}</span>
+            <button type="button" className="btn btn-primary" aria-disabled={hint ? "true" : undefined}>
+              {primary}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Step1({ error }: { error: boolean }) {
+  return (
+    <StepFrame
+      n={1}
+      title="Define your vision"
+      hint={error ? "The deadline must be in the future." : "The vision unlocks every sprint."}
+      back={null}
+      primary="Save & continue"
+    >
+      <div className="v-prompt">Where does your life stand one to two years from now? One or two sentences.</div>
+      <textarea className="input v-textarea" rows={4} placeholder="Where you stand one to two years from now." defaultValue={error ? VISION : ""} aria-label="Vision" />
+      <div className="v-field-label">By when?</div>
+      <input className="input v-input v-date" type="date" defaultValue={error ? "2025-09-01" : ""} aria-label="Deadline" aria-invalid={error ? "true" : undefined} />
+      <div className="v-field-label">What would prove it happened?</div>
+      <input
+        className="input v-input"
+        placeholder="Something you could point to: a number, a habit held for a quarter, a signed contract"
+        defaultValue={error ? PROOF : ""}
+        aria-label="Proof"
+      />
+      <div className="v-field-label v-field-label-opt">
+        What it means to you <em>· optional</em>
+      </div>
+      <input className="input v-input" placeholder="Why this, and not something else" defaultValue={error ? "Time with the kids on Fridays." : ""} />
+      <div className="v-field-label v-field-label-opt">
+        Where you stand today <em>· optional</em>
+      </div>
+      <input
+        className="input v-input"
+        placeholder="The honest baseline, in one line"
+        defaultValue={error ? "One retainer, five days a week, no running since March." : ""}
+      />
+      {error ? (
+        <div className="error-bar mt-14" role="alert">
+          <span>Couldn&apos;t save the vision. Your text is still here.</span>
+          <button type="button" className="link-quiet error-bar-action">
+            Retry
+          </button>
+        </div>
+      ) : null}
+    </StepFrame>
+  );
+}
+
+function Step2() {
+  return (
+    <StepFrame n={2} title="Identify the main obstacle" hint="" back="Back" primary="Save & continue">
+      <div className="v-prompt">What most often pulls you off that course? Pick a global impediment or name a new one.</div>
+      <div className="v-options" role="radiogroup" aria-label="Global impediments">
+        {IMPS.map((o, i) => (
+          <button key={o.name} type="button" className={`option-row ${i === 0 ? "option-row-on" : ""}`} role="radio" aria-checked={i === 0}>
+            <span className="option-mark option-mark-circle">{i === 0 ? "●" : ""}</span>
+            <span className="option-body">
+              <span className="option-label">{o.name}</span>
+            </span>
+            {o.tag ? <span className="option-tag">{o.tag}</span> : null}
+          </button>
+        ))}
+      </div>
+      <div className="v-field-label">Or create a new impediment</div>
+      <div className="proof-grid v-grid">
+        <span className="label-accent proof-label">SITUATION</span>
+        <input className="input input-compact v-strong" placeholder="e.g. Saying yes to one-off projects" aria-label="Situation" />
+        <span className="label-accent proof-label">INTERFERES</span>
+        <input className="input input-compact" placeholder="What it does to your day, e.g. retainer outreach slips a week, every week" aria-label="Interferes" />
+      </div>
+      <div className="v-note">
+        Same card as any impediment in the library, saved with global scope so every sprint can watch it. The WHEN → THEN comes next.
+      </div>
+    </StepFrame>
+  );
+}
+
+function Step3() {
+  return (
+    <StepFrame n={3} title="Choose a WHEN → THEN guiding rule" hint="WHEN, THEN and the recovery criterion are all required." back="Back" primary="Save">
+      <div className="v-prompt">The one move you make the moment {OBSTACLE.name} shows up.</div>
+      <div className="proof-grid v-grid">
+        <span className="label-accent proof-label">WHEN</span>
+        <input className="input input-compact" defaultValue={RULE.when} aria-label="When" />
+        <span className="label-accent proof-label">THEN</span>
+        <input className="input input-compact" defaultValue={RULE.then} aria-label="Then" />
+        <span className="label-accent proof-label nowrap">RECOVERED WHEN</span>
+        <input className="input input-compact" placeholder="Observable sign you're back on track, e.g. I'm on the task within 15 minutes" aria-label="Recovered when" />
+      </div>
+      <div className="v-note">Saved on {OBSTACLE.name} as its WHEN → THEN. Any sprint that watches it uses this same response.</div>
+    </StepFrame>
+  );
+}
+
+function Overview({ steps, review, armed, prev }: { steps: 1 | 3; review: boolean; armed: boolean; prev: boolean }) {
+  const has = steps === 3;
+  return (
+    <>
+      <div className="v-head">
+        <div className="label-accent">One to two years from now</div>
+        <span className="v-head-meta">Saved Sep 1, 2026 · By Sep 1, 2027 · {has ? "Reviewed Sep 7, 2026" : "Not reviewed yet"}</span>
+      </div>
+      <h1 className="v-vision">{VISION}</h1>
+      <div className="v-actions">
+        <button type="button" className="btn btn-secondary">
+          Edit
+        </button>
+        <button type="button" className="btn btn-primary">
+          Review vision
+        </button>
+        <button type="button" className={`v-replace ${armed ? "v-replace-armed" : ""}`}>
+          {armed ? "Tap again to archive it and start over" : "Replace"}
+        </button>
+        <span className={`v-steps-done ${has ? "v-steps-done-all" : ""}`}>{steps} of 3 steps</span>
+      </div>
+
+      {review ? (
+        <div className="v-review">
+          <div className="label-accent">Review</div>
+          <div className="v-review-q">Does this still describe where you&apos;re headed?</div>
+          <div className="v-review-note">Proof you named: {PROOF}. 3 sprints have run behind it. 359 days to the deadline.</div>
+          <div className="v-field-label v-field-label-opt">
+            What shows it? <em>· optional</em>
+          </div>
+          <textarea className="input v-textarea" rows={2} placeholder="Evidence you can point to today" aria-label="Review note" />
+          <div className="v-review-actions">
+            <button type="button" className="btn btn-primary">
+              Still true · mark reviewed
+            </button>
+            <button type="button" className="btn btn-secondary">
+              Needs changes
+            </button>
+            <button type="button" className="btn btn-ghost">
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="v-cards">
+        <div className="card v-mini">
+          <div className="v-mini-head">
+            <span className="label-accent">Vision</span>
+            <button type="button" className="v-mini-action">
+              Edit
+            </button>
+          </div>
+          <div className="v-mini-body">{VISION}</div>
+          <div className="v-mini-sub">Proof: {PROOF}</div>
+        </div>
+        <div className="card v-mini">
+          <div className="v-mini-head">
+            <span className="label-accent">Main obstacle</span>
+            <button type="button" className="v-mini-action">
+              {has ? "Edit" : "Add"}
+            </button>
+          </div>
+          {has ? (
+            <div className="v-mini-body">{OBSTACLE.name}</div>
+          ) : (
+            <button type="button" className="v-mini-empty">
+              What most often pulls you off course?
+            </button>
+          )}
+          {has ? <div className="v-mini-sub">{OBSTACLE.interferes}</div> : null}
+        </div>
+        <div className="card v-mini">
+          <div className="v-mini-head">
+            <span className="label-accent">Guiding rule</span>
+            <button type="button" className="v-mini-action">
+              {has ? "Edit" : "Add"}
+            </button>
+          </div>
+          {has ? (
+            <div className="v-mini-body">
+              WHEN {RULE.when} → THEN {RULE.then}
+            </div>
+          ) : (
+            <button type="button" className="v-mini-empty">
+              Name the obstacle first.
+            </button>
+          )}
+          {has ? <div className="v-mini-sub">Recovered when {RULE.recover}</div> : null}
+        </div>
+      </div>
+
+      <div className="v-cards v-cards-2">
+        <div className="card v-mini">
+          <span className="label-accent">Library</span>
+          <button type="button" className="v-row">
+            <span>Execution cues</span>
+            <span className="v-row-n">4 →</span>
+          </button>
+          <button type="button" className="v-row">
+            <span>Impediments</span>
+            <span className="v-row-n">5 →</span>
+          </button>
+          <div className="v-mini-note">Cues and impediments are picked per sprint.</div>
+        </div>
+        <div className="card v-mini">
+          <div className="v-mini-head">
+            <span className="label-accent">Sprints behind this vision</span>
+            <span className="v-mini-sub">3</span>
+          </div>
+          <button type="button" className="v-sprint">
+            <span className="v-sprint-area">Wealth</span>
+            <span className="v-sprint-outcome">Land two retainer clients</span>
+            <span className="v-sprint-status">Day 9 of 14</span>
+          </button>
+          <button type="button" className="v-sprint">
+            <span className="v-sprint-area">Health</span>
+            <span className="v-sprint-outcome">Run 60 km across the sprint</span>
+            <span className="v-sprint-status v-met">Met · 64 of 60</span>
+          </button>
+          <button type="button" className="v-sprint">
+            <span className="v-sprint-area">Relationships</span>
+            <span className="v-sprint-outcome">Twelve unhurried dinners at home</span>
+            <span className="v-sprint-status v-under">Under · 8 of 12</span>
+          </button>
+        </div>
+      </div>
+
+      <button type="button" className="v-prev-toggle">
+        {prev ? "Hide" : "Show"} previous visions (1)
+      </button>
+      {prev ? (
+        <div className="v-prev">
+          I have replaced freelancing with a small agency and take August off entirely.
+          <span className="v-prev-meta">Sep 2025 – Aug 2026 · replaced Sep 1, 2026 · 2 sprints ran behind it</span>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function Loading() {
+  return (
+    <div aria-busy="true" aria-label="Loading the vision">
+      <div className="v-head">
+        <span className="v-skel" style={{ width: 160 }} />
+        <span className="v-skel" style={{ width: 220 }} />
+      </div>
+      <div className="v-skel v-skel-h1" />
+      <div className="v-skel v-skel-h1" style={{ width: "45%" }} />
+      <div className="v-actions">
+        <span className="v-skel v-skel-btn" style={{ width: 70 }} />
+        <span className="v-skel v-skel-btn" />
+      </div>
+      <div className="v-cards">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="card v-mini">
+            <span className="v-skel" style={{ width: 80 }} />
+            <span className="v-skel" style={{ height: 40 }} />
+            <span className="v-skel" style={{ width: "60%" }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
