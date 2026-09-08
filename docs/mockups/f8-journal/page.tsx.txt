@@ -1,0 +1,547 @@
+import "./mockup.css";
+
+/**
+ * F8 mockup — throwaway scaffolding for the feature gate. Hardcoded Day 9 of a Wealth
+ * sprint. `?theme=night` switches the palette, `?state=planning|reviewing|closed`
+ * switches the Today card. Deleted once F8 is approved.
+ */
+
+type State = "planning" | "reviewing" | "closed";
+
+const DAYS = [
+  { i: 1, date: "Tuesday, September 1, 2026", short: "Sep 1", actual: "715", target: "715", tail: "", met: true },
+  { i: 2, date: "Wednesday, September 2, 2026", short: "Sep 2", actual: "600", target: "715", tail: " · showed up: Starting late", met: false },
+  { i: 3, date: "Thursday, September 3, 2026", short: "Sep 3", actual: "900", target: "715", tail: "", met: true },
+  { i: 4, date: "Friday, September 4, 2026", short: "Sep 4", actual: null, target: "715", tail: "", met: false },
+  { i: 5, date: "Saturday, September 5, 2026", short: "Sep 5", actual: "715", target: "715", tail: "", met: true },
+  { i: 6, date: "Sunday, September 6, 2026", short: "Sep 6", actual: "970", target: "715", tail: " · showed up: Phone distraction", met: true },
+  { i: 7, date: "Monday, September 7, 2026", short: "Sep 7", actual: "800", target: "715", tail: "", met: true },
+];
+
+export default async function JournalMockup({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = await searchParams;
+  const theme = sp.theme === "night" ? "night" : "dusk";
+  const state: State = sp.state === "reviewing" ? "reviewing" : sp.state === "closed" ? "closed" : "planning";
+  const other = theme === "night" ? "dusk" : "night";
+  const q = (t: string, s: State) => `/mockup/journal?theme=${t}&state=${s}`;
+
+  return (
+    <div className="page" data-mock data-theme={theme}>
+      <header className="app-header">
+        <div className="brand">
+          <span className="brand-dot" />
+          <span className="heading brand-name">Hustlemania</span>
+        </div>
+        <nav className="tabs" aria-label="Sections">
+          <a className="tab tab-on" href="#">
+            Sprints
+          </a>
+          <a className="tab" href="#">
+            Vision
+          </a>
+          <a className="tab" href="#">
+            Insights
+          </a>
+        </nav>
+        <div className="header-spacer" />
+        <div className="header-user">
+          <a className="mk-theme" href={q(other, state)} aria-label={`Switch to ${other} mode`}>
+            <span className="mk-theme-dot" />
+            <span className="mk-theme-text">{theme === "night" ? "Night" : "Dusk"}</span>
+          </a>
+          <span className="header-email hide-narrow">you@example.com</span>
+          <span className="link-quiet nowrap">Sign out</span>
+        </div>
+      </header>
+
+      <div className="shell" data-shell>
+        <aside data-sidebar>
+          <div className="label-muted side-title">Sprints</div>
+          <a className="mk-side-row side-link" href="#">
+            <span className="side-link-head">
+              <span className="side-label">Health</span>
+              <span className="side-meta">Ready</span>
+            </span>
+            <span className="side-sub">No active sprint</span>
+          </a>
+          <a className="mk-side-row side-link side-link-on" href="#" aria-current="page">
+            <span className="side-link-head">
+              <span className="side-label">Wealth</span>
+              <span className="side-meta">Day 9/14</span>
+            </span>
+            <span className="side-sub">Bank the side income</span>
+          </a>
+          <a className="mk-side-row side-link" href="#">
+            <span className="side-link-head">
+              <span className="side-label">Relationships</span>
+              <span className="side-meta">Locked</span>
+            </span>
+            <span className="side-sub">Vision not written yet</span>
+          </a>
+        </aside>
+
+        <main className="main">
+          <div className="mk-journal">
+            <div>
+              <h1 className="heading mk-title">Bank the side income</h1>
+              <div className="mk-meta">Wealth · Sep 1 → Sep 14</div>
+
+              <div className="mk-progress">
+                <div>
+                  <div className="mk-progress-kicker">Day 9 of 14</div>
+                  <div className="heading mk-progress-pct">55%</div>
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="mk-progress-line">5,500 of 10,000 USD · 750 a day finishes it</div>
+                  <div className="mk-segs">
+                    {Array.from({ length: 14 }, (_, k) => (
+                      <span key={k} className="mk-seg" data-closed={k < 8 && k !== 3 ? "true" : "false"} data-today={k === 8 ? "true" : "false"} />
+                    ))}
+                  </div>
+                  <div className="mk-progress-streak">3-day streak</div>
+                </div>
+              </div>
+
+              <div className="mk-timeline">
+                <div className="mk-label">
+                  Days 1–7
+                  <span className="mk-label-sub">Sep 1 – Sep 7</span>
+                </div>
+                <div className="mk-row">
+                  <span className="mk-dot" />
+                  <button type="button" className="mk-summary">
+                    <span>Earlier in the sprint</span>
+                    <span className="mk-link">{sp.past === "1" ? "hide" : "show"}</span>
+                  </button>
+                </div>
+
+                {sp.past === "1"
+                  ? DAYS.map((d) => (
+                      <PastRow key={d.i} d={d} />
+                    ))
+                  : null}
+
+                <div className="mk-label">
+                  Day 8<span className="mk-label-sub hide-narrow">Tuesday, September 8, 2026</span><span className="mk-label-sub mk-only-narrow">Tue, Sep 8</span>
+                </div>
+                <div className="mk-row">
+                  <span className="mk-dot" data-tone="met" />
+                  <div className="mk-closed">
+                    <span>
+                      <strong>800</strong> <span className="mk-of">of 715 · showed up: Starting late</span>
+                    </span>
+                    <span className="mk-row-actions">
+                      <span className="mk-verdict" data-tone="met">
+                        met
+                      </span>
+                      <button type="button" className="mk-link">
+                        hide
+                      </button>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mk-label" data-today="true">
+                  Day 9 · today
+                  <span className="mk-label-sub hide-narrow">Wednesday, September 9, 2026</span><span className="mk-label-sub mk-only-narrow">Wed, Sep 9</span>
+                </div>
+                <div className="mk-row" data-today="true">
+                  <span className="mk-dot" data-tone="today" />
+                  <TodayCard state={state} />
+                </div>
+
+                <div className="mk-label">
+                  Day 10<span className="mk-label-sub hide-narrow">Thursday, September 10, 2026</span><span className="mk-label-sub mk-only-narrow">Thu, Sep 10</span>
+                </div>
+                <div className="mk-row">
+                  <span className="mk-dot" />
+                  <div className="mk-future">
+                    <span>Target 715</span>
+                    <span className="mk-row-actions">
+                      <button type="button" className="mk-link">
+                        edit
+                      </button>
+                      <button type="button" className="mk-link">
+                        hide
+                      </button>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mk-label">
+                  Days 11–14
+                  <span className="mk-label-sub">Sep 11 – Sep 14</span>
+                </div>
+                <div className="mk-row">
+                  <span className="mk-dot" />
+                  <button type="button" className="mk-summary">
+                    <span>Rest of the sprint</span>
+                    <span className="mk-link">show</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="mk-plan-modes" role="group" aria-label="Target mode">
+                <span className="chip chip-on">Same daily target</span>
+                <span className="chip">Custom</span>
+              </div>
+              <div className="mk-footnote">
+                Tap a day to see what happened or set its target. Missed days can be added there — they count toward the goal, not the streak. Days close 11:59 PM America/Los Angeles.
+              </div>
+            </div>
+
+            <aside className="mk-rail">
+              <div className="mk-card">
+                <button type="button" className="mk-mantra" title="Edit mantra">
+                  “Small deposits, every day.”
+                </button>
+                <div className="mk-streak">3-day streak</div>
+              </div>
+
+              <div className="mk-card">
+                <div className="mk-card-head">
+                  <span className="mk-kicker">Highest impediment</span>
+                  <button type="button" className="mk-link">
+                    Change
+                  </button>
+                </div>
+                <div className="mk-highest-name">Starting late</div>
+                <div className="mk-proof">
+                  <strong>WHEN</strong> I notice delaying → <strong>THEN</strong> a 10-minute timer on the smallest task
+                </div>
+                <div className="mk-proof-recover">
+                  <strong>RECOVERED WHEN</strong> I am typing
+                </div>
+                <button type="button" className="mk-link" style={{ marginTop: 8 }}>
+                  Edit proof point
+                </button>
+                <div className="mk-card-rule">
+                  <div className="mk-card-head">
+                    <span className="mk-prompt">Also watching</span>
+                    <span className="mk-card-count">2 of 5</span>
+                  </div>
+                  <div className="mk-item">
+                    <span>Phone distraction</span>
+                    <button type="button" className="mk-link">
+                      Remove
+                    </button>
+                  </div>
+                  <button type="button" className="mk-link" style={{ marginTop: 6 }}>
+                    Add impediment
+                  </button>
+                </div>
+              </div>
+
+              <div className="mk-card">
+                <div className="mk-card-head">
+                  <span className="mk-kicker">Execution cues</span>
+                  <span className="mk-card-count">2 of 3</span>
+                </div>
+                <div className="mk-cue">
+                  <div className="mk-cue-head">
+                    <span className="mk-cue-name">
+                      Ask how much this pays
+                      <span className="mk-tag">FOCUS</span>
+                    </span>
+                  </div>
+                  <div className="mk-cue-when">
+                    <strong>WHEN</strong> I schedule anything
+                  </div>
+                </div>
+                <div className="mk-cue">
+                  <div className="mk-cue-head">
+                    <span className="mk-cue-name">Close the laptop at nine</span>
+                    <span className="mk-row-actions">
+                      <button type="button" className="mk-link">
+                        Set as focus
+                      </button>
+                      <button type="button" className="mk-link" style={{ color: "var(--muted)" }}>
+                        Remove
+                      </button>
+                    </span>
+                  </div>
+                  <div className="mk-cue-when">
+                    <strong>WHEN</strong> the clock shows 9 pm
+                  </div>
+                </div>
+                <button type="button" className="mk-link" style={{ marginTop: 12 }}>
+                  Add cue
+                </button>
+              </div>
+
+              <div className="mk-card">
+                <span className="mk-kicker">Celebration</span>
+                <div className="mk-celebration">Two nights away, booked before Day 14.</div>
+              </div>
+
+              <div className="mk-card">
+                <span className="mk-kicker">Usage of funds</span>
+                <div className="mk-usage">5,000 savings · 3,000 debt · 2,000 travel</div>
+              </div>
+            </aside>
+          </div>
+
+          <p className="mk-footnote" style={{ marginTop: 40 }}>
+            Mockup states: <a href={q(theme, "planning")}>planning</a> · <a href={q(theme, "reviewing")}>reviewing</a> · <a href={q(theme, "closed")}>closed</a> ·{" "}
+            <a href={`${q(theme, state)}&past=1`}>show Days 1–7</a>
+          </p>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function PastRow({ d }: { d: (typeof DAYS)[number] }) {
+  return (
+    <>
+      <div className="mk-label">
+        Day {d.i}
+        <span className="mk-label-sub hide-narrow">{d.date}</span><span className="mk-label-sub mk-only-narrow">{d.short}</span>
+      </div>
+      <div className="mk-row">
+        {d.actual === null ? (
+          <>
+            <span className="mk-dot" />
+            <div className="mk-missed">
+              <span>Missed · target {d.target}</span>
+              <span className="mk-row-actions">
+                <button type="button" className="mk-link">
+                  add
+                </button>
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
+            <span className="mk-dot" data-tone={d.met ? "met" : "under"} />
+            <div className="mk-closed">
+              <span>
+                <strong>{d.actual}</strong>{" "}
+                <span className="mk-of">
+                  of {d.target}
+                  {d.tail}
+                </span>
+              </span>
+              <span className="mk-verdict" data-tone={d.met ? "met" : "under"}>
+                {d.met ? "met" : "under"}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+function Tasks({ locked }: { locked: boolean }) {
+  return (
+    <div className="mk-tasks">
+      <div className="mk-task">
+        <button type="button" className="mk-check" data-on="true" disabled={locked} aria-label="Done: Call the bank about the fee">
+          ✓
+        </button>
+        <input className="mk-task-text" data-done="true" defaultValue="Call the bank about the fee" disabled={locked} aria-label="Task 1" />
+        {locked ? null : (
+          <button type="button" className="mk-task-x" aria-label="Remove task">
+            ×
+          </button>
+        )}
+      </div>
+      <div className="mk-task">
+        <button type="button" className="mk-check" data-on="false" disabled={locked} aria-label="Done: Move the second $600" />
+        <input className="mk-task-text" defaultValue="Move the second $600 before lunch" disabled={locked} aria-label="Task 2" />
+        {locked ? null : (
+          <button type="button" className="mk-task-x" aria-label="Remove task">
+            ×
+          </button>
+        )}
+      </div>
+      {locked ? null : (
+        <button type="button" className="mk-add-task">
+          + task
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Pill({ on, children }: { on?: boolean; children: React.ReactNode }) {
+  return (
+    <button type="button" className="mk-pill" data-on={on ? "true" : "false"} aria-pressed={on ? "true" : "false"}>
+      {children}
+    </button>
+  );
+}
+
+function TodayCard({ state }: { state: State }) {
+  if (state === "planning") {
+    return (
+      <div className="mk-today">
+        <div className="mk-today-head">
+          <span className="mk-kicker">Today's entry · target 715</span>
+          <span className="mk-closes">closes 11:59 PM America/Los Angeles</span>
+        </div>
+        <div className="heading mk-big">715</div>
+        <div className="mk-unit">USD today</div>
+        <div className="mk-rule">
+          <div className="mk-prompt">How do I intend to produce today's target?</div>
+          <input className="mk-intention" defaultValue="Move the $600 before lunch, then two client follow-ups." aria-label="Daily intention" />
+          <Tasks locked={false} />
+        </div>
+        <div className="mk-foot">
+          <span className="mk-foot-hint">At the end of the day, enter the actual and log what showed up.</span>
+          <button type="button" className="btn btn-primary" style={{ padding: "11px 20px" }}>
+            Close the day
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (state === "reviewing") {
+    return (
+      <div className="mk-today">
+        <div className="mk-today-head">
+          <span className="mk-kicker">Closing Day 9 · target 715</span>
+          <span className="mk-closes">closes 11:59 PM America/Los Angeles</span>
+        </div>
+        <input className="heading mk-big-input" defaultValue="800" inputMode="numeric" aria-label="Actual result" />
+        <div className="mk-unit">USD · against 715</div>
+
+        <div className="mk-q">
+          <div className="mk-q-group">Use</div>
+          <div className="mk-q-head">
+            <span className="mk-q-label">Which cues did you use?</span>
+          </div>
+          <div className="mk-pills">
+            <Pill on>
+              Ask how much this pays <span className="mk-tag">FOCUS</span>
+            </Pill>
+            <Pill>Close the laptop at nine</Pill>
+            <Pill>None</Pill>
+            <Pill>Unsure</Pill>
+          </div>
+        </div>
+        <div className="mk-q">
+          <div className="mk-q-group">Occurrence</div>
+          <div className="mk-q-head">
+            <span className="mk-q-label">Which obstacles showed up?</span>
+            <span className="mk-q-sub">Highest: Starting late</span>
+          </div>
+          <div className="mk-pills">
+            <Pill on>Starting late</Pill>
+            <Pill>Phone distraction</Pill>
+            <Pill>None</Pill>
+            <Pill>Unsure</Pill>
+          </div>
+        </div>
+        <div className="mk-q">
+          <div className="mk-q-group">Response · Starting late</div>
+          <div className="mk-q-head">
+            <span className="mk-q-label">Did you run the response?</span>
+            <span className="mk-q-sub">THEN a 10-minute timer on the smallest task · judge the first time it showed up today</span>
+          </div>
+          <div className="mk-pills">
+            <Pill on>Yes</Pill>
+            <Pill>No</Pill>
+            <Pill>Partially</Pill>
+            <Pill>Unsure</Pill>
+          </div>
+        </div>
+        <div className="mk-q">
+          <div className="mk-q-group">Recovery</div>
+          <div className="mk-q-head">
+            <span className="mk-q-label">Did you recover?</span>
+            <span className="mk-q-sub">Recovered when I am typing</span>
+          </div>
+          <div className="mk-pills">
+            <Pill>Yes</Pill>
+            <Pill>No</Pill>
+            <Pill>Unsure</Pill>
+          </div>
+        </div>
+        <div className="mk-q">
+          <div className="mk-q-group">Impact · Starting late</div>
+          <div className="mk-q-head">
+            <span className="mk-q-label">How much did it cost today?</span>
+            <span className="mk-q-sub">Your read, not the number</span>
+          </div>
+          <div className="mk-pills">
+            <Pill>Nothing</Pill>
+            <Pill>Some</Pill>
+            <Pill>A lot</Pill>
+            <Pill>Unsure</Pill>
+          </div>
+        </div>
+
+        <div className="mk-rule">
+          <div className="mk-prompt">Tasks</div>
+          <Tasks locked />
+        </div>
+        <input className="mk-notes" placeholder="A note about today (optional)" aria-label="Note" />
+        <div className="mk-foot">
+          <span className="mk-accent-hint">Did you recover?</span>
+          <span className="mk-foot-actions">
+            <button type="button" className="mk-back">
+              Back
+            </button>
+            <button type="button" className="btn btn-primary" aria-disabled="true" style={{ padding: "11px 20px" }}>
+              Confirm close
+            </button>
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mk-today">
+      <div className="mk-today-head">
+        <span className="mk-kicker">Today's entry · closed</span>
+        <span className="mk-closes">closed</span>
+      </div>
+      <div className="heading mk-big" data-tone="met">
+        800
+      </div>
+      <div className="mk-unit">USD against 715</div>
+      <div className="mk-summary-line">Showed up: Starting late · Response ran · recovered · Cost: some · Cues used: Ask how much this pays</div>
+      <div className="mk-quote">“The timer worked; the bank call did not.”</div>
+      <div className="mk-rule">
+        <div className="mk-prompt">Move the $600 before lunch, then two client follow-ups.</div>
+        <Tasks locked />
+      </div>
+      <div className="mk-tomorrow">
+        <div className="mk-tomorrow-head">
+          <span className="mk-kicker">Set up tomorrow · Day 10</span>
+          <button type="button" className="mk-link">
+            Done
+          </button>
+        </div>
+        <div className="mk-tomorrow-blurb">Keep what still matters. Anything you remove leaves this sprint, not the library.</div>
+        <div className="mk-tomorrow-section">Didn't show up today</div>
+        <div className="mk-tomorrow-item">
+          <span>Phone distraction</span>
+          <button type="button" className="mk-link">
+            Remove
+          </button>
+        </div>
+        <div className="mk-tomorrow-section">Not used today</div>
+        <div className="mk-tomorrow-item">
+          <span>Close the laptop at nine</span>
+          <button type="button" className="mk-link">
+            Remove
+          </button>
+        </div>
+        <div className="mk-tomorrow-adds">
+          <button type="button" className="mk-link">
+            Add impediment
+          </button>
+          <button type="button" className="mk-link">
+            Add cue
+          </button>
+        </div>
+      </div>
+      <div className="mk-locked">Day closed · locked · tomorrow's target 715</div>
+    </div>
+  );
+}

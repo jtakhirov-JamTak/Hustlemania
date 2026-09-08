@@ -9,8 +9,6 @@ export type SideItem = {
   meta?: string;
   metaAccent?: boolean;
   sub?: string;
-  /** A second quiet line under `sub` — the sprint's streak. */
-  note?: string;
 };
 
 export function SideNavList({ items }: { items: SideItem[] }) {
@@ -26,11 +24,6 @@ export function SideNavList({ items }: { items: SideItem[] }) {
               {it.meta ? <span className={`side-meta ${it.metaAccent ? "side-meta-accent" : ""}`}>{it.meta}</span> : null}
             </span>
             {it.sub ? <span className="side-sub">{it.sub}</span> : null}
-            {it.note ? (
-              <span className="side-note" data-testid="side-note">
-                {it.note}
-              </span>
-            ) : null}
           </Link>
         );
       })}

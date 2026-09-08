@@ -847,18 +847,19 @@ re-applied). "Set up tomorrow" (B12 / C7, pure UI) moves to F8.
   FOCUS tag / "Set as focus" on Today are not drawn in the artboard.
 
 ### F8 — Journal restyle: timeline, rail, Dusk, night mode
-*Stub (2026-09-06). Filled by `/interview`; the v8 handoff has no dark palette, so
-Claude derives night-mode tokens from Dusk and the user approves them inside that
-interview (user, 2026-09-06). Scope: rows B1 B2 B3 B11 B13 B14 B16 B18 C8 D8 D9.* Sprints tab = journal timeline (Days 1–7 collapsed → Yesterday → Today card
-→ Tomorrow → Days 11–14) with a 300px right rail (Mantra + streak, Highest, Cues,
-Celebration, Usage of funds), stacking under 1240px; target and actual 64px; page
-titles 30px; the Daily Intention is the first line of the Today card under "How do I
-intend to produce today's target?"; sidebars per the v8 README (Sprints: no New Sprint
-button; Vision: Vision `n of 3` · Execution cues · Impediments; Insights: Across
-sprints · Reviews with % of goal on finished rows); palette **Dusk** (accent
-`#5b5bd6`, ink `#1c1b2a`) plus a user-switchable **night mode**; two-tap for End
-sprint early and Replace vision. Moves the e2e pins (hero 92→64, highest name 22→16,
-title sizes) with the spec, not around them. No evaluator trigger.
+*Specified 2026-09-07 by `/interview` (feature mode). Scope:
+`docs/RECONCILIATION-2026-09-06.md` rows B1 B2 B3 B11 B13 B14 B18 C8 D8; B16 (two-tap)
+and D9 (Insights sidebar rows) left with F10 / F11 per the review notes below. In-session
+calls (2026-09-07): night mode is a per-device **cookie** read by the root layout (no
+migration, no flash) · the switch is a two-state **Dusk / Night** toggle in the header,
+default Dusk, no system preference · an inline close ends on the **Closed card + "Set up
+tomorrow"** (the modal's result screen stays backfill-only) · phone timeline: the label
+column narrows to 72px with a short date, the rule and dots stay (approved in the mockup)
+· closed past rows are **one line** — a closed day's tasks are read in the sprint review
+(F10, noted in BACKLOG) · the Sprints sidebar drops the streak line · "Set up tomorrow"
+lists items answered **No or untouched**, never the highest or the focus cue · future
+rows do not show their pre-planned intention · primary action on the screen is planning
+today (intention + tasks); closing is the evening's action.*
 
 *Review notes 2026-09-07:* F8 = the journal (timeline, rail, Today card states,
 "Set up tomorrow" from F7) and the **Sprints** sidebar only. The Vision tab and its
@@ -866,6 +867,173 @@ sidebar move to F9, the Insights sidebar to F11; the rail's Complete sprint / En
 sprint early and the Review gate card arrive with F10, the two-tap component with
 its first consumer. The rail's cue card shows `WHEN {cue_when}` under the name (no
 note column exists).
+
+- **Behavior.** The Sprints tab becomes a journal: a header block with the sprint's
+  progress, then a 14-day timeline (earlier days folded, Yesterday, the Today card,
+  Tomorrow, the rest folded) with a right rail carrying the mantra and streak, the
+  highest impediment and the other impediments, the cues, the celebration and the
+  usage of funds. The Today card is planned in place (intention, tasks), closed in
+  place (actual, then the F7 questions), and once closed shows the result, a summary
+  of what happened and a "Set up tomorrow" block to prune the sprint's items. The
+  whole app takes the Dusk palette, and a header toggle switches every screen to a
+  night palette that this device remembers.
+- **Acceptance criteria.**
+  - **Tokens.** `app/globals.css` `:root` carries Dusk: `--page-bg #f9f9fd`, wash
+    `linear-gradient(180deg,#f2f2fb 0%,#fcfcfe 46%)`, `--panel #fff`, `--ink #1c1b2a`,
+    `--accent #5b5bd6`, `--accent-ink #4141ab`, new `--on-accent #fff`; divider /
+    muted / faint / control-border derived from the new ink at the existing ratios.
+    `:root[data-theme="night"]` carries: `--page-bg #131320`, wash
+    `linear-gradient(180deg,#181828 0%,#131320 46%)`, `--panel #1c1c2c`, `--ink
+    #ecebf7`, `--accent #8f8ff2`, `--accent-ink #b3b3f8`, `--on-accent #131320`,
+    `--success #5cc48a`, `--under #ef7a6f`, divider ink 13%, muted ink 62%, faint ink
+    6%, control-border ink 40%, `color-scheme: dark`. Every white-on-accent surface
+    (primary buttons, active pills and chips, the progress block, the active side
+    row's tag) reads `--on-accent`; a grep for `#fff` / `white` in `app/` and
+    `components/` after the pass finds only `app/global-error.tsx` and the login
+    brand. Contrast (WCAG AA, computed): night ink/panel 14.2, muted/panel 6.2,
+    accent/panel 5.9, accent-ink/panel 8.6, on-accent/accent 6.5, met/panel 7.8,
+    under/panel 6.1; Dusk on-accent/accent 5.4. `themeColor` follows the mode
+    (`#f9f9fd` / `#131320`) in `app/layout.tsx` (`generateViewport` reading the
+    cookie) and `#f9f9fd` in `manifest.ts`.
+  - **Switch.** A header control (testid `theme-toggle`, `aria-label` "Switch to night
+    mode" / "Switch to dusk mode", icon-only ≤940px) submits a form to a server action
+    that sets cookie `theme` = `night` | `dusk` (path `/`, `SameSite=Lax`, one year)
+    and redirects back; the root layout reads the cookie and renders
+    `data-theme` on `<html>`, so the first paint is already in the chosen mode. Works
+    without client JS. e2e: toggle → cookie present → reload → `html[data-theme=night]`
+    and computed `--page-bg` on `<html>` is `#131320`; toggle again → attribute absent
+    and `#f9f9fd`; the login page renders in night mode too.
+  - **Sprints sidebar.** No New Sprint button (the empty-area card carries the CTA).
+    Rows: label · meta (`Day n/14` · `Starts tomorrow` · `Ended` · `Ready` · `Locked`)
+    · sub (outcome · "No active sprint" · "Vision not written yet"); the streak line
+    and its `side-note` testid are gone.
+  - **Journal header.** Title = outcome, 30px/700 (testid `journal-title`); meta `Area
+    · Sep 1 → Sep 14`; progress block (testid `sprint-progress`, accent fill,
+    on-accent text): `Day n of 14` (testid `day-label`, text `Day 9 of 14`), pct
+    44px, line `{cum} of {goal} {unit} · {perDay} a day finishes it` |
+    `· goal reached` | `· final day` (perDay = ceil(remaining ÷ days left, incl.
+    today), the `remainingPlan` helper), 14 segments (`data-closed`, `data-today`),
+    streak line (`streakLabel`; `Streak starts with day 1` before the start).
+  - **Timeline** (testid `timeline`; grid `190px 1fr`, rule 2px, accent on today; ≤940px
+    `72px 1fr` with the short date `Wed, Sep 9`). Rows carry `data-day` and
+    `data-kind` ∈ `summary` `closed` `missed` `future` `today`. Order: folded
+    `Days 1–{n-2}` ("Earlier in the sprint" · show/hide; present when today ≥ Day 3),
+    Yesterday (folded "Yesterday · show" → its row · hide), Today, Tomorrow (folded
+    "Tomorrow · show" → its future row · hide), folded `Days {n+2}–14` ("Rest of the
+    sprint"). Folds are page state (open on the client, closed on reload). Dots:
+    10px, met green / under red / empty; today 14px accent with a 4px 20% halo.
+    Closed row: `**{actual}** of {target}` + ` · showed up: {name}` when an
+    impediment occurred (the highest first, else the first by rank) + verdict `met` /
+    `under` (`data-state`). Missed row (dashed red): `Missed · target {t}` + `add` →
+    the existing backfill modal (`CloseFlow`, its result screen and 78px pin
+    unchanged). Future row (dashed): `Target {t}`; Tomorrow's carries `edit`.
+  - **Target editing.** `edit` (or the `Custom` chip) opens every unlocked future row
+    as a numeric input (ids `plan-target-{i}` kept, ≥16px), shows the mode chips
+    `Same daily target · Custom` (testid `plan-modes`), a summary `Planned {sum} ·
+    Goal {goal} · {delta}` and Cancel / **Save plan** (`aria-disabled` until balanced
+    and changed; hints unchanged). Rules 10–12 and `saveTargetsAction` are untouched;
+    `PlanGrid` stays for the wizard only.
+  - **Today card** (testid `today-card`, `data-state` ∈ `planning` `reviewing`
+    `closed`; 1.5px accent border, radius 20, shadow accent 12%).
+    *Planning:* kicker `Today's entry · target {t}` (`Day 1 target` before the
+    start) + `closes 11:59 PM {tz}`; target 64px/700 (`[data-hero]`, 64px on both
+    viewports); `{unit} today`; divider; prompt "How do I intend to produce today's
+    target?" over a borderless auto-growing textarea (`aria-label` "Daily intention",
+    16px, saves on blur through `saveIntention`, unchanged); task rows (18px box
+    radius 6, borderless 16px input, ×, `+ task`; the F3 behaviour unchanged); footer
+    hint "At the end of the day, enter the actual and log what showed up." + primary
+    **Close the day** (`aria-disabled` with the existing reason before the start /
+    after the window).
+    *Reviewing* (after Close the day, inline): kicker `Closing Day n · target {t}`;
+    64px borderless actual input (`aria-label` "Actual result", numeric; hours add a
+    minutes input) over `{unit} · against {t}`; the F7 question set with the same
+    groups, order, copy, testids, pill semantics and validation, rendered by one
+    shared component (`components/today/DayQuestions.tsx`) that the backfill modal
+    uses too; tasks read-only; note input; footer: accent hint · Back · **Confirm
+    close** (`aria-disabled` until valid). Submits `closeDayAction` unchanged.
+    *Closed:* kicker `Today's entry · closed`; 64px actual green / red (testid
+    `closed-actual`, `data-state`) over `{unit} against {t}`; summary line (testid
+    `day-summary`) joined with ` · ` from the day row and its observation rows:
+    `Showed up: a, b` | `No obstacles` | `Obstacles: unsure` (omitted when every row
+    is unanswered); `Response ran` | `Response didn't run` | `Response partially ran`
+    | `Response unsure` + `recovered` | `didn't recover` | `recovery unsure`; `Cost:
+    nothing` | `some` | `a lot` | `unsure`; `Cues used: a, b` | `No cue used` |
+    `Cues: unsure`. Quoted note in italics when present; intention and tasks
+    read-only; footer `Day closed · locked · tomorrow's target {t}` (`final day` on
+    Day 14). A day closed before 0010 (no observation rows) shows only the numbers.
+  - **Set up tomorrow** (testid `setup-tomorrow`): shown in the Closed card right
+    after an inline close in this page session only (gone on reload), never on
+    Day 14. Under "Didn't show up today": impediments whose `occurred` ∈ {`no`,
+    `unanswered`}, the highest excluded; under "Not used today": cues whose `used` ∈
+    {`no`, `unanswered`}, the focus excluded; each with Remove → `removeSprintItem`
+    (DB rejections in the error bar); `Add impediment` / `Add cue` open the existing
+    picker; **Done** dismisses. Copy: "Keep what still matters. Anything you remove
+    leaves this sprint, not the library."
+  - **Rail** (testid `rail`; 300px, sticky top 78; static single column ≤1240px).
+    Mantra card: 18px italic accent-ink in curly quotes, tap to edit inline (input +
+    Save / Cancel, `saveMantra` unchanged), `streak-label` under it. Highest card:
+    kicker + Change; name 16px/600 (`highest-name`); `WHEN … → THEN …` 13px;
+    `RECOVERED WHEN …` 12.5px muted (or the existing "not set" line); Edit proof
+    point; divider; "Also watching" rows with Remove + `n of 5`; Add impediment —
+    `HighestImpedimentCard` and the impediment half of `SprintItemsRow` merged, all
+    actions unchanged. Cues card: `n of 3`; each cue on a 2px accent rule: name 14px
+    + FOCUS tag (`focus-tag`) or `Set as focus`, `WHEN {cue_when}` 12.5px muted (or
+    the existing missing-when line), Remove (absent on the focus); Add cue.
+    Celebration card: text only. Usage of funds: money sprints with allocations,
+    one line `5,000 savings · 3,000 debt`.
+  - **Empty and edge states.** No sprint: accent card (on-accent text) with the area
+    tag, the existing titles at 30px, the lede and the white primary (`Create a
+    {Area} sprint` / `Write the {Area} vision`) — testid `empty-state` kept. Before
+    the start: Day 1 in the Today slot, planning, Close disabled with "Day 1 begins
+    tomorrow." After the window: all 14 rows past (folded), no future rows, and a
+    quiet panel in the Today slot `Sprint window ended · {closed} of 14 days closed`
+    (F10 replaces it with the review gate); the rail stays.
+  - **Code.** `TodayView`, `CloseCard`, `PlanCard`, `DayStrip`, `MantraCard`,
+    `HighestImpedimentCard`, `SprintItemsRow`, `TasksCard`, `IntentionCard` are
+    rewritten as journal components with classes in `globals.css`; no inline
+    `style={{…}}` remains in `components/today/`. The `[data-hero]` `!important`
+    phone override is deleted; `[data-cols]` stays until F9 rewrites the wizard, its
+    last inline-styled user (build note 2026-09-07). `lib/data.ts` gains
+    `loadSprintObservations(sprintId)` (one query per table, `sprint_day_id in (…)`,
+    RLS SELECT as built in 0010). No migration. `NewSprintWizard` keeps its inline
+    styles (F9).
+  - **e2e golden path (desktop + phone).** Pins move with the spec: `[data-hero]`
+    64px on both projects; `highest-name` 16px; `journal-title` 30px; `day-label`
+    `Day 1 of 14`; the result 78px pin only on the backfill path. Today's close walks
+    the inline card (Close the day → actual → the F7 group assertions → Confirm
+    close) and asserts the Closed card's `day-summary` text and the `setup-tomorrow`
+    lists; the DB assertions from F7 are unchanged. Rows: Yesterday shows the closed
+    line with `showed up:`; a missed row's `add` reaches the modal. Night mode: the
+    toggle round-trip above. Overflow ≤ 0 at 390px on planning, reviewing and closed,
+    with Days 1–7 shown; every text field ≥16px in all three states. Rule 28
+    (`HIT` / `MISS` absent) kept. `npm run verify` green.
+- **Non-goals.** The Vision and Insights tabs and sidebars (F9, F11) · Complete
+  sprint, End sprint early, the review gate, the two-tap component, the "Lesson from
+  the last sprint" card (F10) · the wizard restyle (F9) · a system colour-scheme
+  preference, a cross-device theme, other palettes, the date bar · editing future
+  intentions from the journal · reading a closed day's tasks (F10's postmortem) ·
+  an expandable detail block on closed rows · any change to the DB functions.
+- **Risks.** (1) Rewriting nine Today components at once breaks the golden path in a
+  way the old pins would not see — the e2e is rewritten in the same feature and its
+  DB-side assertions stay identical to F7's. (2) Night mode leaks white text on
+  accent in a component that hardcodes `#fff` — one `--on-accent` token, the grep
+  above, and the toggle round-trip in e2e. (3) The inline reviewing card and the
+  backfill modal drift apart — one `DayQuestions` owner, one validation helper, and
+  both paths in e2e. (4) A cookie theme with no JS fallback flashes or fails on the
+  first load — the layout reads the cookie server-side and the control is a form.
+- **Evaluator.** none (no migration, no auth / RLS / money change).
+- **UI.** Primary action: plan today (intention + tasks); closing is the evening's
+  action. Viewport: both, desktop-first (Chrome at desktop width against the artboard;
+  phone via a Playwright screenshot and the phone e2e project). States: empty /
+  blocked area, error (error bar; accent hints beside disabled primaries), loading
+  (backfill offers fetched before the modal; the theme switch is a full request),
+  gated (existing). Mockup: `app/mockup/journal/` (thin page in the stack, hardcoded
+  Day 9, `?theme=night`, `?state=…`) — approved 2026-09-07 with the night tokens
+  above; moved to `docs/mockups/f8-journal/` with two screenshots before the build.
+  Departures from the artboard: the empty-area title stays 30px (the 64px poster
+  title wraps at our copy length) · the header toggle, the FOCUS tag and "Set as
+  focus" on the rail cue card are not drawn in v8 · closed past rows carry no
+  detail block.
 
 ### F9 — Vision v2: one vision, three annual steps, obstacle link, dated reviews
 *Stub (2026-09-06). Filled by `/interview`. Scope: rows B8 C4 D1 D6 D7.* **One vision

@@ -134,26 +134,38 @@ test.describe("golden path", () => {
     await expect(start).toBeEnabled();
     await start.click();
 
-    // Today, Day 1.
+    // Today, Day 1 — the journal (F8): title, progress block, timeline, Today card, rail.
     await expect(page).toHaveURL(/\/sprints\/health$/);
-    await expect(page.getByTestId("day-label")).toHaveText("Day 1 / 14");
+    await expect(page.getByTestId("journal-title")).toHaveText("Save $8,000 toward the emergency fund");
+    expect(await page.getByTestId("journal-title").evaluate((el) => getComputedStyle(el).fontSize)).toBe("30px");
+    await expect(page.getByTestId("day-label")).toHaveText("Day 1 of 14");
+    const today = page.getByTestId("today-card");
+    await expect(today).toHaveAttribute("data-state", "planning");
     const hero = page.locator("[data-hero]");
     await expect(hero).toHaveText("572");
-    expect(await hero.evaluate((el) => getComputedStyle(el).fontSize)).toBe(isPhone ? "64px" : "92px");
-    await expect(page.getByTestId("day-strip").locator("[data-day]")).toHaveCount(14);
-    // Per-day remaining is a whole currency unit (8000 / 14 rounds up to 572), never cents.
-    await expect(page.getByTestId("target-hero")).toContainText("14 days left · 572 USD a day");
-    await expect(page.getByRole("blockquote")).toHaveText("Boring money is the money that stays.");
+    expect(await hero.evaluate((el) => getComputedStyle(el).fontSize)).toBe("64px");
+    await expect(page.getByTestId("sprint-progress").locator(".j-seg")).toHaveCount(14);
+    // Per-day pace is a whole currency unit (8000 / 14 rounds up to 572), never cents.
+    await expect(page.getByTestId("sprint-progress")).toContainText("0 of 8,000 USD · 572 a day finishes it");
+    await expect(page.getByTestId("mantra")).toHaveText("“Boring money is the money that stays.”");
+    await expect(page.getByTestId("streak-label")).toHaveText("No streak");
+    // The Dusk palette is on (F8): the accent on the root is the README's.
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim())).toBe("#5b5bd6");
+    // Timeline on Day 1: no Yesterday, a folded Tomorrow, the rest folded.
+    const rows = page.getByTestId("timeline").getByTestId("day-row");
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(1)).toContainText("Tomorrow");
+    await expect(rows.nth(2)).toContainText("Rest of the sprint");
 
-    // F2: Highest Impediment card with WHEN → THEN; collapsed row with counts.
+    // F2: the rail's Highest card with WHEN → THEN; the cues card with the focus.
     const highest = page.getByTestId("highest-impediment");
     await expect(highest.getByTestId("highest-name")).toHaveText("Starting late");
-    expect(await highest.getByTestId("highest-name").evaluate((el) => getComputedStyle(el).fontSize)).toBe("22px");
+    expect(await highest.getByTestId("highest-name").evaluate((el) => getComputedStyle(el).fontSize)).toBe("16px");
     await expect(highest.getByTestId("proof-when")).toHaveText("I notice myself delaying my first work block");
     await expect(highest.getByTestId("proof-then")).toHaveText("I start a 10-minute timer on the smallest executable task");
     await expect(highest.getByTestId("proof-recover")).toHaveText("The timer is running within 10 minutes");
-    await expect(page.getByTestId("sprint-items-toggle")).toHaveText("▸ Other impediments (0) · Execution cues (1)");
-    await page.getByTestId("sprint-items-toggle").click();
+    await expect(highest.getByTestId("also-watching")).toContainText("1 of 5");
+    await expect(page.getByTestId("sprint-items")).toContainText("1 of 3");
     await expect(page.getByTestId("sprint-items").getByText("Ask how much this pays")).toBeVisible();
     await expect(page.getByTestId("sprint-items").getByText("WHEN I schedule anything")).toBeVisible();
     // F7: the focus cue carries the tag and no Remove.
@@ -171,7 +183,7 @@ test.describe("golden path", () => {
     await createInPicker.click();
     await expect(picker.getByRole("radio", { name: /Close the laptop at nine/ })).toHaveAttribute("aria-checked", "true");
     await picker.getByRole("button", { name: "Add to sprint" }).click();
-    await expect(page.getByTestId("sprint-items-toggle")).toHaveText("▾ Other impediments (0) · Execution cues (2)");
+    await expect(page.getByTestId("sprint-items")).toContainText("2 of 3");
     await expect(page.getByTestId("sprint-items").getByText("WHEN the clock shows 9 pm")).toBeVisible();
     // F7: "Set as focus" moves the tag to the new cue and frees the old one.
     await page.getByRole("button", { name: "Set as focus: Close the laptop at nine" }).click();
@@ -181,62 +193,69 @@ test.describe("golden path", () => {
     await expect(focusRow.getByRole("button", { name: "Remove Ask how much this pays" })).toBeVisible();
     await page.getByRole("button", { name: "Set as focus: Ask how much this pays" }).click();
     await expect(focusRow.getByTestId("focus-tag")).toHaveText("FOCUS");
-    await page.getByTestId("sprint-items-toggle").click();
 
-    // F3: the 14-day plan on Today. The sprint started custom; day 1 is locked (it is
-    // today), day 7 is the zero the wizard saved, and day 2's intention was pre-filled.
-    const plan = page.getByTestId("plan-card");
-    await expect(plan.getByTestId("plan-target-7")).toHaveText("0");
-    await expect(plan.getByTestId("plan-target-8")).toHaveText("1,142");
-    await expect(plan.locator('[data-day="1"]')).toHaveAttribute("data-locked", "true");
-    await expect(plan.locator('[data-day="2"]')).toHaveAttribute("data-locked", "false");
+    // F3: the plan lives on the timeline's future rows. The sprint started custom; day 1
+    // is today, day 7 is the zero the wizard saved, and day 2's intention was pre-filled.
+    const timeline = page.getByTestId("timeline");
+    await rows.nth(2).getByRole("button", { name: /Rest of the sprint/ }).click();
+    await expect(timeline.getByTestId("plan-target-7")).toHaveText("0");
+    await expect(timeline.getByTestId("plan-target-8")).toHaveText("1,142");
+    await expect(timeline.locator('[data-day="1"]')).toHaveAttribute("data-kind", "today");
+    await expect(timeline.locator('[data-day="8"]')).toHaveAttribute("data-kind", "future");
     const day2 = await admin.from("sprint_days").select("intention").eq("user_id", user.id).eq("day_index", 2).single();
     expect(day2.error).toBeNull();
     expect(day2.data!.intention).toBe("Move the second $600 before lunch.");
 
-    // Edit the future plan: day 1 has no input, Save waits for balance, then persists.
-    await plan.getByRole("button", { name: "Custom · edit" }).click();
-    await expect(plan.getByLabel("Day 1 target")).toHaveCount(0);
-    await expect(plan.getByLabel("Day 14 target")).toHaveValue("571");
-    const savePlan = plan.getByRole("button", { name: "Save plan" });
+    // Edit the future plan from Tomorrow's row: day 1 has no input, Save waits for balance, then persists.
+    await rows.nth(1).getByRole("button", { name: /Tomorrow/ }).click();
+    await timeline.locator('[data-day="2"]').getByRole("button", { name: "edit" }).click();
+    await expect(page.getByLabel("Day 1 target")).toHaveCount(0);
+    await expect(page.getByLabel("Day 14 target")).toHaveValue("571");
+    const savePlan = page.getByRole("button", { name: "Save plan" });
     await expect(savePlan).toBeDisabled();
-    await expect(plan.getByText("Nothing has changed yet.")).toBeVisible();
-    await plan.getByLabel("Day 14 target").fill("0");
-    await expect(plan.getByTestId("plan-delta")).toHaveText("−571 USD below goal");
+    await expect(page.getByText("Nothing has changed yet.")).toBeVisible();
+    await page.getByLabel("Day 14 target").fill("0");
+    await expect(page.getByTestId("plan-delta")).toHaveText("−571 USD below goal");
     await expect(savePlan).toBeDisabled();
-    await plan.getByLabel("Day 13 target").fill("1142");
-    await expect(plan.getByTestId("plan-delta")).toHaveText("Balanced");
+    await page.getByLabel("Day 13 target").fill("1142");
+    await expect(page.getByTestId("plan-delta")).toHaveText("Balanced");
     await expect(savePlan).toBeEnabled();
     await savePlan.click();
-    await expect(plan.getByText("Saved")).toBeVisible();
-    await expect(plan.getByTestId("plan-target-14")).toHaveText("0");
-    await expect(plan.getByTestId("plan-target-13")).toHaveText("1,142");
+    await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+    await expect(timeline.getByTestId("plan-target-14")).toHaveText("0");
+    await expect(timeline.getByTestId("plan-target-13")).toHaveText("1,142");
     await page.reload();
-    await expect(page.getByTestId("plan-card").getByTestId("plan-target-14")).toHaveText("0");
-    await expect(page.getByTestId("plan-card").getByTestId("plan-target-1")).toHaveText("572");
+    await page.getByTestId("timeline").getByRole("button", { name: /Rest of the sprint/ }).click();
+    await expect(page.getByTestId("timeline").getByTestId("plan-target-14")).toHaveText("0");
+    await expect(page.getByTestId("timeline").locator('[data-day="1"]')).toHaveAttribute("data-kind", "today");
     await expect(hero).toHaveText("572");
 
     // Rule 28: no HIT/MISS labels anywhere in the rendered DOM.
     const bodyText = await page.locator("body").innerText();
     expect(bodyText).not.toMatch(/\b(HIT|MISS)\b/);
 
-    // The page never scrolls sideways (the 14-day strip scrolls inside its own box).
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    expect(overflow).toBeLessThanOrEqual(0);
+    // The page never scrolls sideways, with the folds open and the plan in edit mode.
+    const noOverflow = async () => {
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
+    };
+    await noOverflow();
     // Every text field renders at 16px or more, so iOS Safari never zooms on focus (audit #1).
-    // Includes the plan grid's edit inputs, the smallest fields on the page.
-    await plan.getByRole("button", { name: "Custom · edit" }).click();
-    const smallFields = await page.evaluate(() =>
-      Array.from(document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea"))
-        .filter((el) => el.type !== "hidden" && el.type !== "checkbox")
-        .map((el) => ({ label: el.getAttribute("aria-label") ?? el.id, size: parseFloat(getComputedStyle(el).fontSize) }))
-        .filter((f) => f.size < 16),
-    );
-    expect(smallFields).toEqual([]);
-    await plan.getByRole("button", { name: "Cancel" }).click();
+    // Includes the plan's edit inputs, the smallest fields on the page.
+    const smallFields = async () =>
+      page.evaluate(() =>
+        Array.from(document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea"))
+          .filter((el) => el.type !== "hidden" && el.type !== "checkbox")
+          .map((el) => ({ label: el.getAttribute("aria-label") ?? el.id, size: parseFloat(getComputedStyle(el).fontSize) }))
+          .filter((f) => f.size < 16),
+      );
+    await page.getByRole("button", { name: "Custom · edit" }).click();
+    expect(await smallFields()).toEqual([]);
+    await noOverflow();
+    await page.getByRole("button", { name: "Cancel" }).click();
     await page.screenshot({ path: `test-results/today-${testInfo.project.name}.png`, fullPage: true });
 
-    // Daily Intention autosaves on blur and survives a reload.
+    // Daily Intention — the first line of the Today card — autosaves on blur and survives a reload.
     await page.getByLabel("Daily intention").fill("Today I will move the $600 before lunch.");
     await page.getByLabel("Daily intention").blur();
     await expect(page.getByTestId("intention-card").getByText("Saved")).toBeVisible();
@@ -275,51 +294,60 @@ test.describe("golden path", () => {
     await expect(page.getByTestId("tasks-card").getByRole("checkbox", { name: "Done: Call the bank about the fee" })).toHaveAttribute("aria-checked", "true");
     // Rule 15: a completed task changed no total.
     await expect(hero).toHaveText("572");
-    await expect(page.getByTestId("target-hero")).toContainText("0% of goal");
+    await expect(page.getByTestId("sprint-progress")).toContainText("0%");
 
-    // Close Day 1 with an actual above target → two-step dialog → green result, then locked.
-    await page.getByRole("button", { name: "Enter actual result" }).click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByTestId("close-step")).toHaveText("Close day 1 · step 1 of 2");
-    await expect(dialog.getByText("Today's target was 572 USD.", { exact: false })).toBeVisible();
-    const cont = dialog.getByRole("button", { name: "Continue" });
-    await expect(cont).toBeDisabled();
-    await dialog.getByLabel("Actual result").fill("600");
-    await expect(cont).toBeEnabled();
-    await cont.click();
-    // F7 step 2: observations. The focus cue is asked first; the highest's occurrence
-    // opens the response questions, and the close waits for both answers.
-    await expect(dialog.getByTestId("close-step")).toHaveText("Close day 1 · step 2 of 2");
-    await expect(dialog.getByRole("heading", { name: "What happened on Day 1?" })).toBeVisible();
-    const use = dialog.getByTestId("use-group");
+    // Close Day 1 inline on the Today card (F8): the actual, then the F7 questions.
+    await today.getByRole("button", { name: "Close the day" }).click();
+    await expect(today).toHaveAttribute("data-state", "reviewing");
+    await expect(today).toContainText("Closing Day 1 · target 572");
+    const confirm = today.getByRole("button", { name: "Confirm close" });
+    await expect(confirm).toBeDisabled();
+    await expect(today.locator("#close-hint")).toHaveText("Enter today's actual — zero is truthful");
+    await today.getByLabel("Actual result").fill("600");
+    await expect(confirm).toBeEnabled();
+    // F7: observations. The focus cue is asked first; the highest's occurrence opens the
+    // response questions, and the close waits for both answers.
+    const use = today.getByTestId("use-group");
     await expect(use.getByRole("button").first()).toContainText("Ask how much this pays");
     await expect(use.getByRole("button").first().getByTestId("focus-tag")).toHaveText("FOCUS");
-    const close = dialog.getByRole("button", { name: "Close the day" });
-    await expect(close).toBeEnabled();
-    await expect(dialog.getByTestId("response-group")).toHaveCount(0);
-    await dialog.getByTestId("occurrence-group").getByRole("button", { name: "Starting late" }).click();
-    await expect(dialog.getByTestId("response-group")).toBeVisible();
-    await expect(close).toBeDisabled();
-    await expect(dialog.locator("#close-hint")).toHaveText("Did the response run?");
-    await dialog.getByTestId("response-group").getByRole("radio", { name: "Partially" }).click();
-    await expect(dialog.locator("#close-hint")).toHaveText("Did you recover?");
-    await expect(close).toBeDisabled();
-    await dialog.getByTestId("recovery-group").getByRole("radio", { name: "Yes" }).click();
-    await expect(close).toBeEnabled();
-    await dialog.getByTestId("impact-group").getByRole("radio", { name: "Some" }).click();
-    // The cue group stays untouched: the DB stores it as unanswered.
-    await close.click();
+    await expect(today.getByTestId("response-group")).toHaveCount(0);
+    await today.getByTestId("occurrence-group").getByRole("button", { name: "Starting late" }).click();
+    await expect(today.getByTestId("response-group")).toBeVisible();
+    await expect(confirm).toBeDisabled();
+    await expect(today.locator("#close-hint")).toHaveText("Did the response run?");
+    await today.getByTestId("response-group").getByRole("radio", { name: "Partially" }).click();
+    await expect(today.locator("#close-hint")).toHaveText("Did you recover?");
+    await expect(confirm).toBeDisabled();
+    await today.getByTestId("recovery-group").getByRole("radio", { name: "Yes" }).click();
+    await expect(confirm).toBeEnabled();
+    await today.getByTestId("impact-group").getByRole("radio", { name: "Some" }).click();
+    // Tasks are read-only while closing; the cue group stays untouched (stored as unanswered).
+    await expect(today.getByLabel("Task 1")).toBeDisabled();
+    await today.getByLabel("Note").fill("The timer worked.");
+    await confirm.click();
 
-    const result = page.getByTestId("result-actual");
-    await expect(result).toHaveText("600");
-    await expect(result).toHaveAttribute("data-state", "at-or-above");
-    expect(await result.evaluate((el) => getComputedStyle(el).fontSize)).toBe("78px");
-    await expect(page.getByRole("dialog").getByText("Tomorrow's target", { exact: true })).toBeVisible();
-    // F5: an on-time close starts the streak.
-    await expect(page.getByRole("dialog").getByTestId("result-streak")).toHaveText("1 day");
-    await page.getByRole("button", { name: "Back to today" }).click();
-
-    await expect(page.getByText("Day closed · locked")).toBeVisible();
+    // The card flips to Closed: result, summary line, note, "Set up tomorrow".
+    await expect(today).toHaveAttribute("data-state", "closed");
+    await expect(page.getByTestId("closed-actual")).toHaveText("600");
+    await expect(page.getByTestId("closed-actual")).toHaveAttribute("data-state", "at-or-above");
+    await expect(page.getByTestId("day-summary")).toHaveText("Showed up: Starting late · Response partially ran · recovered · Cost: some");
+    await expect(today.getByText("“The timer worked.”")).toBeVisible();
+    await expect(page.getByTestId("day-locked")).toHaveText("Day closed · locked · tomorrow's target 572");
+    const setup = page.getByTestId("setup-tomorrow");
+    await expect(setup).toContainText("Set up tomorrow · Day 2");
+    // Untouched cues are offered; the focus cue never is.
+    await expect(setup.getByTestId("quiet-cue")).toHaveCount(1);
+    await expect(setup.getByTestId("quiet-cue")).toContainText("Close the laptop at nine");
+    await expect(setup.getByTestId("quiet-impediment")).toHaveCount(0);
+    await setup.getByRole("button", { name: "Remove Close the laptop at nine" }).click();
+    await expect(setup.getByTestId("quiet-cue")).toHaveCount(0);
+    await expect(page.getByTestId("sprint-items")).toContainText("1 of 3");
+    await setup.getByRole("button", { name: "Done" }).click();
+    await expect(page.getByTestId("setup-tomorrow")).toHaveCount(0);
+    // F5: an on-time close starts the streak; the progress block moved on.
+    await expect(page.getByTestId("streak-label")).toHaveText("1-day streak");
+    await expect(page.getByTestId("sprint-progress")).toContainText("600 of 8,000 USD");
+    await expect(page.getByTestId("sprint-progress").locator('.j-seg[data-day="1"]')).toHaveAttribute("data-closed", "true");
     // F7: the day row carries the highest's answers and snapshot; one observation row per
     // offered item, the untouched cue group as unanswered.
     const dayRow = await admin.from("sprint_days").select("id, response, recovered, impact, proof_recover").eq("user_id", user.id).eq("day_index", 1).single();
@@ -331,17 +359,15 @@ test.describe("golden path", () => {
       { name: "Ask how much this pays", used: "unanswered", was_focus: true },
       { name: "Close the laptop at nine", used: "unanswered", was_focus: false },
     ]);
-    await expect(page.getByTestId("streak-label")).toHaveText("1-day streak");
-    await expect(page.locator("[data-sidebar]").getByTestId("side-note").filter({ hasText: "1-day streak" })).toHaveCount(1);
-    await expect(page.getByTestId("closed-actual")).toHaveText("600 USD");
-    await expect(page.getByTestId("closed-actual")).toHaveAttribute("data-state", "at-or-above");
-    await expect(page.getByTestId("day-strip").locator('[data-day="1"]')).toHaveAttribute("data-state", "at-or-above");
-
-    // Reload: still locked; intention and tasks read-only; the close button is gone.
+    // Reload: still locked; intention read-only, tasks read-only, no close button, no "Set up tomorrow".
     await page.reload();
-    await expect(page.getByText("Day closed · locked")).toBeVisible();
-    await expect(page.getByLabel("Daily intention")).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Enter actual result" })).toHaveCount(0);
+    await expect(page.getByTestId("today-card")).toHaveAttribute("data-state", "closed");
+    await expect(page.getByTestId("day-summary")).toHaveText("Showed up: Starting late · Response partially ran · recovered · Cost: some");
+    await expect(page.getByTestId("intention-locked")).toHaveText("Today I will move the $600 before lunch.");
+    await expect(page.getByLabel("Daily intention")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Close the day" })).toHaveCount(0);
+    await expect(page.getByTestId("setup-tomorrow")).toHaveCount(0);
+    await noOverflow();
     const lockedTasks = page.getByTestId("tasks-card");
     await expect(lockedTasks.getByTestId("tasks-hint")).toHaveText("Locked with the closed day");
     await expect(lockedTasks.getByLabel("Task 1")).toBeDisabled();
@@ -350,8 +376,25 @@ test.describe("golden path", () => {
     await expect(lockedTasks.getByRole("button", { name: "Add task" })).toHaveCount(0);
     await expect(lockedTasks.getByRole("button", { name: /Remove task/ })).toHaveCount(0);
 
-    // Sidebar reflects the sprint.
+    // Sidebar reflects the sprint: label · meta · outcome, no streak line, no New Sprint button.
     await expect(page.locator("[data-sidebar]").getByText("Day 1/14")).toBeVisible();
+    // The outcome line is in the DOM on both viewports; the phone's chip row hides it.
+    const sideOutcome = page.locator("[data-sidebar]").getByText("Save $8,000 toward the emergency fund");
+    if (isPhone) await expect(sideOutcome).toBeHidden();
+    else await expect(sideOutcome).toBeVisible();
+    await expect(page.locator("[data-sidebar]").getByRole("link", { name: "New Sprint" })).toHaveCount(0);
+
+    // F8 night mode: the header toggle sets a cookie; the next paint is already dark.
+    await page.getByTestId("theme-toggle").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "night");
+    expect((await page.context().cookies()).find((c) => c.name === "theme")?.value).toBe("night");
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "night");
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--page-bg").trim())).toBe("#131320");
+    await page.screenshot({ path: `test-results/today-night-${testInfo.project.name}.png`, fullPage: true });
+    await page.getByTestId("theme-toggle").click();
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", "night");
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--page-bg").trim())).toBe("#f9f9fd");
 
     // F2 library: the impediment is in sprint history; archiving it is blocked because
     // it is the sprint's highest impediment (rule 20), and nothing changed.
@@ -414,15 +457,18 @@ test.describe("golden path", () => {
 
     await signInViaMagicLink(page, user.email);
     await page.goto("/sprints/wealth");
-    await expect(page.getByTestId("day-label")).toHaveText("Day 3 / 14");
+    await expect(page.getByTestId("day-label")).toHaveText("Day 3 of 14");
     await expect(page.getByTestId("streak-label")).toHaveText("No streak");
-    const plan = page.getByTestId("plan-card");
-    await expect(plan.locator('[data-day="1"]')).toHaveAttribute("data-missed", "true");
-    await expect(plan.locator('[data-day="2"]')).toHaveAttribute("data-missed", "true");
-    await expect(plan.locator('[data-day="3"]')).not.toHaveAttribute("data-missed", "true");
-    await expect(plan.getByRole("button", { name: /Backfill day/ })).toHaveCount(2);
+    // Day 3: Day 1 sits in the folded past, Day 2 is Yesterday; both missed.
+    const timeline = page.getByTestId("timeline");
+    await timeline.getByRole("button", { name: /Earlier in the sprint/ }).click();
+    await timeline.getByRole("button", { name: /Yesterday/ }).click();
+    await expect(timeline.locator('[data-day="1"]')).toHaveAttribute("data-kind", "missed");
+    await expect(timeline.locator('[data-day="2"]')).toHaveAttribute("data-kind", "missed");
+    await expect(timeline.locator('[data-day="3"]')).toHaveAttribute("data-kind", "today");
+    await expect(timeline.getByRole("button", { name: /Backfill day/ })).toHaveCount(2);
 
-    await plan.getByRole("button", { name: "Backfill day 1" }).click();
+    await timeline.getByRole("button", { name: "Backfill day 1" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByTestId("close-step")).toHaveText("Backfill day 1 · step 1 of 2");
     await expect(dialog.getByTestId("close-note")).toContainText("never repairs the streak");
@@ -439,17 +485,19 @@ test.describe("golden path", () => {
     // 50 against 100 is the red state, and the result's cumulative is the whole sprint's.
     await expect(page.getByTestId("result-actual")).toHaveAttribute("data-state", "under");
     await expect(page.getByRole("dialog")).toContainText("50 USD · 4% of goal");
+    // The result screen (78px) lives on the backfill path only (F8).
+    expect(await page.getByTestId("result-actual").evaluate((el) => getComputedStyle(el).fontSize)).toBe("78px");
     await page.getByRole("button", { name: "Back to today" }).click();
 
     // Counted toward totals, gone from the backfill offers, streak untouched, day 2 still missed.
-    await expect(plan.locator('[data-day="1"]')).toContainText("actual 50");
-    await expect(page.getByTestId("day-strip").locator('[data-day="1"]')).toHaveAttribute("data-state", "under");
-    await expect(plan.getByRole("button", { name: /Backfill day/ })).toHaveCount(1);
+    const day1 = timeline.locator('[data-day="1"]');
+    await expect(day1).toHaveAttribute("data-kind", "closed");
+    await expect(day1).toContainText("50 of 100");
+    await expect(day1.locator(".j-verdict")).toHaveAttribute("data-state", "under");
+    await expect(timeline.getByRole("button", { name: /Backfill day/ })).toHaveCount(1);
     // Derived totals past day 1: 1,350 left over the 12 open days from day 3 → 113 a day, rounded up to a whole unit.
-    await expect(page.getByTestId("target-hero")).toContainText("50 USD");
-    await expect(page.getByTestId("target-hero")).toContainText("4% of goal");
-    await expect(page.getByTestId("target-hero")).toContainText("1,350 USD");
-    await expect(page.getByTestId("target-hero")).toContainText("12 days left · 113 USD a day");
+    await expect(page.getByTestId("sprint-progress")).toContainText("4%");
+    await expect(page.getByTestId("sprint-progress")).toContainText("50 of 1,400 USD · 113 a day finishes it");
     await expect(page.getByTestId("streak-label")).toHaveText("No streak");
     const closed = await admin.from("sprint_days").select("id, closed_on_time, actual, response").eq("sprint_id", sprint.sprintId).eq("day_index", 1).single();
     expect(closed.data).toMatchObject({ closed_on_time: false, actual: 5000, response: null });

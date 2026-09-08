@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { cache } from "react";
 import { AREAS, type AreaKey } from "@/lib/areas";
 import type { Database, Tables } from "@/lib/database.types";
+import { NO_OBSERVATIONS, type DayObservations } from "@/lib/daySummary";
 import { report } from "@/lib/observe";
 
 export type Vision = Tables<"visions">;
@@ -278,4 +279,35 @@ export async function loadDayOfferedItems(supabase: Client, dayId: string): Prom
     cues: rows.filter((r) => r.kind === "cue").sort((a, b) => Number(b.is_focus) - Number(a.is_focus) || byRank(a, b)),
     impediments: rows.filter((r) => r.kind === "impediment").sort(byRank),
   };
+}
+
+/**
+ * F7's observation rows for every closed day of a sprint, keyed by day id (F8: the
+ * closed row's tail, the Closed card's summary line, "Set up tomorrow"). Two reads,
+ * both under the tables' SELECT policies; a day without rows maps to no observations.
+ */
+export async function loadSprintObservations(supabase: Client, dayIds: string[]): Promise<Map<string, DayObservations>> {
+  const out = new Map<string, DayObservations>();
+  if (dayIds.length === 0) return out;
+  const [imps, cues] = await Promise.all([
+    supabase.from("day_impediment_observations").select("sprint_day_id, impediment_id, name, occurred, was_highest").in("sprint_day_id", dayIds).order("created_at").order("id"),
+    supabase.from("day_cue_observations").select("sprint_day_id, cue_id, name, used, was_focus").in("sprint_day_id", dayIds).order("created_at").order("id"),
+  ]);
+  if (imps.error) throw new Error(`day_impediment_observations: ${imps.error.message}`);
+  if (cues.error) throw new Error(`day_cue_observations: ${cues.error.message}`);
+  const of = (id: string) => {
+    let d = out.get(id);
+    if (!d) {
+      d = { impediments: [], cues: [] };
+      out.set(id, d);
+    }
+    return d;
+  };
+  for (const r of imps.data) of(r.sprint_day_id).impediments.push({ id: r.impediment_id, name: r.name, occurred: r.occurred, was_highest: r.was_highest });
+  for (const r of cues.data) of(r.sprint_day_id).cues.push({ id: r.cue_id, name: r.name, used: r.used, was_focus: r.was_focus });
+  return out;
+}
+
+export function observationsOf(map: Map<string, DayObservations>, dayId: string): DayObservations {
+  return map.get(dayId) ?? NO_OBSERVATIONS;
 }

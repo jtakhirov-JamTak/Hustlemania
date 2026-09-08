@@ -2,6 +2,14 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## Found during F8 (2026-09-07), not fixed there
+
+- **`JWT issued at future` on the first request after a magic-link sign-in** (one desktop e2e run; the phone run and every rerun passed). PostgREST in the Docker stack rejected a token the host had just minted, so `/sprints` rendered the error boundary. A clock-skew flake between Docker and the host, not app code; if it recurs, compare `date -u` with `docker exec supabase_db_Hustlemania date -u` and restart Docker Desktop.
+## Noted during the F8 interview (2026-09-07)
+
+- **F10 input — the postmortem lists each closed day's tasks** (done and not done, read-only). The journal's closed rows stay one line (F8, user's call); after a day closes its tasks are readable nowhere until F10 renders them. Add to the F10 entry when `/interview` rewrites it.
+- **F8 note for F10/F11:** `sprint_invalid_reason` still reports `no_focus_cue` on sprints seeded by `insertSprintRows` (no memberships); nothing calls it on them today.
+
 ## Found during F7 (2026-09-07), not fixed there
 
 - **Evaluator allowlist lacks `docker`** (eval-04, P2-4): the prescribed `docker exec … psql`

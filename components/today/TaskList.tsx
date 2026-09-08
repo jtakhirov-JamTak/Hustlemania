@@ -11,12 +11,13 @@ type Row = { id: string; text: string; saved: string; done: boolean };
 type Status = { kind: "idle" | "saving" | "saved" | "error"; text?: string; retry?: () => void };
 
 /**
- * The day's optional task list (PRD §8). Rows autosave on blur; one blank row is always
- * offered while the day is open; "remove" archives. Completion is a fact about the task
- * alone — nothing here reads or changes a target, an actual or the sprint (rule 15).
- * A closed day renders read-only (rule 17); the DB refuses the write regardless.
+ * The day's optional task list (PRD §8), inside the Today card (F8). Rows autosave on
+ * blur; one blank row is always offered while the day is open; "remove" archives.
+ * Completion is a fact about the task alone — nothing here reads or changes a target,
+ * an actual or the sprint (rule 15). A closed day renders read-only (rule 17); the DB
+ * refuses the write regardless.
  */
-export function TasksCard({ dayId, initial, locked, lockedReason }: { dayId: string; initial: Task[]; locked: boolean; lockedReason: string }) {
+export function TaskList({ dayId, initial, locked, lockedReason }: { dayId: string; initial: Task[]; locked: boolean; lockedReason: string }) {
   const [rows, setRows] = useState<Row[]>(initial.map((t) => ({ id: t.id, text: t.text, saved: t.text, done: t.done })));
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
@@ -113,17 +114,8 @@ export function TasksCard({ dayId, initial, locked, lockedReason }: { dayId: str
   const hint = locked ? lockedReason : status.kind === "saving" ? "Saving…" : status.kind === "saved" ? "Saved" : "";
 
   return (
-    <section className="card" style={{ marginTop: 20, padding: "22px 26px" }} data-testid="tasks-card">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 6 }}>
-        <h2 className="card-title">Tasks · optional</h2>
-        <span style={{ fontSize: 11, color: status.kind === "error" ? "var(--under)" : "var(--muted)" }} data-testid="tasks-hint" aria-live="polite">
-          {hint}
-        </span>
-      </div>
-
-      {rows.length === 0 && locked ? (
-        <div style={{ fontSize: 13, color: "var(--muted)", padding: "10px 0" }}>No tasks were written for this day.</div>
-      ) : null}
+    <div className="t-tasks" data-testid="tasks-card">
+      {rows.length === 0 && locked ? <div className="t-prompt">No tasks were written for this day.</div> : null}
 
       {rows.map((row, i) => (
         <div key={row.id} className="task-row" data-testid="task-row" data-done={row.done}>
@@ -180,14 +172,21 @@ export function TasksCard({ dayId, initial, locked, lockedReason }: { dayId: str
       )}
 
       {status.kind === "error" ? (
-        <ErrorBar style={{ marginTop: 10 }} action={{ label: "Retry", onClick: () => status.retry?.() }}>{status.text}</ErrorBar>
+        <ErrorBar className="mt-10" action={{ label: "Retry", onClick: () => status.retry?.() }}>{status.text}</ErrorBar>
       ) : null}
 
-      {locked ? null : (
-        <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => draftRef.current?.focus()}>
-          Add task
-        </button>
-      )}
-    </section>
+      <div className="t-head">
+        {locked ? (
+          <span />
+        ) : (
+          <button type="button" className="t-add-task" aria-label="Add task" onClick={() => draftRef.current?.focus()}>
+            + task
+          </button>
+        )}
+        <span className="t-status" data-tone={status.kind === "error" ? "error" : undefined} data-testid="tasks-hint" aria-live="polite">
+          {hint}
+        </span>
+      </div>
+    </div>
   );
 }

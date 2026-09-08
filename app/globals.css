@@ -224,20 +224,44 @@
 }
 
 :root {
-  --page: linear-gradient(180deg, #eff7fb 0%, #fbfdfe 100%);
-  --page-bg: #f7fbfd;
+  /* Dusk (F8, v8 README). Night overrides below; derived tints keep the same ratios. */
+  --page: linear-gradient(180deg, #f2f2fb 0%, #fcfcfe 46%);
+  --page-bg: #f9f9fd;
   --panel: #ffffff;
-  --ink: #16242e;
-  --accent: #2b7ea8;
-  --accent-ink: #1d6188;
+  --ink: #1c1b2a;
+  --accent: #5b5bd6;
+  --accent-ink: #4141ab;
+  --on-accent: #ffffff;
   --success: #2f7d52;
   --under: #c0392b;
-  --divider: rgba(22, 36, 46, 0.13);
-  --muted: rgba(22, 36, 46, 0.7);
-  --control-border: rgba(22, 36, 46, 0.45);
-  --faint: rgba(22, 36, 46, 0.06);
+  --divider: rgba(28, 27, 42, 0.13);
+  --muted: rgba(28, 27, 42, 0.62);
+  --control-border: rgba(28, 27, 42, 0.45);
+  --faint: rgba(28, 27, 42, 0.06);
   --accent-tint: color-mix(in srgb, var(--accent) 8%, var(--panel));
   --accent-tint-border: color-mix(in srgb, var(--accent) 22%, transparent);
+  --scrim: rgba(11, 11, 22, 0.52);
+  color-scheme: light;
+}
+
+/* Night (F8): derived from Dusk; white on this accent fails AA, so text on accent fills
+   reads --on-accent instead. Ratios: ink/panel 14.2, muted 6.2, accent 5.9, on-accent 6.5. */
+:root[data-theme="night"] {
+  --page: linear-gradient(180deg, #181828 0%, #131320 46%);
+  --page-bg: #131320;
+  --panel: #1c1c2c;
+  --ink: #ecebf7;
+  --accent: #8f8ff2;
+  --accent-ink: #b3b3f8;
+  --on-accent: #131320;
+  --success: #5cc48a;
+  --under: #ef7a6f;
+  --divider: rgba(236, 235, 247, 0.13);
+  --muted: rgba(236, 235, 247, 0.62);
+  --control-border: rgba(236, 235, 247, 0.4);
+  --faint: rgba(236, 235, 247, 0.06);
+  --scrim: rgba(0, 0, 0, 0.62);
+  color-scheme: dark;
 }
 
 html,
@@ -328,7 +352,7 @@ a {
 }
 
 .tag-accent {
-  background: color-mix(in srgb, var(--accent) 12%, #fff);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
   color: var(--accent-ink);
 }
 
@@ -345,7 +369,7 @@ a {
 
 .btn-primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .btn-primary:hover {
@@ -464,7 +488,7 @@ a {
 .chip-on {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .hint {
@@ -521,7 +545,7 @@ a {
   border-radius: 6px;
   border: 1.5px solid var(--control-border);
   background: var(--panel);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 11px;
   line-height: 1;
   display: inline-flex;
@@ -612,7 +636,7 @@ a {
 
 .check:checked::after {
   content: "\2713";
-  color: #fff;
+  color: var(--on-accent);
   font-size: 12px;
   line-height: 1;
 }
@@ -738,14 +762,6 @@ a {
   color: var(--muted);
 }
 
-.side-note {
-  display: block;
-  margin-top: 4px;
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--muted);
-}
-
 /* Dialogs are native <dialog> elements (components/Modal.tsx): head, a body that scrolls
    on its own, and a footer that stays put above the keyboard. */
 .dialog {
@@ -757,7 +773,7 @@ a {
   border-radius: 22px;
   background: var(--panel);
   color: var(--ink);
-  box-shadow: 0 24px 60px rgba(11, 22, 32, 0.28);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
   overscroll-behavior: contain;
 }
 
@@ -768,7 +784,7 @@ a {
 }
 
 .dialog::backdrop {
-  background: rgba(11, 22, 32, 0.52);
+  background: var(--scrim);
 }
 
 body:has(dialog[open]) {
@@ -1288,9 +1304,6 @@ body:has(dialog[open]) {
   .side-sub {
     display: none;
   }
-  .side-note {
-    margin-top: 2px;
-  }
   .side-cta {
     flex: none;
     display: flex;
@@ -1360,9 +1373,7 @@ body:has(dialog[open]) {
   .main {
     padding: 20px 16px 90px;
   }
-  [data-hero] {
-    font-size: 64px !important;
-  }
+  /* The wizard still sets its grid inline (F9 rewrites it). */
   [data-cols] {
     grid-template-columns: 1fr !important;
   }
@@ -1384,6 +1395,13 @@ body:has(dialog[open]) {
 }
 
 @media (max-width: 480px) {
+  /* F8: the header carries the theme toggle; on a phone the brand is its dot. */
+  .app-header .brand-name {
+    display: none;
+  }
+  .app-header .brand {
+    padding: 0 10px 0 14px;
+  }
   .plan-grid {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
@@ -1391,6 +1409,977 @@ body:has(dialog[open]) {
     flex-direction: column;
     align-items: center;
     gap: 1px;
+  }
+}
+
+/* Backfill modal (CloseFlow): headings and the result screen. */
+.dialog-title {
+  font-size: 26px;
+  margin: 0;
+  outline: none;
+}
+
+.dialog-strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.result-body {
+  padding-top: 26px;
+}
+
+.result-actual {
+  font-size: 78px;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin-top: 8px;
+}
+
+.result-actual[data-state="at-or-above"] {
+  color: var(--success);
+}
+
+.result-actual[data-state="under"] {
+  color: var(--under);
+}
+
+.result-unit {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.result-strip {
+  display: flex;
+  gap: 4px;
+  margin-top: 22px;
+}
+
+.result-seg {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--faint);
+}
+
+.result-seg[data-state="at-or-above"] {
+  background: var(--success);
+}
+
+.result-seg[data-state="under"] {
+  background: var(--under);
+}
+
+.result-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 9px;
+  font-size: 13.5px;
+}
+
+.result-row-first {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--divider);
+}
+
+.result-key {
+  color: var(--muted);
+}
+
+.result-val {
+  font-weight: 600;
+}
+
+.result-foot {
+  justify-content: flex-end;
+}
+
+/* ---------------------------------------------------------------------------------
+   Journal (F8): the Sprints tab. Header block, timeline, Today card, rail, theme toggle.
+   --------------------------------------------------------------------------------- */
+
+.theme-form {
+  display: flex;
+  align-items: center;
+  padding-right: 6px;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  padding: 6px 10px;
+  border: 1px solid var(--divider);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.theme-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.workspace-journal {
+  max-width: 1120px;
+}
+
+.journal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 32px;
+  align-items: start;
+}
+
+.j-title {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0;
+  max-width: 28ch;
+}
+
+.j-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.j-progress {
+  margin-top: 20px;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: 20px;
+  padding: 18px 22px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 26px;
+  align-items: end;
+}
+
+.j-progress-kicker {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  opacity: 0.85;
+}
+
+.j-progress-pct {
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin-top: 6px;
+}
+
+.j-progress-line {
+  font-size: 12.5px;
+  opacity: 0.92;
+}
+
+.j-segs {
+  display: flex;
+  gap: 3px;
+  margin-top: 10px;
+}
+
+.j-seg {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--on-accent);
+  opacity: 0.15;
+}
+
+.j-seg[data-closed="true"] {
+  opacity: 1;
+}
+
+.j-seg[data-today="true"] {
+  outline: 1.5px solid var(--on-accent);
+  outline-offset: 1px;
+}
+
+.j-progress-streak {
+  font-size: 11px;
+  margin-top: 8px;
+  opacity: 0.85;
+}
+
+/* Timeline: a label column, a 2px rule with a dot per row, the row's box. */
+.timeline {
+  margin-top: 26px;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+}
+
+.j-label {
+  text-align: right;
+  padding: 12px 16px 12px 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--muted);
+  border-right: 2px solid var(--divider);
+}
+
+.j-label-sub {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.j-label-short {
+  display: none;
+}
+
+.j-label[data-today="true"] {
+  padding: 18px 16px 18px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  border-right-color: var(--accent);
+}
+
+.j-label[data-today="true"] .j-label-sub {
+  color: var(--accent);
+}
+
+.j-row {
+  padding: 8px 0 8px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  position: relative;
+}
+
+.j-row[data-kind="today"] {
+  padding: 10px 0 10px 24px;
+  align-items: flex-start;
+}
+
+.j-dot {
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  margin-top: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--page-bg);
+  border: 1.5px solid var(--divider);
+  box-sizing: border-box;
+}
+
+.j-dot[data-tone="met"] {
+  background: var(--success);
+  border: none;
+}
+
+.j-dot[data-tone="under"] {
+  background: var(--under);
+  border: none;
+}
+
+.j-dot[data-tone="today"] {
+  width: 14px;
+  height: 14px;
+  left: -8px;
+  top: 32px;
+  margin-top: 0;
+  background: var(--accent);
+  border: none;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.j-fold,
+.j-closed,
+.j-missed,
+.j-future,
+.j-ended {
+  flex: 1;
+  min-width: 0;
+  border-radius: 14px;
+  padding: 10px 14px;
+  min-height: 42px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.j-fold {
+  border: 1px dashed var(--divider);
+  background: none;
+  color: var(--muted);
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.j-closed {
+  background: var(--panel);
+  border: 1px solid var(--divider);
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.j-closed .j-of {
+  color: var(--muted);
+}
+
+.j-missed {
+  border: 1px dashed var(--under);
+  color: var(--muted);
+}
+
+.j-future {
+  border: 1px dashed var(--divider);
+  color: var(--muted);
+  padding: 7px 14px;
+}
+
+.j-future .plan-input {
+  width: 110px;
+  margin: 0;
+  font-size: 16px;
+  text-align: left;
+}
+
+.j-ended {
+  background: var(--panel);
+  border: 1px solid var(--divider);
+  color: var(--muted);
+  padding: 16px 18px;
+}
+
+.j-link {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.j-link:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.j-link-muted {
+  color: var(--muted);
+}
+
+.j-verdict {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.j-verdict[data-state="at-or-above"] {
+  color: var(--success);
+}
+
+.j-verdict[data-state="under"] {
+  color: var(--under);
+}
+
+.j-row-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex: none;
+}
+
+/* Target editing under the timeline: mode chips, planned · goal · delta, Cancel / Save. */
+.j-plan {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.j-plan .pill-row {
+  margin-top: 0;
+}
+
+.j-plan-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.j-footnote {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 18px;
+  line-height: 1.5;
+  max-width: 64ch;
+}
+
+/* Today card. */
+.today-card {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel);
+  border: 1.5px solid var(--accent);
+  border-radius: 20px;
+  padding: 20px 22px;
+  box-shadow: 0 18px 40px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.t-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.t-kicker {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+}
+
+.t-closes {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.t-big {
+  font-size: 64px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin-top: 10px;
+}
+
+.t-big[data-state="at-or-above"] {
+  color: var(--success);
+}
+
+.t-big[data-state="under"] {
+  color: var(--under);
+}
+
+.t-big-input {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  font: inherit;
+  font-size: 64px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  border: none;
+  border-bottom: 2px dashed var(--divider);
+  background: none;
+  color: var(--ink);
+  padding: 0;
+  margin-top: 10px;
+  outline: none;
+  border-radius: 0;
+}
+
+.t-big-input:focus-visible {
+  border-bottom-color: var(--accent);
+}
+
+.t-big-input::-webkit-outer-spin-button,
+.t-big-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+.t-minutes {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.t-minutes .input {
+  width: 72px;
+  display: inline-block;
+}
+
+.t-unit {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.t-rule {
+  border-top: 1px solid var(--divider);
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.t-prompt {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.t-intention {
+  display: block;
+  width: 100%;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.45;
+  border: none;
+  background: none;
+  color: var(--ink);
+  padding: 6px 0;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  border-radius: 0;
+}
+
+.t-intention::placeholder {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.t-intention:focus-visible {
+  box-shadow: 0 2px 0 var(--accent);
+}
+
+.t-intention:disabled {
+  color: var(--ink);
+  opacity: 1;
+}
+
+.t-status {
+  font-size: 11px;
+  color: var(--muted);
+  min-height: 14px;
+}
+
+.t-status[data-tone="error"] {
+  color: var(--under);
+}
+
+.t-tasks .task-row {
+  border-top: none;
+  padding: 4px 0;
+}
+
+.t-tasks .task-text:disabled {
+  color: var(--ink);
+}
+
+.t-tasks .task-text[data-done="true"]:disabled {
+  color: var(--muted);
+}
+
+.t-add-task {
+  border: none;
+  background: none;
+  padding: 4px 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+
+.t-foot {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--divider);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.t-foot-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.t-foot-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.t-back {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.t-summary {
+  margin-top: 14px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.t-quote {
+  margin: 8px 0 0;
+  font-size: 14px;
+  font-style: italic;
+  color: var(--ink);
+}
+
+.t-notes {
+  display: block;
+  width: 100%;
+  font: inherit;
+  font-size: 16px;
+  font-style: italic;
+  border: none;
+  background: none;
+  color: var(--ink);
+  padding: 6px 0;
+  outline: none;
+  margin-top: 8px;
+  border-radius: 0;
+}
+
+.t-notes::placeholder {
+  color: var(--muted);
+}
+
+.t-notes:focus-visible {
+  box-shadow: 0 2px 0 var(--accent);
+}
+
+.t-tomorrow {
+  margin-top: 14px;
+  background: var(--faint);
+  border-radius: 16px;
+  padding: 16px 18px;
+}
+
+.t-tomorrow-blurb {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.t-tomorrow-section {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.t-tomorrow-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13.5px;
+}
+
+.t-tomorrow-adds {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.t-locked {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* Day questions (F7), shared by the Today card and the backfill modal. */
+.q-group {
+  margin-top: 14px;
+}
+
+.q-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.q-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.q-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.q-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.q-empty {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.chip-on .option-tag {
+  color: var(--on-accent);
+  border-color: color-mix(in srgb, var(--on-accent) 50%, transparent);
+}
+
+/* Rail. */
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 78px;
+  min-width: 0;
+}
+
+.r-card {
+  background: var(--panel);
+  border: 1px solid var(--divider);
+  border-radius: 20px;
+  padding: 18px 20px;
+}
+
+.r-mantra {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 18px;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--accent-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.r-streak {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.r-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.r-count {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.r-name {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.r-proof {
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 8px;
+}
+
+.r-proof-recover {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.r-part {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.r-missing {
+  font-style: italic;
+  color: var(--muted);
+}
+
+.r-rule {
+  border-top: 1px solid var(--divider);
+  margin-top: 14px;
+  padding-top: 12px;
+}
+
+.r-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 13.5px;
+}
+
+.r-cue {
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
+  margin-top: 12px;
+}
+
+.r-cue-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.r-cue-name {
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.r-cue-when {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.r-text {
+  font-size: 13.5px;
+  line-height: 1.5;
+  margin-top: 6px;
+}
+
+.r-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* The empty-area poster (no sprint): accent card, on-accent text, white primary. */
+.poster {
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+}
+
+.poster .tag-accent {
+  background: color-mix(in srgb, var(--on-accent) 16%, transparent);
+  color: var(--on-accent);
+}
+
+.poster .lede {
+  color: var(--on-accent);
+  opacity: 0.9;
+}
+
+.poster .btn-primary {
+  background: var(--panel);
+  color: var(--accent-ink);
+}
+
+.poster .btn-primary:hover {
+  background: var(--panel);
+  opacity: 0.92;
+}
+
+@media (max-width: 1240px) {
+  .journal {
+    grid-template-columns: 1fr;
+  }
+  .rail {
+    position: static;
+  }
+}
+
+@media (max-width: 940px) {
+  .theme-text {
+    display: none;
+  }
+  .theme-toggle {
+    padding: 6px;
+    min-width: 32px;
+    min-height: 32px;
+    justify-content: center;
+  }
+  .timeline {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+  .j-label {
+    padding-right: 10px;
+    font-size: 11px;
+  }
+  .j-label[data-today="true"] {
+    padding-right: 10px;
+  }
+  .j-label-long {
+    display: none;
+  }
+  .j-label-short {
+    display: block;
+  }
+  .j-row,
+  .j-row[data-kind="today"] {
+    padding-left: 16px;
+  }
+  .j-progress {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .today-card {
+    padding: 16px;
+  }
+  .j-link,
+  .t-back,
+  .t-add-task,
+  .r-mantra {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .j-future .plan-input {
+    width: 96px;
   }
 }
 

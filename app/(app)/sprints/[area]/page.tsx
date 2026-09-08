@@ -1,9 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { TodayView } from "@/components/today/TodayView";
+import { Journal } from "@/components/today/Journal";
 import { areaName, isAreaKey } from "@/lib/areas";
-import { allOrThrow, eligibleFor, loadActiveLibrary, loadActiveSprint, loadActiveVision, loadDayOfferedItems, loadSprintItems, loadStreaks, loadTasks, streakOf } from "@/lib/data";
+import {
+  allOrThrow,
+  eligibleFor,
+  loadActiveLibrary,
+  loadActiveSprint,
+  loadActiveVision,
+  loadDayOfferedItems,
+  loadSprintItems,
+  loadSprintObservations,
+  loadStreaks,
+  loadTasks,
+  streakOf,
+} from "@/lib/data";
 import { sprintDayFor } from "@/lib/sprintDay";
 import { createClient } from "@/lib/supabase/server";
 
@@ -23,7 +35,7 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
   if (!active) {
     const vision = await loadActiveVision(supabase, area);
     return (
-      <div className="card card-page" data-testid="empty-state">
+      <div className="card card-page poster" data-testid="empty-state">
         <span className="tag tag-accent">{name}</span>
         <h1 className="heading page-title mt-12">{vision ? `No sprint running in ${name}` : "No sprint can start here yet"}</h1>
         <p className="lede lede-narrow">
@@ -41,17 +53,31 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
   const position = sprintDayFor(active.sprint, new Date());
   const focusIndex = position.kind === "during" ? position.dayIndex : position.kind === "before" ? 1 : 14;
   const focusDay = active.days.find((d) => d.day_index === focusIndex) ?? active.days[0];
+  const closedIds = active.days.filter((d) => d.closed_at !== null).map((d) => d.id);
 
   // allSettled: when one read fails the others still finish, so the failure reported
   // is the real one and no sibling rejection goes unhandled (BACKLOG, F4).
-  const [items, fullLibrary, offered, tasks, streaks] = await allOrThrow([
+  const [items, fullLibrary, offered, tasks, streaks, observations] = await allOrThrow([
     loadSprintItems(supabase, active.sprint.id),
     loadActiveLibrary(supabase),
     loadDayOfferedItems(supabase, focusDay.id),
     loadTasks(supabase, focusDay.id),
     loadStreaks(supabase),
+    loadSprintObservations(supabase, closedIds),
   ]);
   const library = { cues: fullLibrary.cues.filter(eligibleFor(area)), impediments: fullLibrary.impediments.filter(eligibleFor(area)) };
 
-  return <TodayView sprint={active.sprint} days={active.days} position={position} items={items} library={library} offered={offered} tasks={tasks} streak={streakOf(streaks, active.sprint.id)} />;
+  return (
+    <Journal
+      sprint={active.sprint}
+      days={active.days}
+      position={position}
+      items={items}
+      library={library}
+      offered={offered}
+      tasks={tasks}
+      streak={streakOf(streaks, active.sprint.id)}
+      observations={observations}
+    />
+  );
 }

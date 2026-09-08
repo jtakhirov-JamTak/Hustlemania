@@ -6,6 +6,62 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-07 — F8 journal restyle: night mode is a cookie, closes end on the card, past rows stay one line
+
+**Decision.** F8 interviewed in feature mode (`docs/SPEC.md` F8). Night mode is a
+per-device `theme` cookie read by the root layout and rendered as `data-theme` on
+`<html>` — no migration, no flash, no system preference; the switch is a two-state
+Dusk / Night control in the header. An inline close on the Today card ends on the
+Closed card with "Set up tomorrow"; the modal's result screen (78px, strip, streak
+rows) is backfill-only. Closed past rows are one line; a closed day's tasks are read in
+the sprint review (F10 input, BACKLOG). "Set up tomorrow" lists items answered No or
+left untouched, never the highest or the focus cue. The Sprints sidebar drops the
+streak line (it lives in the rail and the progress block). The phone timeline keeps the
+rule and dots with a 72px label column and a short date. Primary action on the
+screen: planning today.
+
+**Night tokens** (derived from Dusk; no dark palette exists in the v8 handoff): page
+`#131320`, wash `#181828 → #131320`, panel `#1c1c2c`, ink `#ecebf7`, accent
+`#8f8ff2`, accent-ink `#b3b3f8`, met `#5cc48a`, under `#ef7a6f`, derived ratios
+unchanged (divider 13%, muted 62%, faint 6%). White on the night accent fails AA
+(2.9:1), so a new `--on-accent` token carries text on accent fills: `#fff` in Dusk
+(5.4:1), `#131320` at night (6.5:1). Every other pairing is ≥5.9:1 (script in the
+session; ratios listed in the SPEC entry).
+
+**Why.** A DB-backed theme would be F8's only migration and the only evaluator trigger,
+for a preference that is about the device's light, not the account. The README's
+closed card already carries the result and the summary; a second result screen is a
+tap for nothing. One-line rows are the artboard; the full record of a day belongs
+to the postmortem, which the user chose over a per-row detail block.
+
+**Rejected.** Dusk / Night / System (a first-visit look the user did not choose;
+a third state to test). localStorage (flash or a blocking script). Expandable
+closed-row detail (postmortem instead). Showing or editing tomorrow's pre-planned
+intention on its row. The 64px poster title on the empty-area card (wraps at our
+copy length; 30px kept).
+
+**Mockup.** `app/mockup/journal/` — a thin page in the stack, hardcoded Day 9, Dusk
+and Night, planning / reviewing / closed, desktop 1440 / 1100 / phone 390. Approved
+at the feature gate; moved to `docs/mockups/f8-journal/` with two screenshots.
+
+**Numbers (2026-09-08T00:05Z).** Built in the same session as the interview, one approval (the
+gate). Nine Today components became six journal components plus one shared question
+set (`DayQuestions`, used by the Today card and the backfill modal); no inline
+`style` left in `components/today/`. Unit 54 → 60 (daySummary), DB 204 unchanged (no
+migration), e2e 8 rewritten: the golden path walks the inline close, asserts the
+summary line and "Set up tomorrow", and round-trips the night cookie. Verify green.
+Four live mutations each turned a named test red (unit ×3, the theme action → the
+desktop e2e's night step). Chrome desktop check in both palettes; the phone capture
+found the brand overlapping the Sprints tab beside the new toggle — on a phone the
+brand is now its dot (≤480px). One environment flake in BACKLOG (`JWT issued at
+future`). Cycle time 0h54m, human stops 0.
+
+**Build notes.** `[data-cols]` keeps its phone override until F9 rewrites the wizard;
+folds and "Set up tomorrow" are page state, gone on reload; a closed day's tasks
+are read in F10's postmortem (BACKLOG).
+
+---
+
 ## 2026-09-07 — F7 day observations: answers replace judgments, the focus cue is required, the local stack starts blank
 
 **Decision.** Day Close records what happened (per-item occurred / used on a yes / no /

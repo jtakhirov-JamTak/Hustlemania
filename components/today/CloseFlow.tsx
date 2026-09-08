@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { closeDayAction, type Answer, type ImpactAnswer, type ResponseAnswer } from "@/app/(app)/actions/day";
+import { closeDayAction } from "@/app/(app)/actions/day";
 import { Modal } from "@/components/Modal";
+import { answersHint, closeInput, DayQuestions, EMPTY_ANSWERS, highestOf, type DayAnswers } from "@/components/today/DayQuestions";
 import { callAction } from "@/lib/callAction";
 import type { OfferedItems, SprintDay } from "@/lib/data";
 import { formatAmount, formatNumber, toBaseUnits, unitLabel, type Measured } from "@/lib/format";
@@ -11,9 +12,8 @@ import { formatAmount, formatNumber, toBaseUnits, unitLabel, type Measured } fro
 export type CloseOutcome = { days: SprintDay[]; streak: number };
 
 /**
- * The whole Day Close: the two-step dialog, then the result screen, for today's day or
- * a missed one being backfilled (F5). Hosted by CloseCard and PlanCard, which only
- * decide when it opens and what to do with the fresh rows when it is dismissed.
+ * The backfill of a missed day (F5): the two-step modal, then the result screen. Today's
+ * own close happens inline on the Today card (F8); both render the same question set.
  */
 export function CloseFlow({
   sprintId,
@@ -22,7 +22,6 @@ export function CloseFlow({
   day,
   offered,
   highestId,
-  backfill,
   onCancel,
   onDone,
 }: {
@@ -33,8 +32,6 @@ export function CloseFlow({
   offered: OfferedItems;
   /** The sprint's highest impediment: its occurrence opens the response questions (F7). */
   highestId: string | null;
-  /** The day's date has passed in the sprint's zone: the pre-close copy says so. */
-  backfill: boolean;
   onCancel: () => void;
   /** After the result screen is dismissed; the rows are the sprint's fresh days. */
   onDone: (outcome: CloseOutcome) => void;
@@ -52,36 +49,7 @@ export function CloseFlow({
       />
     );
   }
-  return (
-    <CloseDialog sprintId={sprintId} measured={measured} day={day} offered={offered} highestId={highestId} backfill={backfill} onCancel={onCancel} onClosed={setOutcome} />
-  );
-}
-
-/**
- * One multi-pick group (F7): tapping an item marks it yes and the rest no; None marks
- * every item no; Unsure marks every item unsure; a group never touched sends nothing,
- * and the DB stores every offered item as unanswered.
- */
-type Group = { mode: "untouched" | "picked" | "none" | "unsure"; picked: string[] };
-const UNTOUCHED: Group = { mode: "untouched", picked: [] };
-
-function answersOf(group: Group, ids: string[]): { id: string; answer: Answer }[] {
-  switch (group.mode) {
-    case "untouched":
-      return [];
-    case "none":
-      return ids.map((id) => ({ id, answer: "no" }));
-    case "unsure":
-      return ids.map((id) => ({ id, answer: "unsure" }));
-    case "picked":
-      return ids.map((id) => ({ id, answer: group.picked.includes(id) ? "yes" : "no" }));
-  }
-}
-
-function pick(group: Group, id: string): Group {
-  if (group.mode !== "picked") return { mode: "picked", picked: [id] };
-  const picked = group.picked.includes(id) ? group.picked.filter((x) => x !== id) : [...group.picked, id];
-  return picked.length === 0 ? UNTOUCHED : { mode: "picked", picked };
+  return <CloseDialog sprintId={sprintId} measured={measured} day={day} offered={offered} highestId={highestId} onCancel={onCancel} onClosed={setOutcome} />;
 }
 
 function CloseDialog(props: {
@@ -90,21 +58,16 @@ function CloseDialog(props: {
   day: SprintDay;
   offered: OfferedItems;
   highestId: string | null;
-  backfill: boolean;
   onCancel: () => void;
   onClosed: (outcome: CloseOutcome) => void;
 }) {
-  const { measured, day, offered, backfill } = props;
+  const { measured, day, offered } = props;
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
   const [whole, setWhole] = useState("");
   const [hours, setHours] = useState("");
   const [minutes, setMinutes] = useState("");
-  const [cues, setCues] = useState<Group>(UNTOUCHED);
-  const [imps, setImps] = useState<Group>(UNTOUCHED);
-  const [response, setResponse] = useState<ResponseAnswer | null>(null);
-  const [recovered, setRecovered] = useState<Answer | null>(null);
-  const [impact, setImpact] = useState<ImpactAnswer | null>(null);
+  const [answers, setAnswers] = useState<DayAnswers>(EMPTY_ANSWERS);
   const [notes, setNotes] = useState("");
   // `closed` means the day did close and only the refresh failed: no retry, reload instead.
   const [error, setError] = useState<{ text: string; closed: boolean } | null>(null);
@@ -130,38 +93,15 @@ function CloseDialog(props: {
   const actualValid = value !== null && Number.isInteger(value) && value >= 0 && (measured.measurement !== "hours" || Number(minutes || 0) < 60);
   const step1Hint = actualValid ? null : "Enter the actual, zero included.";
 
-  // The highest impediment, as this day offers it; its occurrence opens the response questions.
-  const highest = offered.impediments.find((i) => i.id === props.highestId) ?? null;
-  const highestOccurred = highest !== null && imps.mode === "picked" && imps.picked.includes(highest.id);
-  const step2Hint = !highestOccurred ? null : !response ? "Did the response run?" : !recovered ? "Did you recover?" : null;
+  const highest = highestOf(offered, props.highestId);
+  const step2Hint = answersHint(answers, highest);
   const hint = step === 1 ? step1Hint : step2Hint;
   const closeBlocked = Boolean(step2Hint) || pending || error?.closed === true;
-
-  function setImpediments(next: Group) {
-    setImps(next);
-    // The three questions apply only while the highest is picked; drop stale answers otherwise.
-    if (!(highest && next.mode === "picked" && next.picked.includes(highest.id))) {
-      setResponse(null);
-      setRecovered(null);
-      setImpact(null);
-    }
-  }
 
   function submit() {
     if (closeBlocked || step1Hint || value === null) return;
     start(async () => {
-      const res = await callAction(() =>
-        closeDayAction(day.id, props.sprintId, {
-          actual: value,
-          notes,
-          impediments: answersOf(imps, offered.impediments.map((i) => i.id)),
-          cues: answersOf(cues, offered.cues.map((c) => c.id)),
-          response: highestOccurred ? response : null,
-          recovered: highestOccurred ? recovered : null,
-          impact: highestOccurred ? impact : null,
-          highestId: highest?.id ?? null,
-        }),
-      );
+      const res = await callAction(() => closeDayAction(day.id, props.sprintId, closeInput(answers, offered, highest, value, notes)));
       if (res.error !== undefined) {
         setError({ text: res.error, closed: res.closed === true });
         return;
@@ -174,9 +114,9 @@ function CloseDialog(props: {
     <Modal labelledBy="close-title" onDismiss={props.onCancel} initialFocus={first} maxWidth={620}>
       <div className="dialog-head">
         <span className="label-muted" data-testid="close-step">
-          {backfill ? "Backfill" : "Close"} day {day.day_index} · step {step} of 2
+          Backfill day {day.day_index} · step {step} of 2
         </span>
-        <button type="button" className="link-quiet" aria-label="Cancel" onClick={props.onCancel} style={{ fontSize: 18, lineHeight: 1 }}>
+        <button type="button" className="link-quiet dialog-x" aria-label="Cancel" onClick={props.onCancel}>
           ×
         </button>
       </div>
@@ -193,28 +133,27 @@ function CloseDialog(props: {
         <div className="dialog-body">
           {step === 1 ? (
             <>
-              <h2 id="close-title" ref={heading} tabIndex={-1} className="heading" style={{ fontSize: 26, margin: 0, outline: "none" }}>
+              <h2 id="close-title" ref={heading} tabIndex={-1} className="heading dialog-title">
                 What was the actual result?
               </h2>
-              <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }} data-testid="close-note">
-                {backfill ? `Day ${day.day_index}'s target was ` : "Today's target was "}
-                <strong style={{ fontWeight: 600, color: "var(--ink)" }}>{formatAmount(measured, Number(day.target))}</strong>.{" "}
-                {backfill ? "A backfill counts toward the goal and insights, but never repairs the streak." : "Zero is a truthful answer."}
+              <div className="dialog-blurb" data-testid="close-note">
+                Day {day.day_index}&apos;s target was <strong className="dialog-strong">{formatAmount(measured, Number(day.target))}</strong>. A backfill counts toward the goal and insights, but
+                never repairs the streak.
               </div>
-              <div style={{ marginTop: 18 }}>
+              <div className="mt-18">
                 {measured.measurement === "hours" ? (
-                  <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-                    <label style={{ flex: 1 }}>
+                  <div className="row">
+                    <label className="grow">
                       <span className="label-muted">Hours</span>
                       <input ref={first} className="input input-hero" type="number" inputMode="numeric" min={0} step={1} value={hours} onChange={(e) => setHours(e.target.value)} />
                     </label>
-                    <label style={{ flex: 1 }}>
+                    <label className="grow">
                       <span className="label-muted">Minutes</span>
                       <input className="input input-hero" type="number" inputMode="numeric" min={0} max={59} step={1} value={minutes} onChange={(e) => setMinutes(e.target.value)} />
                     </label>
                   </div>
                 ) : (
-                  <label style={{ display: "block" }}>
+                  <label className="block">
                     <span className="label-muted">Actual · {unitLabel(measured)}</span>
                     <input
                       ref={first}
@@ -233,94 +172,29 @@ function CloseDialog(props: {
             </>
           ) : (
             <>
-              <h2 id="close-title" ref={heading} tabIndex={-1} className="heading" style={{ fontSize: 26, margin: 0, outline: "none" }}>
+              <h2 id="close-title" ref={heading} tabIndex={-1} className="heading dialog-title">
                 What happened on Day {day.day_index}?
               </h2>
-              <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>None and Unsure are truthful answers.</div>
+              <div className="dialog-blurb">None and Unsure are truthful answers.</div>
 
-              <PickGroup
-                testId="use-group"
-                kicker="Use"
-                question="Which cues did you use?"
-                items={offered.cues.map((c) => ({ id: c.id, label: c.name, tag: c.is_focus ? "FOCUS" : null }))}
-                emptyLine="No cues were in the sprint on this day."
-                group={cues}
-                onChange={setCues}
-              />
+              <DayQuestions offered={offered} highest={highest} answers={answers} onChange={setAnswers} />
 
-              <PickGroup
-                testId="occurrence-group"
-                kicker="Occurrence"
-                question="Which obstacles showed up?"
-                sub={highest ? `Highest: ${highest.name}` : null}
-                items={offered.impediments.map((i) => ({ id: i.id, label: i.name, tag: null }))}
-                emptyLine="No impediments were in the sprint on this day."
-                group={imps}
-                onChange={setImpediments}
-              />
-
-              {highestOccurred && highest ? (
-                <>
-                  <AnswerGroup
-                    testId="response-group"
-                    kicker={`Response · ${highest.name}`}
-                    question="Did you run the response?"
-                    sub={`${highest.proof_then ? `THEN ${highest.proof_then} · ` : ""}judge the first time it showed up today`}
-                    options={[
-                      ["yes", "Yes"],
-                      ["no", "No"],
-                      ["partially", "Partially"],
-                      ["unsure", "Unsure"],
-                    ]}
-                    value={response}
-                    onChange={setResponse}
-                  />
-                  <AnswerGroup
-                    testId="recovery-group"
-                    kicker="Recovery"
-                    question="Did you recover?"
-                    sub={highest.proof_recover ? `Recovered when ${highest.proof_recover}` : "No recovery criterion recorded for this day"}
-                    options={[
-                      ["yes", "Yes"],
-                      ["no", "No"],
-                      ["unsure", "Unsure"],
-                    ]}
-                    value={recovered}
-                    onChange={setRecovered}
-                  />
-                  <AnswerGroup
-                    testId="impact-group"
-                    kicker={`Impact · ${highest.name}`}
-                    question="How much did it cost today?"
-                    sub="Your read, not the number"
-                    options={[
-                      ["nothing", "Nothing"],
-                      ["some", "Some"],
-                      ["a_lot", "A lot"],
-                      ["unsure", "Unsure"],
-                    ]}
-                    value={impact}
-                    onChange={setImpact}
-                  />
-                </>
-              ) : null}
-
-              <label style={{ display: "block", marginTop: 18 }}>
+              <label className="block mt-18">
                 <span className="label-muted">Notes · optional</span>
-                <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything worth remembering about today" style={{ marginTop: 6 }} />
+                <textarea className="input mt-6" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything worth remembering about today" />
               </label>
             </>
           )}
 
           {error ? (
-            <div role="alert" className="error-bar" style={{ marginTop: 14 }}>
+            <div role="alert" className="error-bar mt-14">
               <span>{error.text}</span>
               {error.closed ? (
-                <button type="button" className="link-quiet" style={{ color: "inherit", fontWeight: 600 }} onClick={() => router.refresh()}>
+                <button type="button" className="link-quiet error-bar-action" onClick={() => router.refresh()}>
                   Reload
                 </button>
               ) : (
-                <button type="submit" className="link-quiet" style={{ color: "inherit", fontWeight: 600 }}>
+                <button type="submit" className="link-quiet error-bar-action">
                   Retry
                 </button>
               )}
@@ -338,7 +212,7 @@ function CloseDialog(props: {
               Back
             </button>
           )}
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div className="row">
             <span className="hint" id="close-hint" aria-live="polite">
               {hint ?? ""}
             </span>
@@ -355,108 +229,6 @@ function CloseDialog(props: {
         </div>
       </form>
     </Modal>
-  );
-}
-
-function GroupHead({ kicker, question, sub, id }: { kicker: string; question: string; sub?: string | null; id: string }) {
-  return (
-    <>
-      <div className="label-accent" style={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>
-        {kicker}
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginTop: 2 }}>
-        <span id={id} style={{ fontSize: 13, fontWeight: 600 }}>
-          {question}
-        </span>
-        {sub ? <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{sub}</span> : null}
-      </div>
-    </>
-  );
-}
-
-/** A multi-pick question: item pills plus None and Unsure. */
-function PickGroup({
-  testId,
-  kicker,
-  question,
-  sub,
-  items,
-  emptyLine,
-  group,
-  onChange,
-}: {
-  testId: string;
-  kicker: string;
-  question: string;
-  sub?: string | null;
-  items: { id: string; label: string; tag: string | null }[];
-  emptyLine: string;
-  group: Group;
-  onChange: (next: Group) => void;
-}) {
-  const labelId = `${testId}-label`;
-  return (
-    <div style={{ marginTop: 16 }} data-testid={testId} data-mode={group.mode}>
-      <GroupHead kicker={kicker} question={question} sub={sub} id={labelId} />
-      {items.length === 0 ? (
-        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>{emptyLine}</div>
-      ) : (
-        <div className="pill-row" role="group" aria-labelledby={labelId}>
-          {items.map((item) => {
-            const on = group.mode === "picked" && group.picked.includes(item.id);
-            return (
-              <button key={item.id} type="button" className={`chip ${on ? "chip-on" : ""}`} aria-pressed={on} onClick={() => onChange(pick(group, item.id))}>
-                {item.label}
-                {item.tag ? (
-                  <span className="option-tag" data-testid="focus-tag" style={on ? { color: "#fff", borderColor: "rgba(255,255,255,0.6)" } : undefined}>
-                    {item.tag}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-          <button type="button" className={`chip ${group.mode === "none" ? "chip-on" : ""}`} aria-pressed={group.mode === "none"} onClick={() => onChange({ mode: "none", picked: [] })} data-testid={`${testId.replace("-group", "")}-none`}>
-            None
-          </button>
-          <button type="button" className={`chip ${group.mode === "unsure" ? "chip-on" : ""}`} aria-pressed={group.mode === "unsure"} onClick={() => onChange({ mode: "unsure", picked: [] })}>
-            Unsure
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** A single-answer question on a fixed scale. */
-function AnswerGroup<T extends string>({
-  testId,
-  kicker,
-  question,
-  sub,
-  options,
-  value,
-  onChange,
-}: {
-  testId: string;
-  kicker: string;
-  question: string;
-  sub?: string | null;
-  options: [T, string][];
-  value: T | null;
-  onChange: (next: T) => void;
-}) {
-  const labelId = `${testId}-label`;
-  return (
-    <div style={{ marginTop: 16 }} data-testid={testId}>
-      <GroupHead kicker={kicker} question={question} sub={sub} id={labelId} />
-      <div className="pill-row" role="radiogroup" aria-labelledby={labelId}>
-        {options.map(([key, label]) => (
-          <button key={key} type="button" role="radio" className={`chip ${value === key ? "chip-on" : ""}`} aria-checked={value === key} onClick={() => onChange(key)}>
-            {label}
-          </button>
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -490,55 +262,50 @@ function ResultScreen({
 
   return (
     <Modal labelledBy="result-title" onDismiss={onBack} initialFocus={summary} maxWidth={620} style={{ animation: "popIn 220ms ease-out" }}>
-      <div className="dialog-body" style={{ paddingTop: 26 }}>
+      <div className="dialog-body result-body">
         {/* Focus lands on the whole summary, so the actual and its verdict are read together. */}
-        <div id="result-title" ref={summary} tabIndex={-1} style={{ outline: "none" }}>
+        <div id="result-title" ref={summary} tabIndex={-1} className="focus-quiet">
           <span className="label-muted">{backfill ? `Day ${day.day_index} backfilled` : `Day ${day.day_index} closed`}</span>
-          <div
-            className="heading"
-            data-testid="result-actual"
-            data-state={atOrAbove ? "at-or-above" : "under"}
-            style={{ fontSize: 78, letterSpacing: "-0.04em", lineHeight: 1, marginTop: 8, color: atOrAbove ? "var(--success)" : "var(--under)" }}
-          >
+          <div className="heading result-actual" data-testid="result-actual" data-state={atOrAbove ? "at-or-above" : "under"}>
             {formatNumber(measured, actual)}
           </div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--muted)", marginTop: 4 }}>
+          <div className="result-unit">
             {unitLabel(measured)} · target {formatNumber(measured, target)}
             {atOrAbove ? "" : " · under target"}
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 4, marginTop: 22 }} role="img" aria-label={`${days.filter((d) => d.closed_at !== null).length} of 14 days closed`}>
+        <div className="result-strip" role="img" aria-label={`${days.filter((d) => d.closed_at !== null).length} of 14 days closed`}>
           {days.map((d) => {
             const c = d.closed_at !== null;
             const h = c && Number(d.actual) >= Number(d.target);
-            return <span key={d.id} style={{ flex: 1, height: 6, borderRadius: 3, background: c ? (h ? "var(--success)" : "var(--under)") : "var(--faint)" }} />;
+            return <span key={d.id} className="result-seg" data-state={c ? (h ? "at-or-above" : "under") : "open"} />;
           })}
         </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--divider)", fontSize: 13.5 }}>
-          <span style={{ color: "var(--muted)" }}>Streak</span>
-          <strong style={{ fontWeight: 600 }} data-testid="result-streak">
+        <div className="result-row result-row-first">
+          <span className="result-key">Streak</span>
+          <strong className="result-val" data-testid="result-streak">
             {streak} {streak === 1 ? "day" : "days"}
             {backfill ? " · unchanged by a backfill" : ""}
           </strong>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 9, fontSize: 13.5 }}>
-          <span style={{ color: "var(--muted)" }}>Cumulative</span>
-          <strong style={{ fontWeight: 600 }}>
+        <div className="result-row">
+          <span className="result-key">Cumulative</span>
+          <strong className="result-val">
             {formatAmount(measured, cumulative)} · {Math.round((cumulative / goal) * 100)}% of goal
           </strong>
         </div>
         {next ? (
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 9, fontSize: 13.5 }}>
-            <span style={{ color: "var(--muted)" }}>{backfill ? `Day ${next.day_index} target` : "Tomorrow's target"}</span>
-            <strong style={{ fontWeight: 600 }}>{formatAmount(measured, Number(next.target))}</strong>
+          <div className="result-row">
+            <span className="result-key">{backfill ? `Day ${next.day_index} target` : "Tomorrow's target"}</span>
+            <strong className="result-val">{formatAmount(measured, Number(next.target))}</strong>
           </div>
         ) : (
-          <div style={{ marginTop: 9, fontSize: 13.5, color: "var(--muted)" }}>That was the last day of the sprint.</div>
+          <div className="result-row result-key">That was the last day of the sprint.</div>
         )}
       </div>
-      <div className="dialog-foot" style={{ justifyContent: "flex-end" }}>
+      <div className="dialog-foot result-foot">
         <button type="button" className="btn btn-primary" onClick={onBack}>
           Back to today
         </button>
