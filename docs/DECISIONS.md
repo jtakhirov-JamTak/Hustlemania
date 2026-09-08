@@ -51,8 +51,22 @@ screenshots. Additions the artboard does not draw: the deadline field, the two
 optional prompts on step 1, the review note, the "days to the deadline" line, the
 previous-vision meta line.
 
-**Numbers.** Recorded when the row closes (build in the next session; the F9 row
-opened 2026-09-08T00:16Z).
+**Numbers (2026-09-08T03:38Z).** Cycle 3h22m from the interview's start, one human
+stop (the fresh-session handoff). DB 224 (was 204; the F9 file adds 20 across three
+describes), unit 64 (TwoTap adds 4), e2e 8 unchanged in count but the golden path now
+walks the three steps, the review and Replace's two-tap. Four live function mutations
+red then restored. eval-05: no P0/P1, two P2 fixed before green. Build-time calls, all
+inside the entry: `save_vision` upserts on the partial unique index (one statement,
+race-free, `created_at` kept); the deadline stays compared with the database's date
+(UTC) as specified, and the date input's `min` is the later of local tomorrow and UTC
+tomorrow so the first offered date is never refused (eval-05 P2-1); `set_vision_obstacle`
+requires an explicit `null` id when a name is given (no default, exactly-one rule);
+`archive_item` / `set_item_scope` raise `vision_obstacle` rather than returning a
+`failing` row, so the library page shows the copy through `friendlyError`; the seed
+helper for past-dated sprints keeps a service-role insert (area-less, reusing the
+user's active vision) because `save_vision` takes identity from `auth.uid()`; the
+Vision index lives in a route group (`(overview)`) so its `loading.tsx` does not cover
+the library pages.
 
 ---
 

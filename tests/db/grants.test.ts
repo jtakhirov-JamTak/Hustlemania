@@ -27,7 +27,7 @@ describe("public schema access model", () => {
     expect(rows).toEqual([]);
   });
 
-  it("authenticated may INSERT only library items, visions and tasks, and DELETE only library items (rule 19 via RLS)", async () => {
+  it("authenticated may INSERT only library items and tasks (F9: visions only through save_vision), and DELETE only library items (rule 19 via RLS)", async () => {
     const rows = await sql<{ table_name: string; privilege_type: string }[]>`
       select table_name, privilege_type from information_schema.role_table_grants
       where table_schema = 'public' and grantee = 'authenticated' and privilege_type in ('INSERT', 'DELETE')
@@ -58,9 +58,6 @@ describe("public schema access model", () => {
       { table_name: "tasks", column_name: "sprint_day_id" },
       { table_name: "tasks", column_name: "text" },
       { table_name: "tasks", column_name: "user_id" },
-      { table_name: "visions", column_name: "area" },
-      { table_name: "visions", column_name: "body" },
-      { table_name: "visions", column_name: "user_id" },
     ]);
   });
 
@@ -83,7 +80,6 @@ describe("public schema access model", () => {
       { table_name: "tasks", column_name: "archived_at" },
       { table_name: "tasks", column_name: "done" },
       { table_name: "tasks", column_name: "text" },
-      { table_name: "visions", column_name: "body" },
     ]);
   });
 
@@ -158,11 +154,16 @@ describe("public schema access model", () => {
       "day_offered_items",
       "move_item",
       "remove_sprint_item",
+      "replace_vision",
       "restore_item",
+      "review_vision",
       "save_targets",
+      "save_vision",
       "set_focus_cue",
       "set_highest_impediment",
       "set_item_scope",
+      "set_vision_obstacle",
+      "set_vision_rule",
       "sprint_streaks",
       "start_sprint",
     ]);

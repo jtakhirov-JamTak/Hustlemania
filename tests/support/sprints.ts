@@ -1,6 +1,16 @@
 import type { AdminClient } from "./local";
 import { addDays } from "../../lib/sprintDay";
 
+/** F9: one active vision per user — reuse it when the user already has one, else seed one with the service role. */
+async function activeVision(admin: AdminClient, userId: string): Promise<string> {
+  const existing = await admin.from("visions").select("id").eq("user_id", userId).is("archived_at", null).maybeSingle();
+  if (existing.error) throw new Error(existing.error.message);
+  if (existing.data) return existing.data.id;
+  const created = await admin.from("visions").insert({ user_id: userId, body: "A seeded vision", deadline: "2099-01-01", proof: "Seeded proof" }).select("id").single();
+  if (created.error) throw new Error(created.error.message);
+  return created.data.id;
+}
+
 /**
  * A sprint whose day 1 is `startDate` (any date, past included) with 14 open days,
  * written straight into the tables with the service role. start_sprint only accepts
@@ -14,13 +24,12 @@ export async function insertSprintRows(
 ): Promise<{ sprintId: string; dayIds: string[] }> {
   const area = opts.area ?? "wealth";
   const target = opts.target ?? 100;
-  const vision = await admin.from("visions").insert({ user_id: userId, area, body: `A ${area} vision` }).select("id").single();
-  if (vision.error) throw new Error(vision.error.message);
+  const vision = await activeVision(admin, userId);
   const sprint = await admin
     .from("sprints")
     .insert({
       user_id: userId,
-      vision_id: vision.data.id,
+      vision_id: vision,
       area,
       outcome: opts.outcome ?? "Past-dated sprint",
       measurement: "money",

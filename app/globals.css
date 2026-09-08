@@ -1373,10 +1373,6 @@ body:has(dialog[open]) {
   .main {
     padding: 20px 16px 90px;
   }
-  /* The wizard still sets its grid inline (F9 rewrites it). */
-  [data-cols] {
-    grid-template-columns: 1fr !important;
-  }
   [data-strip] {
     overflow-x: auto;
   }
@@ -2386,5 +2382,665 @@ body:has(dialog[open]) {
 @media (prefers-reduced-motion: reduce) {
   .dialog[open] {
     animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   F9 — Vision tab (docs/mockups/f9-vision). Setup steps, the saved overview, the
+   review card, previous visions, the loading skeleton. */
+.workspace-vision {
+  max-width: 960px;
+}
+
+.mt-8 {
+  margin-top: 8px;
+}
+
+.mt-22 {
+  margin-top: 22px;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--control-border);
+  padding: 10px 17px;
+}
+
+.btn-secondary:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.v-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.v-head-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.v-under {
+  color: var(--under);
+}
+
+.v-title {
+  margin: 8px 0 0;
+  font-size: 30px;
+  line-height: 1.15;
+  outline: none;
+}
+
+.v-progress {
+  display: flex;
+  gap: 5px;
+  margin-top: 18px;
+  max-width: 320px;
+}
+
+.v-seg {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--faint);
+}
+
+.v-seg-on {
+  background: var(--accent);
+}
+
+.v-steps {
+  display: flex;
+  gap: 18px;
+  margin-top: 8px;
+  max-width: 320px;
+}
+
+.v-steps span {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.v-steps .v-step-on {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.v-card {
+  margin-top: 22px;
+  padding: 22px 24px;
+  max-width: 720px;
+}
+
+.v-prompt {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.v-textarea {
+  margin-top: 14px;
+  border-radius: 14px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.v-field-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-top: 16px;
+}
+
+.v-field-label-opt {
+  color: var(--muted);
+}
+
+.v-field-label-opt em {
+  font-style: normal;
+  font-weight: 500;
+}
+
+.v-input {
+  margin-top: 8px;
+  border-radius: 14px;
+}
+
+.v-date {
+  max-width: 220px;
+}
+
+.v-note {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 10px;
+  line-height: 1.5;
+}
+
+.v-grid {
+  margin-top: 16px;
+}
+
+.v-grid .input {
+  border-radius: 14px;
+}
+
+.v-grid .v-strong {
+  font-weight: 600;
+}
+
+.v-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--divider);
+  flex-wrap: wrap;
+}
+
+.v-foot-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.v-options {
+  margin-top: 14px;
+}
+
+/* Overview */
+.v-vision {
+  margin: 10px 0 0;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+  max-width: 34ch;
+}
+
+.v-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.v-replace {
+  border: none;
+  background: none;
+  font-size: 12.5px;
+  padding: 0 6px;
+  color: var(--muted);
+}
+
+.v-replace.two-tap-armed {
+  color: var(--under);
+  font-weight: 600;
+}
+
+.v-steps-done {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-ink);
+}
+
+.v-steps-done-all {
+  color: var(--success);
+}
+
+.v-review {
+  margin-top: 18px;
+  border: 1.5px solid var(--accent);
+  border-radius: 20px;
+  padding: 20px 22px;
+  max-width: 720px;
+}
+
+.v-review-q {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+.v-review-note {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.v-review-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.v-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.v-cards-2 {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  margin-top: 16px;
+}
+
+.v-mini {
+  padding: 18px 20px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.v-mini-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.v-mini-action {
+  border: none;
+  background: none;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0;
+  text-decoration: none;
+}
+
+.v-mini-body {
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.v-mini-sub {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.v-mini-empty {
+  display: block;
+  text-align: left;
+  border: 1px dashed var(--control-border);
+  border-radius: 14px;
+  background: none;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+  text-decoration: none;
+}
+
+.v-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-top: 1px solid var(--divider);
+  background: none;
+  padding: 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.v-row-n {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.v-sprint {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-top: 1px solid var(--divider);
+  background: none;
+  padding: 12px 0;
+  font-size: 14px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.v-sprint-area {
+  font-weight: 600;
+}
+
+.v-sprint-outcome {
+  color: var(--muted);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v-sprint-status {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.v-met {
+  color: var(--success);
+}
+
+.v-mini-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.v-empty-line {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.v-prev-toggle {
+  border: none;
+  background: none;
+  padding: 0;
+  margin-top: 18px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-ink);
+}
+
+.v-prev {
+  margin-top: 10px;
+  background: var(--faint);
+  border-radius: 14px;
+  padding: 13px 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 720px;
+}
+
+.v-prev-meta {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.5px;
+}
+
+/* Loading skeleton: the overview's shapes, no text, no layout shift. */
+.v-skel {
+  display: block;
+  background: var(--faint);
+  border-radius: 8px;
+  height: 14px;
+}
+
+.v-skel-kicker {
+  width: 160px;
+}
+
+.v-skel-kicker-short {
+  width: 80px;
+}
+
+.v-skel-meta {
+  width: 220px;
+}
+
+.v-skel-h1 {
+  height: 34px;
+  width: 70%;
+  margin-top: 12px;
+  border-radius: 10px;
+}
+
+.v-skel-h1-short {
+  width: 45%;
+}
+
+.v-skel-btn {
+  height: 40px;
+  width: 120px;
+  border-radius: 12px;
+}
+
+.v-skel-btn-short {
+  width: 70px;
+}
+
+.v-skel-body {
+  height: 40px;
+}
+
+.v-skel-sub {
+  width: 60%;
+}
+
+/* ---------------------------------------------------------------------------
+   New Sprint wizard (F9: classes instead of inline styles; the v8 restyle is F10). */
+.wz-title {
+  outline: none;
+}
+
+.wz-progress {
+  display: flex;
+  gap: 4px;
+  margin-top: 16px;
+  max-width: 420px;
+}
+
+.wz-card {
+  margin-top: 22px;
+  padding: 24px 26px;
+}
+
+.wz-vision {
+  background: var(--faint);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+}
+
+.wz-vision-text {
+  margin-top: 4px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.wz-blocked {
+  margin: 0 0 18px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.wz-strong {
+  font-weight: 600;
+}
+
+.wz-cols {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.wz-pair {
+  display: flex;
+  gap: 10px;
+}
+
+.wz-upper {
+  text-transform: uppercase;
+}
+
+.wz-row {
+  display: flex;
+  gap: 8px;
+}
+
+.wz-two {
+  flex: 2;
+}
+
+.wz-spacer {
+  width: 36px;
+}
+
+.wz-note {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.wz-narrow {
+  max-width: 64ch;
+}
+
+.wz-chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.wz-conf {
+  min-width: 40px;
+  justify-content: center;
+}
+
+.wz-conf-ideal {
+  border-color: var(--accent);
+}
+
+.wz-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wz-modes {
+  display: flex;
+  gap: 6px;
+}
+
+.wz-section {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid var(--divider);
+}
+
+.wz-group-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wz-count {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.wz-count-on {
+  color: var(--accent);
+}
+
+.wz-create {
+  color: var(--accent-ink);
+  padding: 6px 12px;
+}
+
+.wz-highest {
+  margin-top: 22px;
+  background: var(--faint);
+  border-radius: 16px;
+  padding: 18px 20px;
+}
+
+.wz-blurb {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: 4px 0 6px;
+  line-height: 1.5;
+}
+
+.wz-intentions {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  margin-top: 10px;
+  align-items: center;
+}
+
+.wz-day {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.wz-input-tight {
+  padding: 8px 12px;
+}
+
+.wz-align {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+  cursor: pointer;
+}
+
+.wz-align-text {
+  font-size: 14px;
+}
+
+.wz-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 26px;
+  flex-wrap: wrap;
+}
+
+.wz-foot-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 940px) {
+  .v-cards,
+  .v-cards-2 {
+    grid-template-columns: 1fr;
+  }
+  .v-date {
+    max-width: none;
+  }
+  .wz-cols {
+    grid-template-columns: 1fr;
   }
 }

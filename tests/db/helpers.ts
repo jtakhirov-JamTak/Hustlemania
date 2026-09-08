@@ -48,10 +48,11 @@ export async function dbTodayIn(tz: string): Promise<string> {
   return row.d;
 }
 
-export async function insertVision(user: TestUser, area: string, body = "A 1-year vision") {
-  const res = await user.client.from("visions").insert({ user_id: user.id, area, body }).select("id").single();
-  if (res.error) throw res.error;
-  return res.data.id as string;
+/** F9: the account's one vision, written through save_vision (there is no direct INSERT grant). Idempotent: a second call edits in place. */
+export async function insertVision(user: TestUser, body = "A 1-year vision") {
+  const res = await user.client.rpc("save_vision", { p_body: body, p_deadline: "2099-01-01", p_proof: "Proof it happened" });
+  if (res.error) throw new Error(res.error.message);
+  return res.data as string;
 }
 
 export async function insertCue(user: TestUser, name: string, scope = "global", explanation: string | null = null): Promise<string> {

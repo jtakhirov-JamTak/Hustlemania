@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
  */
 export default async function SprintsLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
-  const areas = await loadOverview(supabase);
+  const { vision, areas } = await loadOverview(supabase);
   const now = new Date();
 
   const items: SideItem[] = areas.map((a) => {
@@ -18,7 +18,7 @@ export default async function SprintsLayout({ children }: { children: React.Reac
       const meta = pos.kind === "during" ? `Day ${pos.dayIndex}/14` : pos.kind === "before" ? "Starts tomorrow" : "Ended";
       return { href: `/sprints/${a.key}`, label: a.name, meta, sub: a.sprint.outcome };
     }
-    if (a.vision) return { href: `/sprints/${a.key}`, label: a.name, meta: "Ready", sub: "No active sprint" };
+    if (vision) return { href: `/sprints/${a.key}`, label: a.name, meta: "Ready", sub: "No active sprint" };
     return { href: `/sprints/${a.key}`, label: a.name, meta: "Locked", sub: "Vision not written yet" };
   });
 

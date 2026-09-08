@@ -2,6 +2,26 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## Found during F9 (2026-09-07), not fixed there
+
+- **eval-05 observations** (no P0/P1; both P2s fixed before green): the library's direct
+  UPDATE grant on `impediments.proof_*` can blank one part of the vision's guiding rule
+  outside `set_vision_rule` (F6's trigger guards only an active sprint's highest; the
+  Guiding-rule card's Add path restores it — DECISIONS 2026-09-08 rejected extending the
+  trigger) · `set_vision_obstacle` accepts a duplicate impediment name (no uniqueness rule
+  in SPEC) · a sprint past its `end_date` still reads `status = 'active'`, so the wizard
+  calls the area "active" while the sidebar says "Ended" — F10 owns the transition ·
+  `save_vision` has no body length limit.
+
+- **`friendlyError` matches codes as substrings of the whole message**, so a PostgREST
+  schema-cache error naming `set_vision_obstacle(...)` renders the `vision_obstacle` copy
+  (FIX_LOG 2026-09-07). Any future code that is a suffix of a function name will do the
+  same. Match on word boundaries or on the `details`/`hint`-free message prefix.
+- **An impediment that is the vision's obstacle cannot be deleted from the library** (FK
+  `visions_obstacle_id_fkey`, no cascade); the copy says to change the obstacle first.
+  Rule 19 already limits Delete to unused items, so this only reaches a never-used
+  obstacle. Acceptable; noted so it is not read as a bug.
+
 ## Found during F8 (2026-09-07), not fixed there
 
 - **`JWT issued at future` on the first request after a magic-link sign-in** (one desktop e2e run; the phone run and every rerun passed). PostgREST in the Docker stack rejected a token the host had just minted, so `/sprints` rendered the error boundary. A clock-skew flake between Docker and the host, not app code; if it recurs, compare `date -u` with `docker exec supabase_db_Hustlemania date -u` and restart Docker Desktop.

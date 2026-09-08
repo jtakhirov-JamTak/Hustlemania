@@ -28,7 +28,7 @@ describe("RLS isolation", () => {
   beforeAll(async () => {
     a = await createTestUser("rls-a");
     b = await createTestUser("rls-b");
-    await insertVision(a, "wealth");
+    await insertVision(a);
     const items = await seedItems(a);
     impedimentId = items.p_highest_impediment_id;
     sprintId = await startSprint(a, moneySprintArgs({ ...items, p_start_date: await dbTodayIn("America/Los_Angeles") }));
@@ -79,10 +79,10 @@ describe("RLS isolation", () => {
     expect(row.n).toBe(0);
   });
 
-  it("user B cannot update A's vision body or impediment proof (0 rows affected, rows unchanged)", async () => {
+  it("user B cannot update A's vision body (F9: no UPDATE grant on visions at all) or impediment proof (0 rows affected, rows unchanged)", async () => {
     const v = await b.client.from("visions").update({ body: "hijacked" }).eq("user_id", a.id).select("id");
-    expect(v.error).toBeNull();
-    expect(v.data).toEqual([]);
+    expect(v.error?.message).toMatch(/permission denied/);
+    expect(v.data).toBeNull();
     const i = await b.client.from("impediments").update({ proof_when: "hijacked", name: "hijacked" }).eq("id", impedimentId).select("id");
     expect(i.error).toBeNull();
     expect(i.data).toEqual([]);
@@ -93,9 +93,10 @@ describe("RLS isolation", () => {
     expect(row).toEqual({ v: 0, i: 0 });
   });
 
-  it("user B cannot insert a vision as A", async () => {
-    const res = await b.client.from("visions").insert({ user_id: a.id, area: "health", body: "forged" }).select("id");
+  it("user B cannot insert a vision as A (F9: no direct INSERT grant remains on visions)", async () => {
+    const res = await b.client.from("visions").insert({ user_id: a.id, body: "forged", deadline: "2099-01-01" }).select("id");
     expect(res.error).not.toBeNull();
+    expect(res.error!.message).toMatch(/permission denied/);
     expect(res.data).toBeNull();
   });
 

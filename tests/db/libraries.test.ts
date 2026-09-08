@@ -43,7 +43,7 @@ describe("F2 RLS isolation", () => {
   beforeAll(async () => {
     a = await createTestUser("lib-rls-a");
     b = await createTestUser("lib-rls-b");
-    await insertVision(a, "wealth");
+    await insertVision(a);
     const items = await seedItems(a);
     cueId = items.p_cue_ids[0];
     impId = items.p_impediment_ids[0];
@@ -149,7 +149,7 @@ describe("start_sprint with cues and impediments (rules 3–6)", () => {
   beforeAll(async () => {
     u = await createTestUser("lib-start");
     today = await dbTodayIn(TZ);
-    await insertVision(u, "wealth");
+    await insertVision(u);
     cues = [];
     imps = [];
     for (let i = 0; i < 4; i++) cues.push(await insertCue(u, `Cue ${i + 1}`));
@@ -244,7 +244,7 @@ describe("library rules and sprint membership", () => {
   beforeAll(async () => {
     u = await createTestUser("lib-rules");
     today = await dbTodayIn(TZ);
-    await insertVision(u, "wealth");
+    await insertVision(u);
     cueA = await insertCue(u, "Cue A", "global", "  why it matters  ");
     cueB = await insertCue(u, "Cue B");
     impHighest = await insertImpediment(u, "Highest", PROOF);
@@ -513,7 +513,7 @@ describe("close_day with day observations (F7)", () => {
   beforeAll(async () => {
     u = await createTestUser("lib-close");
     today = await dbTodayIn(KTZ);
-    await insertVision(u, "health");
+    await insertVision(u);
     cueA = await insertCue(u, "Cue A");
     cueRemoved = await insertCue(u, "Cue removed today");
     impHighest = await insertImpediment(u, "Highest", PROOF);
@@ -692,7 +692,7 @@ describe("close_day with day observations (F7)", () => {
   it("deleting the user cascades through every F2 and F7 table without an FK error", async () => {
     const victim = await createTestUser("lib-cascade");
     const items = await seedItems(victim);
-    await insertVision(victim, "wealth");
+    await insertVision(victim);
     const sid = await startSprint(victim, moneySprintArgs({ ...items, p_start_date: await dbTodayIn(TZ) }));
     const [d] = await sql<{ id: string }[]>`select id from public.sprint_days where sprint_id = ${sid} and day_index = 1`;
     await rpc(victim, "close_day", {
@@ -734,7 +734,7 @@ describe("F7 focus cue", () => {
   beforeAll(async () => {
     u = await createTestUser("lib-focus");
     today = await dbTodayIn(TZ);
-    await insertVision(u, "wealth");
+    await insertVision(u);
     cueA = await insertCue(u, "Cue A");
     cueB = await insertCue(u, "Cue B");
     cueC = await insertCue(u, "Cue C, never in the sprint");
@@ -953,7 +953,7 @@ describe("F6 libraries v2", () => {
   beforeAll(async () => {
     u = await createTestUser("lib-v2");
     today = await dbTodayIn(TZ);
-    await insertVision(u, "wealth");
+    await insertVision(u);
     cueId = await insertCue(u, "Ask how much this pays");
     impHighest = await insertImpediment(u, "Starting late", PROOF);
     impOther = await insertImpediment(u, "Other", { proofWhen: "when", proofThen: "then" });
@@ -1060,7 +1060,7 @@ describe("F6 libraries v2", () => {
     beforeAll(async () => {
       h = await createTestUser("lib-v2-start");
       hToday = await dbTodayIn(TZ);
-      await insertVision(h, "health");
+      await insertVision(h);
       hCue = await insertCue(h, "Cue");
     });
     afterAll(async () => {
@@ -1089,7 +1089,7 @@ describe("F6 libraries v2", () => {
     it("writes all three inline parts to the impediment row when given together", async () => {
       const r = await createTestUser("lib-v2-start-3");
       try {
-        await insertVision(r, "wealth");
+        await insertVision(r);
         const cue = await insertCue(r, "Cue");
         const imp = await insertImpediment(r, "Nothing yet");
         const args = moneySprintArgs({ p_cue_ids: [cue], p_impediment_ids: [imp], p_highest_impediment_id: imp, p_start_date: hToday });

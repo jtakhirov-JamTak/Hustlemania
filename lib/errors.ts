@@ -4,7 +4,17 @@
  */
 const MESSAGES: Record<string, string> = {
   not_authenticated: "Your session ended. Sign in again to continue.",
-  no_active_vision: "Write this area's 1-year vision before starting a sprint.",
+  no_active_vision: "There is no active vision. Write it first.",
+  vision_body_required: "Write the vision before saving.",
+  vision_proof_required: "Name what would prove it happened.",
+  vision_deadline_past: "The deadline must be in the future.",
+  obstacle_pick_or_name: "Pick one impediment or name a new one, not both.",
+  obstacle_not_global: "The main obstacle has to be a global impediment.",
+  no_vision_obstacle: "Name the obstacle before writing its rule.",
+  rule_incomplete: "WHEN, THEN and the recovery criterion are all required.",
+  invalid_verdict: "That review answer is not one of the choices.",
+  vision_obstacle: "This impediment is the vision's main obstacle. Change the obstacle on the Vision tab first.",
+  visions_obstacle_id_fkey: "This impediment is the vision's main obstacle. Change the obstacle on the Vision tab first.",
   active_sprint_exists: "This area already has an active sprint.",
   invalid_start_date: "A sprint starts today or tomorrow.",
   invalid_tz: "Your browser's time zone was not recognised.",

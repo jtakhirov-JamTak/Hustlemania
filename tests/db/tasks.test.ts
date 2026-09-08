@@ -30,8 +30,8 @@ describe("tasks", () => {
   beforeAll(async () => {
     a = await createTestUser("tasks-a");
     b = await createTestUser("tasks-b");
-    await insertVision(a, "wealth");
-    await insertVision(b, "wealth");
+    await insertVision(a);
+    await insertVision(b);
     const today = await dbTodayIn(TZ);
     sprintId = await startSprint(a, moneySprintArgs({ ...(await seedItems(a)), p_tz: TZ, p_start_date: today, p_amount: 1400 }));
     const bSprint = await startSprint(b, moneySprintArgs({ ...(await seedItems(b)), p_tz: TZ, p_start_date: today, p_amount: 1400 }));

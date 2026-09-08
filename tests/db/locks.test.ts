@@ -22,7 +22,7 @@ describe("locks: sprint after start, day after close", () => {
 
   beforeAll(async () => {
     u = await createTestUser("locks");
-    await insertVision(u, "wealth");
+    await insertVision(u);
     sprintId = await startSprint(u, moneySprintArgs({ ...(await seedItems(u)), p_tz: TZ, p_start_date: await dbTodayIn(TZ), p_amount: 1400 }));
     const days = await sql<{ id: string; day_index: number }[]>`
       select id, day_index from public.sprint_days where sprint_id = ${sprintId} order by day_index`;

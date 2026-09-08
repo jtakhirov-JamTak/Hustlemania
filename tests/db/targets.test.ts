@@ -52,7 +52,7 @@ describe("F3 targets: save_targets, locking, ownership", () => {
     let sprintId: string;
 
     beforeAll(async () => {
-      await insertVision(u, "wealth");
+      await insertVision(u);
       sprintId = await startSprint(u, moneySprintArgs({ ...(await seedItems(u)), p_tz: TZ, p_start_date: today }));
     });
 
@@ -156,7 +156,6 @@ describe("F3 targets: save_targets, locking, ownership", () => {
     let sprintId: string;
 
     beforeAll(async () => {
-      await insertVision(u, "health");
       sprintId = await startSprint(u, moneySprintArgs({ ...(await seedItems(u)), p_area: "health", p_tz: TZ, p_start_date: today, p_amount: 1400 }));
     });
 
@@ -192,7 +191,6 @@ describe("F3 targets: save_targets, locking, ownership", () => {
     let sprintId: string;
 
     beforeAll(async () => {
-      await insertVision(u, "relationships");
       sprintId = await startSprint(u, moneySprintArgs({ ...(await seedItems(u)), p_area: "relationships", p_tz: TZ, p_start_date: tomorrow }));
     });
 
@@ -214,8 +212,7 @@ describe("F3 targets: save_targets, locking, ownership", () => {
 
     beforeAll(async () => {
       u2 = await createTestUser("targets-setup");
-      await insertVision(u2, "wealth");
-      await insertVision(u2, "health");
+      await insertVision(u2);
     });
 
     afterAll(async () => {

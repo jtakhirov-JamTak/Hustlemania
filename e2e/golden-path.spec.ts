@@ -33,6 +33,11 @@ test.describe("golden path", () => {
 
   test("sign in → Vision → start Sprint → Day 1 → close → locked after reload", async ({ page }, testInfo) => {
     const isPhone = testInfo.project.name === "phone";
+    // No horizontal overflow at either viewport, on every Vision view and wizard step (F9).
+    const noOverflow = async () => {
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
+    };
 
     await signInViaMagicLink(page, user.email);
 
@@ -45,28 +50,84 @@ test.describe("golden path", () => {
     const sidebarWidth = await page.locator("[data-sidebar]").evaluate((el) => getComputedStyle(el).width);
     expect(sidebarWidth).toBe(isPhone ? "390px" : "266px");
 
-    // Empty state: no vision yet → write it.
+    // Empty state: no vision yet → the Sprints sidebar says Locked, the card links to /vision.
     await expect(page.getByRole("heading", { name: "No sprint can start here yet" })).toBeVisible();
-    await page.getByRole("link", { name: /Write the .* vision/ }).click();
-    await expect(page).toHaveURL(/\/vision\/health$/);
-    await page.getByLabel("The vision").fill("In a year I run three times a week and sleep seven hours.");
-    await page.getByRole("button", { name: "Save vision" }).click();
-    await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+    await expect(page.locator("[data-sidebar]").getByText("Locked")).toHaveCount(3);
+    await page.getByRole("link", { name: "Write the vision" }).click();
+    await expect(page).toHaveURL(/\/vision$/);
 
-    // Back to Sprints: the area is now Ready → create a sprint.
+    // F9 step 1: the sidebar reads 0 of 3; a past deadline shows the hint and does not submit.
+    const visionSetup = page.getByTestId("vision-setup");
+    await expect(visionSetup).toHaveAttribute("data-step", "1");
+    await expect(page.locator("[data-sidebar]").getByText("0 of 3")).toBeVisible();
+    // The sub line is in the DOM on both viewports; the phone chip row hides it (F8).
+    const sideSub = (text: string) => (isPhone ? expect(page.locator("[data-sidebar]").getByText(text)).toBeHidden() : expect(page.locator("[data-sidebar]").getByText(text)).toBeVisible());
+    await sideSub("Not written yet");
+    await noOverflow();
+    const saveVision = page.getByRole("button", { name: "Save & continue" });
+    await expect(page.getByText("The vision unlocks every sprint.")).toBeVisible();
+    await page.getByLabel("Vision", { exact: true }).fill("In a year I run three times a week and sleep seven hours.");
+    await page.getByLabel("Deadline").fill("2020-01-01");
+    await expect(page.getByText("The deadline must be in the future.")).toBeVisible();
+    await expect(saveVision).toHaveAttribute("aria-disabled", "true");
+    // Submitting the form (Enter in a field) is a no-op while the hint stands.
+    await page.getByLabel("Proof").press("Enter");
+    await expect(visionSetup).toHaveAttribute("data-step", "1");
+    const nextYear = addDays(localDateIn("UTC", new Date()), 365);
+    await page.getByLabel("Deadline").fill(nextYear);
+    await expect(page.getByText("Name what would prove it happened.")).toBeVisible();
+    await page.getByLabel("Proof").fill("Three runs a week held for a quarter");
+    await expect(saveVision).toHaveAttribute("aria-disabled", "false");
+    await saveVision.click();
+
+    // Step 2: the vision alone unlocks the sprints; create the obstacle on the spot.
+    await expect(page.getByTestId("vision-setup")).toHaveAttribute("data-step", "2");
+    await expect(page.locator("[data-sidebar]").getByText("1 of 3")).toBeVisible();
+    await expect(page.getByText("Pick or name one obstacle.")).toBeVisible();
+    await noOverflow();
+    await page.getByLabel("Situation").fill("Starting late");
+    await page.getByLabel("Interferes").fill("what it does to your day");
+    await page.getByRole("button", { name: "Save & continue" }).click();
+
+    // Step 3: the rule, saved onto the impediment.
+    await expect(page.getByTestId("vision-setup")).toHaveAttribute("data-step", "3");
+    await expect(page.getByText("WHEN, THEN and the recovery criterion are all required.")).toBeVisible();
+    await noOverflow();
+    await page.getByLabel("WHEN", { exact: true }).fill("I notice myself delaying my first work block");
+    await page.getByLabel("THEN", { exact: true }).fill("I start a 10-minute timer on the smallest executable task");
+    await page.getByLabel("RECOVERED WHEN").fill("The timer is running within 10 minutes");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+
+    // Overview: 3 of 3, the obstacle card, no sprints yet.
+    const overview = page.getByTestId("vision-overview");
+    await expect(overview).toBeVisible();
+    await expect(page.getByTestId("vision-steps")).toHaveText("3 of 3 steps");
+    await noOverflow();
+    await expect(page.getByTestId("card-obstacle")).toContainText("Starting late");
+    await expect(page.getByTestId("card-rule")).toContainText("WHEN I notice myself delaying my first work block → THEN I start a 10-minute timer on the smallest executable task");
+    await expect(page.getByTestId("card-sprints")).toContainText("No sprints yet.");
+    await expect(page.getByTestId("vision-meta")).toContainText("Not reviewed yet");
+    await expect(page.locator("[data-sidebar]").getByText("3 of 3")).toBeVisible();
+
+    // The Sprints sidebar now reads Ready on every area → create a sprint.
     await page.goto("/sprints/health");
+    await expect(page.locator("[data-sidebar]").getByText("Ready")).toHaveCount(3);
     await page.getByRole("link", { name: "Create a Health sprint" }).click();
     await expect(page).toHaveURL(/\/sprints\/new\?area=health$/);
+    await expect(page.getByTestId("wizard-vision")).toContainText("In a year I run three times a week");
+    await noOverflow();
 
     // Step 1
     await page.getByLabel("Sprint outcome").fill("Save $8,000 toward the emergency fund");
     await page.getByRole("button", { name: "Continue" }).click();
     // Step 2 (money, USD)
+    await noOverflow();
     await page.getByLabel(/Sprint goal/).fill("8000");
     await page.getByLabel("Usage 1 label").fill("Rent");
     await page.getByLabel("Usage 1 amount").fill("2800");
     await page.getByRole("button", { name: "Continue" }).click();
     // Step 3
+    await noOverflow();
     await page.getByRole("button", { name: "Confidence 7" }).click();
     await page.getByLabel("Why this sprint matters").fill("A cushion buys calm.");
     await page.getByLabel(/Celebration/).fill("Dinner at the lake");
@@ -78,6 +139,7 @@ test.describe("golden path", () => {
     await expect(summary).toContainText("Goal · locked 8,000 USD");
     await expect(page.getByTestId("plan-delta")).toHaveText("Balanced");
     await expect(page.getByText(/does not split evenly/)).toBeVisible();
+    await noOverflow();
 
     // F3: Custom mode — every day is editable before the start, today included. Zeroing
     // day 7 leaves the plan 571 short; nothing is redistributed, and Start stays off
@@ -104,18 +166,17 @@ test.describe("golden path", () => {
     const start = page.getByRole("button", { name: "Start sprint" });
     await expect(start).toBeDisabled();
     await expect(page.getByText("Select 1–5 impediments.")).toBeVisible();
-    await page.getByLabel("Create a new impediment").fill("Starting late");
-    await page.getByTestId("wizard-impediments").getByRole("button", { name: "Create" }).click();
-    await expect(page.getByTestId("wizard-impediments").getByRole("checkbox", { name: "Starting late" })).toHaveAttribute("aria-checked", "true");
+    // F9: the vision's obstacle is a global impediment with its rule, so it is offered here.
+    await page.getByTestId("wizard-impediments").getByRole("checkbox", { name: /Starting late/ }).click();
+    await expect(page.getByTestId("wizard-impediments").getByRole("checkbox", { name: /Starting late/ })).toHaveAttribute("aria-checked", "true");
     await expect(page.getByText("Designate the highest impediment.")).toBeVisible();
     await page.getByTestId("wizard-highest").getByRole("radio", { name: /Starting late/ }).click();
-    const highestSetup = page.getByTestId("wizard-highest");
-    await expect(page.getByText("The highest impediment needs WHEN → THEN and a recovery criterion.")).toBeVisible();
-    await highestSetup.getByLabel("WHEN", { exact: true }).fill("I notice myself delaying my first work block");
-    await highestSetup.getByLabel("THEN", { exact: true }).fill("I start a 10-minute timer on the smallest executable task");
-    // F6: WHEN + THEN alone do not unblock — the recovery criterion is the third part.
-    await expect(page.getByText("The highest impediment needs WHEN → THEN and a recovery criterion.")).toBeVisible();
-    await highestSetup.getByLabel("RECOVERED WHEN").fill("The timer is running within 10 minutes");
+    // The rule written on the Vision tab is complete, so no proof inputs open.
+    await expect(page.getByTestId("wizard-highest").getByLabel("WHEN", { exact: true })).toHaveCount(0);
+    // A second impediment created inline still works (the create row is unchanged).
+    await page.getByLabel("Create a new impediment").fill("Phone distraction");
+    await page.getByTestId("wizard-impediments").getByRole("button", { name: "Create" }).click();
+    await expect(page.getByTestId("wizard-impediments").getByRole("checkbox", { name: "Phone distraction" })).toHaveAttribute("aria-checked", "true");
     await expect(page.getByText("Select 1–3 execution cues.")).toBeVisible();
     // F6: a cue is a WHEN → REMIND pair; Create waits for both.
     const cueSetup = page.getByTestId("wizard-cues");
@@ -164,7 +225,7 @@ test.describe("golden path", () => {
     await expect(highest.getByTestId("proof-when")).toHaveText("I notice myself delaying my first work block");
     await expect(highest.getByTestId("proof-then")).toHaveText("I start a 10-minute timer on the smallest executable task");
     await expect(highest.getByTestId("proof-recover")).toHaveText("The timer is running within 10 minutes");
-    await expect(highest.getByTestId("also-watching")).toContainText("1 of 5");
+    await expect(highest.getByTestId("also-watching")).toContainText("2 of 5");
     await expect(page.getByTestId("sprint-items")).toContainText("1 of 3");
     await expect(page.getByTestId("sprint-items").getByText("Ask how much this pays")).toBeVisible();
     await expect(page.getByTestId("sprint-items").getByText("WHEN I schedule anything")).toBeVisible();
@@ -235,10 +296,6 @@ test.describe("golden path", () => {
     expect(bodyText).not.toMatch(/\b(HIT|MISS)\b/);
 
     // The page never scrolls sideways, with the folds open and the plan in edit mode.
-    const noOverflow = async () => {
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-      expect(overflow).toBeLessThanOrEqual(0);
-    };
     await noOverflow();
     // Every text field renders at 16px or more, so iOS Safari never zooms on focus (audit #1).
     // Includes the plan's edit inputs, the smallest fields on the page.
@@ -338,7 +395,9 @@ test.describe("golden path", () => {
     // Untouched cues are offered; the focus cue never is.
     await expect(setup.getByTestId("quiet-cue")).toHaveCount(1);
     await expect(setup.getByTestId("quiet-cue")).toContainText("Close the laptop at nine");
-    await expect(setup.getByTestId("quiet-impediment")).toHaveCount(0);
+    // F9 golden path carries a second impediment (Phone distraction), untouched at close → offered.
+    await expect(setup.getByTestId("quiet-impediment")).toHaveCount(1);
+    await expect(setup.getByTestId("quiet-impediment")).toContainText("Phone distraction");
     await setup.getByRole("button", { name: "Remove Close the laptop at nine" }).click();
     await expect(setup.getByTestId("quiet-cue")).toHaveCount(0);
     await expect(page.getByTestId("sprint-items")).toContainText("1 of 3");
@@ -352,8 +411,11 @@ test.describe("golden path", () => {
     // offered item, the untouched cue group as unanswered.
     const dayRow = await admin.from("sprint_days").select("id, response, recovered, impact, proof_recover").eq("user_id", user.id).eq("day_index", 1).single();
     expect(dayRow.data).toMatchObject({ response: "partially", recovered: "yes", impact: "some", proof_recover: "The timer is running within 10 minutes" });
-    const impRows = await admin.from("day_impediment_observations").select("name, occurred, was_highest").eq("sprint_day_id", dayRow.data!.id);
-    expect(impRows.data).toEqual([{ name: "Starting late", occurred: "yes", was_highest: true }]);
+    const impRows = await admin.from("day_impediment_observations").select("name, occurred, was_highest").eq("sprint_day_id", dayRow.data!.id).order("name");
+    expect(impRows.data).toEqual([
+      { name: "Phone distraction", occurred: "no", was_highest: false },
+      { name: "Starting late", occurred: "yes", was_highest: true },
+    ]);
     const cueRows = await admin.from("day_cue_observations").select("name, used, was_focus").eq("sprint_day_id", dayRow.data!.id).order("name");
     expect(cueRows.data).toEqual([
       { name: "Ask how much this pays", used: "unanswered", was_focus: true },
@@ -396,6 +458,36 @@ test.describe("golden path", () => {
     await expect(page.locator("html")).not.toHaveAttribute("data-theme", "night");
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--page-bg").trim())).toBe("#f9f9fd");
 
+    // F9: the sprint appears under "Sprints behind this vision"; Review → Still true stamps today.
+    await page.goto("/vision");
+    const visionSprint = page.getByTestId("card-sprints").getByTestId("vision-sprint");
+    await expect(visionSprint).toHaveCount(1);
+    await expect(visionSprint).toContainText("Health");
+    await expect(visionSprint).toContainText("Save $8,000 toward the emergency fund");
+    await expect(visionSprint).toContainText("Day 1 of 14");
+    await page.getByRole("button", { name: "Review vision" }).click();
+    const reviewCard = page.getByTestId("vision-review");
+    await expect(reviewCard).toContainText("Proof you named: Three runs a week held for a quarter. 1 sprint has run behind it.");
+    await reviewCard.getByLabel("Review note").fill("Ran Monday and Wednesday.");
+    await reviewCard.getByRole("button", { name: "Still true · mark reviewed" }).click();
+    const reviewedStamp = `Reviewed ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+    await expect(page.getByTestId("vision-meta")).toContainText(reviewedStamp);
+    await sideSub(reviewedStamp);
+    await expect(page.getByTestId("vision-review")).toHaveCount(0);
+    // Replace arms on the first tap and disarms on blur; nothing is archived.
+    await page.getByTestId("vision-replace").click();
+    await expect(page.getByTestId("vision-replace")).toHaveText("Tap again to archive it and start over");
+    await page.getByRole("button", { name: "Review vision" }).focus();
+    await expect(page.getByTestId("vision-replace")).toHaveText("Replace");
+    await noOverflow();
+    // DB: one active vision with the obstacle set, one review row.
+    const visions = await admin.from("visions").select("id, obstacle_id, archived_at").eq("user_id", user.id);
+    expect(visions.data).toHaveLength(1);
+    expect(visions.data![0].archived_at).toBeNull();
+    expect(visions.data![0].obstacle_id).not.toBeNull();
+    const reviews = await admin.from("vision_reviews").select("verdict, note").eq("user_id", user.id);
+    expect(reviews.data).toEqual([{ verdict: "still_true", note: "Ran Monday and Wednesday." }]);
+
     // F2 library: the impediment is in sprint history; archiving it is blocked because
     // it is the sprint's highest impediment (rule 20), and nothing changed.
     await page.goto("/vision/impediments");
@@ -406,11 +498,10 @@ test.describe("golden path", () => {
     await expect(item.locator("[data-part=situation]")).toHaveText("Starting late");
     await expect(item.locator("[data-part=interferes]")).toHaveText("what it does to your day");
     await expect(item.locator("[data-part=recovered]")).toHaveText("The timer is running within 10 minutes");
-    await expect(page.getByTestId("library-count")).toHaveText("1 · 0 archived");
+    await expect(page.getByTestId("library-count")).toHaveText("2 · 0 archived");
     await item.getByRole("button", { name: "Archive" }).click();
-    await expect(item.getByRole("alert")).toContainText("Archive is blocked");
-    // The first violated rule is reported: with one impediment, rule 4 fires before rule 5.
-    await expect(item.getByRole("alert")).toContainText("it would be left without an impediment");
+    // F9: the vision's obstacle is guarded before any sprint rule is consulted.
+    await expect(item.getByRole("alert")).toContainText("This impediment is the vision's main obstacle.");
     await page.reload();
     await expect(page.getByTestId("library-item").filter({ hasText: "Starting late" })).toBeVisible();
     await page.getByRole("button", { name: /Show archived/ }).click();

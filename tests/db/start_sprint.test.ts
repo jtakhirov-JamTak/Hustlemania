@@ -50,7 +50,7 @@ describe("start_sprint", () => {
   });
 
   it("creates the sprint and exactly 14 days whose targets sum to the goal", async () => {
-    await insertVision(u, "wealth");
+    await insertVision(u);
     const id = await startSprint(u, moneySprintArgs({ ...items, p_tz: TZ, p_start_date: today, p_amount: 10_000, p_intention: "  Move the money  " }));
 
     const s = await u.client.from("sprints").select("*").eq("id", id).single();
@@ -77,7 +77,7 @@ describe("start_sprint", () => {
   });
 
   it("the partial unique index also rejects a direct duplicate insert (rule 1, belt and braces)", async () => {
-    const [{ id: visionId }] = await sql<{ id: string }[]>`select id from public.visions where user_id = ${u.id} and area = 'wealth'`;
+    const [{ id: visionId }] = await sql<{ id: string }[]>`select id from public.visions where user_id = ${u.id} and archived_at is null`;
     await expect(
       sql`insert into public.sprints (user_id, vision_id, area, outcome, measurement, currency, amount, confidence, why, celebration, mantra, tz, start_date, end_date)
           values (${u.id}, ${visionId}, 'wealth', 'dup', 'money', 'USD', 1, 5, 'w', 'c', 'm', ${TZ}, ${today}, ${today}::date + 13)`,
@@ -99,15 +99,11 @@ describe("start_sprint", () => {
   });
 
   it("rejects a money amount that is not a whole currency unit", async () => {
-    await expectRpcError(u, "start_sprint", moneySprintArgs({ ...items, p_area: "relationships", p_tz: TZ, p_start_date: today, p_amount: 150 }), "no_active_vision");
-    await insertVision(u, "relationships");
+    // F9: the one vision covers every Area, so relationships is unlocked by the wealth vision above.
     await expectRpcError(u, "start_sprint", moneySprintArgs({ ...items, p_area: "relationships", p_tz: TZ, p_start_date: today, p_amount: 150 }), "invalid_amount");
   });
 
-  describe("setup validation (health area, fresh vision)", () => {
-    beforeAll(async () => {
-      await insertVision(u, "health");
-    });
+  describe("setup validation (health area)", () => {
     const base = () => moneySprintArgs({ ...items, p_area: "health", p_tz: TZ, p_start_date: today });
 
     it("accepts tomorrow but rejects yesterday and the day after tomorrow", async () => {

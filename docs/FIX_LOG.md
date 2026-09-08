@@ -6,6 +6,24 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-07 — Creating the vision's obstacle by name failed with the "main obstacle" copy
+
+**Problem.** `setVisionObstacle` passed `p_impediment_id: undefined` when the user named a
+new impediment instead of picking one. supabase-js drops an undefined key from the RPC
+body, so PostgREST looked for `set_vision_obstacle(p_explanation, p_name)`, found no such
+signature and answered with a schema-cache error. `friendlyError` then matched the code
+`vision_obstacle` inside the function name in that message and showed "This impediment is
+the vision's main obstacle" on an empty library. The DB tests passed because they send an
+explicit `null`. Found by the F9 golden path (step 2, "Create the impediment").
+
+**Fix.** The action sends `p_impediment_id: null` explicitly (the parameter has no default
+in 0011, by design: exactly one of id / name is the rule).
+
+**Regression test.** `e2e/golden-path.spec.ts` (both projects): step 2 with no global
+impediments creates "Starting late" by name and must land on step 3.
+
+**Where found.** `npm run test:e2e`, first F9 run.
+
 ## 2026-09-07 — A cue created inside the Today "Add cue" picker appeared twice
 
 **Problem.** `SprintItemsRow`'s picker listed `[...candidates, ...created]`. `createItem`

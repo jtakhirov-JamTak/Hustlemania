@@ -3,7 +3,9 @@ import { cache } from "react";
 import { AREAS, type AreaKey } from "@/lib/areas";
 import type { Database, Tables } from "@/lib/database.types";
 import { NO_OBSERVATIONS, type DayObservations } from "@/lib/daySummary";
+import type { Measurement } from "@/lib/format";
 import { report } from "@/lib/observe";
+import { sprintDayFor } from "@/lib/sprintDay";
 
 export type Vision = Tables<"visions">;
 export type Sprint = Tables<"sprints">;
@@ -47,34 +49,121 @@ export type LibraryItem = {
 export type AreaOverview = {
   key: AreaKey;
   name: string;
-  vision: Vision | null;
   sprint: Sprint | null;
 };
 
+/** F9: the account's one active vision plus the active sprint per area. */
+export type Overview = { vision: Vision | null; areas: AreaOverview[] };
+
 /**
- * Active vision and active sprint per area, for sidebars and empty states. Memoised per
- * request on the client identity: the sprints layout, its index page and the vision
- * layout all read it, and one request should ask the DB once.
+ * The active vision and the active sprint per area, for sidebars and empty states.
+ * Memoised per request on the client identity: the sprints layout, its index page and
+ * the wizard page all read it, and one request should ask the DB once.
  */
-export const loadOverview = cache(async (supabase: Client): Promise<AreaOverview[]> => {
+export const loadOverview = cache(async (supabase: Client): Promise<Overview> => {
   const [visions, sprints] = await Promise.all([
-    supabase.from("visions").select("*").is("archived_at", null),
+    supabase.from("visions").select("*").is("archived_at", null).maybeSingle(),
     supabase.from("sprints").select("*").eq("status", "active"),
   ]);
   if (visions.error) throw new Error(`visions: ${visions.error.message}`);
   if (sprints.error) throw new Error(`sprints: ${sprints.error.message}`);
-  return AREAS.map((a) => ({
-    key: a.key,
-    name: a.name,
-    vision: visions.data.find((v) => v.area === a.key) ?? null,
-    sprint: sprints.data.find((s) => s.area === a.key) ?? null,
-  }));
+  return {
+    vision: visions.data,
+    areas: AREAS.map((a) => ({ key: a.key, name: a.name, sprint: sprints.data.find((s) => s.area === a.key) ?? null })),
+  };
 });
 
-export async function loadActiveVision(supabase: Client, area: AreaKey): Promise<Vision | null> {
-  const res = await supabase.from("visions").select("*").eq("area", area).is("archived_at", null).maybeSingle();
-  if (res.error) throw new Error(`vision: ${res.error.message}`);
-  return res.data;
+/** The vision's main obstacle: a global impediment, with its guiding rule (the proof parts). */
+export type VisionObstacle = Pick<Impediment, "id" | "name" | "explanation" | "proof_when" | "proof_then" | "proof_recover">;
+
+export type VisionReview = { verdict: string; created_at: string };
+
+export type PreviousVision = { id: string; body: string; created_at: string; archived_at: string; sprintCount: number };
+
+export type ActiveVision = {
+  vision: Vision;
+  obstacle: VisionObstacle | null;
+  latestReview: VisionReview | null;
+  sprintCount: number;
+};
+
+export type VisionView = { active: ActiveVision | null; previous: PreviousVision[] };
+
+/** How many of the three annual steps the vision has: text, obstacle, complete rule. */
+export function visionSteps(v: ActiveVision | null): 0 | 1 | 2 | 3 {
+  if (!v) return 0;
+  if (!v.obstacle) return 1;
+  return proofComplete(v.obstacle) ? 3 : 2;
+}
+
+/**
+ * F9: the active vision with its obstacle, the latest review and the count of sprints
+ * behind it, plus the archived visions with their sprint counts. Three reads, all under
+ * RLS; memoised per request because the Vision layout (sidebar) and page both need it.
+ */
+export const loadVision = cache(async (supabase: Client): Promise<VisionView> => {
+  const [visions, sprints] = await Promise.all([
+    supabase
+      .from("visions")
+      .select("*, obstacle:impediments(id, name, explanation, proof_when, proof_then, proof_recover)")
+      .order("archived_at", { ascending: false, nullsFirst: true }),
+    supabase.from("sprints").select("vision_id"),
+  ]);
+  if (visions.error) throw new Error(`visions: ${visions.error.message}`);
+  if (sprints.error) throw new Error(`sprints: ${sprints.error.message}`);
+  const counts = new Map<string, number>();
+  for (const s of sprints.data) counts.set(s.vision_id, (counts.get(s.vision_id) ?? 0) + 1);
+
+  const activeRow = visions.data.find((v) => v.archived_at === null) ?? null;
+  let latestReview: VisionReview | null = null;
+  if (activeRow) {
+    const review = await supabase.from("vision_reviews").select("verdict, created_at").eq("vision_id", activeRow.id).order("created_at", { ascending: false }).order("id").limit(1).maybeSingle();
+    if (review.error) throw new Error(`vision_reviews: ${review.error.message}`);
+    latestReview = review.data;
+  }
+  const previous: PreviousVision[] = visions.data
+    .filter((v) => v.archived_at !== null)
+    .map((v) => ({ id: v.id, body: v.body, created_at: v.created_at, archived_at: v.archived_at!, sprintCount: counts.get(v.id) ?? 0 }));
+  if (!activeRow) return { active: null, previous };
+  const { obstacle, ...vision } = activeRow;
+  return { active: { vision, obstacle: obstacle ?? null, latestReview, sprintCount: counts.get(vision.id) ?? 0 }, previous };
+});
+
+/** One row of "Sprints behind this vision": status from the sprint's own zone, the verdict once its end date has passed. */
+export type VisionSprintRow = {
+  id: string;
+  area: AreaKey;
+  outcome: string;
+  label: string;
+  /** Set once the end date has passed: the sum of closed days against the goal. */
+  verdict: { met: boolean; actual: number; goal: number; measured: { measurement: Measurement; currency: string | null; unit: string | null } } | null;
+};
+
+/** Sprints started behind the active vision, active first, then newest first. */
+export async function loadVisionSprints(supabase: Client, visionId: string, now = new Date()): Promise<VisionSprintRow[]> {
+  const sprints = await supabase.from("sprints").select("*").eq("vision_id", visionId).order("start_date", { ascending: false }).order("id");
+  if (sprints.error) throw new Error(`sprints: ${sprints.error.message}`);
+  const ids = sprints.data.map((s) => s.id);
+  const days = ids.length ? await supabase.from("sprint_days").select("sprint_id, actual").in("sprint_id", ids).not("closed_at", "is", null) : { data: [], error: null };
+  if (days.error) throw new Error(`sprint_days: ${days.error.message}`);
+  const actuals = new Map<string, number>();
+  for (const d of days.data) actuals.set(d.sprint_id, (actuals.get(d.sprint_id) ?? 0) + Number(d.actual ?? 0));
+
+  const rows = sprints.data.map((s): VisionSprintRow => {
+    const pos = sprintDayFor(s, now);
+    const label = pos.kind === "during" ? `Day ${pos.dayIndex} of 14` : pos.kind === "before" ? "Starts tomorrow" : "Ended";
+    const actual = actuals.get(s.id) ?? 0;
+    const goal = Number(s.amount);
+    return {
+      id: s.id,
+      area: s.area as AreaKey,
+      outcome: s.outcome,
+      label,
+      verdict: pos.kind === "after" ? { met: actual >= goal, actual, goal, measured: { measurement: s.measurement as Measurement, currency: s.currency, unit: s.unit } } : null,
+    };
+  });
+  // Running sprints first (no verdict yet), then the finished ones, each group newest first.
+  return rows.sort((a, b) => Number(a.verdict !== null) - Number(b.verdict !== null));
 }
 
 export async function loadActiveSprint(

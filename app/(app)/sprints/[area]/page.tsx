@@ -8,8 +8,8 @@ import {
   eligibleFor,
   loadActiveLibrary,
   loadActiveSprint,
-  loadActiveVision,
   loadDayOfferedItems,
+  loadOverview,
   loadSprintItems,
   loadSprintObservations,
   loadStreaks,
@@ -33,7 +33,7 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
   const name = areaName(area);
 
   if (!active) {
-    const vision = await loadActiveVision(supabase, area);
+    const { vision } = await loadOverview(supabase);
     return (
       <div className="card card-page poster" data-testid="empty-state">
         <span className="tag tag-accent">{name}</span>
@@ -41,10 +41,10 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
         <p className="lede lede-narrow">
           {vision
             ? "Pick one numeric goal that moves the vision, lock it for 14 days, and close every day with an honest actual."
-            : `A sprint has to advance a 1-year vision. Write the ${name} vision first; it takes one paragraph.`}
+            : "A sprint has to advance the vision. Write it first; it takes three short steps."}
         </p>
-        <Link href={vision ? `/sprints/new?area=${area}` : `/vision/${area}`} className="btn btn-primary btn-link mt-18">
-          {vision ? `Create a ${name} sprint` : `Write the ${name} vision`}
+        <Link href={vision ? `/sprints/new?area=${area}` : "/vision"} className="btn btn-primary btn-link mt-18">
+          {vision ? `Create a ${name} sprint` : "Write the vision"}
         </Link>
       </div>
     );

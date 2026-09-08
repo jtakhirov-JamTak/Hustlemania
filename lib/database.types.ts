@@ -512,35 +512,90 @@ export type Database = {
           },
         ]
       }
+      vision_reviews: {
+        Row: {
+          created_at: string
+          id: string
+          note: string | null
+          user_id: string
+          verdict: string
+          vision_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          user_id: string
+          verdict: string
+          vision_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          user_id?: string
+          verdict?: string
+          vision_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vision_reviews_vision_id_fkey"
+            columns: ["vision_id"]
+            isOneToOne: false
+            referencedRelation: "visions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       visions: {
         Row: {
           archived_at: string | null
-          area: string
+          baseline: string | null
           body: string
           created_at: string
+          deadline: string
           id: string
+          meaning: string | null
+          obstacle_id: string | null
+          proof: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           archived_at?: string | null
-          area: string
+          baseline?: string | null
           body: string
           created_at?: string
+          deadline: string
           id?: string
+          meaning?: string | null
+          obstacle_id?: string | null
+          proof?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           archived_at?: string | null
-          area?: string
+          baseline?: string | null
           body?: string
           created_at?: string
+          deadline?: string
           id?: string
+          meaning?: string | null
+          obstacle_id?: string | null
+          proof?: string | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "visions_obstacle_id_fkey"
+            columns: ["obstacle_id"]
+            isOneToOne: false
+            referencedRelation: "impediments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -604,9 +659,14 @@ export type Database = {
         Args: { p_item_id: string; p_kind: string; p_sprint_id: string }
         Returns: undefined
       }
+      replace_vision: { Args: never; Returns: undefined }
       restore_item: {
         Args: { p_item_id: string; p_kind: string }
         Returns: undefined
+      }
+      review_vision: {
+        Args: { p_note?: string; p_verdict: string }
+        Returns: string
       }
       same_daily_targets: {
         Args: { p_amount: number; p_step?: number }
@@ -615,6 +675,16 @@ export type Database = {
       save_targets: {
         Args: { p_sprint_id: string; p_targets: number[] }
         Returns: undefined
+      }
+      save_vision: {
+        Args: {
+          p_baseline?: string
+          p_body: string
+          p_deadline: string
+          p_meaning?: string
+          p_proof: string
+        }
+        Returns: string
       }
       set_focus_cue: {
         Args: { p_cue_id: string; p_sprint_id: string }
@@ -633,6 +703,18 @@ export type Database = {
       set_item_scope: {
         Args: { p_item_id: string; p_kind: string; p_scope: string }
         Returns: Json
+      }
+      set_vision_obstacle: {
+        Args: {
+          p_explanation?: string
+          p_impediment_id: string
+          p_name?: string
+        }
+        Returns: string
+      }
+      set_vision_rule: {
+        Args: { p_recover: string; p_then: string; p_when: string }
+        Returns: undefined
       }
       sprint_invalid_reason: {
         Args: { p_exclude_item?: string; p_kind?: string; p_sprint_id: string }
