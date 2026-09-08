@@ -2,6 +2,51 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## Found during F10 (2026-09-08), not fixed there
+
+- **eval-06 findings** (no P0/P1; eight P2s). Fixed before green: the missing "Across n
+  finished sprints" rail card (P2-1) · `answered` excluding `partially` (P2-3, migration
+  0015) · the lesson card not naming its Area (P2-4) · `sprint_best_streak` disagreeing
+  with `sprint_streak_at` about an interior cancelled day (P2-5, migration 0015).
+  Amended in the SPEC because the criterion was wrong, not the code: the
+  `sprint_days_effective` pin covers the four card functions, not five (P2-2 —
+  `sprint_review_summary` must read `sprint_days` to count the days the view excludes) ·
+  the gate kicker for `ended` is "sprint ended" (P2-7) · End sprint early is hidden once
+  the window has passed, not only once the sprint is finished (P2-8). The one left open
+  is P2-6, below.
+- **`stampDate` formats in the render host's zone, not the sprint's** (`lib/dates.ts`).
+  A review completed at 06:53 UTC reads "Reviewed Sep 7" on a machine at UTC−7 while the
+  journal calls the same moment Day 7 of September 8. Pre-existing and shared with F9's
+  Vision overview, so not an F10 regression; the fix is to decide one zone for
+  human-readable stamps (the sprint's `tz` is the only one the app already trusts) and
+  pass it through. eval-06 P2-6.
+- **The evaluator's own integrity check failed through no fault of its own** — this
+  session edited `docs/BACKLOG.md`, `docs/DECISIONS.md` and `docs/FIX_LOG.md` while it was
+  running, so its opening and closing `git status --porcelain` differ by those three
+  lines. The evaluator holds no write tools and its shell refused every mutation, so the
+  divergence is attributable and the findings stand. The lesson for next time: no writes
+  of any kind, including docs, between dispatch and report.
+
+- **The v8 800px New Sprint dialog restyle is still owed.** F9 deferred it to F10 and F10
+  took the kit pre-fill only (DECISIONS 2026-09-08), so the wizard keeps its F9 look. The
+  v8 README §New Sprint dialog draws it: 800px, radius 22, the step progress bar and the
+  small picker modal. The plan grid and the start-date control are not drawn there and
+  need a home in that design. Its own one-line entry, not part of F11.
+- **The Insights sidebar rows carry no Met / Under or % of goal yet** — F11 owns them
+  (reconciliation D9), and F10 built the rows so the postmortem had a home.
+- **`insight_min_days` is duplicated as `MIN_DAYS` in `lib/insightCards.ts`** for the
+  "Needs 3 days with and 3 without" copy. The `enough` flag is always the DB's, so the two
+  cannot disagree about what is shown — only about what the sentence says the threshold
+  is. Move the number into the card payload if it ever becomes configurable.
+- **A card's coverage line takes the maximum `logged_days` across its rows**, so a card
+  whose items were logged on different day counts prints the largest. The v8 README
+  specifies one coverage line per card, and per-row counts already sit on every row; noted
+  so it is not read as a bug.
+- **The kit offers no highest impediment unless one was promoted.** Deciding nothing gives
+  the next sprint every item and no highest, so the wizard still asks for one. This
+  matches the v8 artboard, which shows "None chosen" in the same case, but it means a
+  reviewer who changes nothing does not carry the highest forward.
+
 ## Found during F9 (2026-09-07), not fixed there
 
 - **eval-05 observations** (no P0/P1; both P2s fixed before green): the library's direct
@@ -9,8 +54,8 @@
   outside `set_vision_rule` (F6's trigger guards only an active sprint's highest; the
   Guiding-rule card's Add path restores it — DECISIONS 2026-09-08 rejected extending the
   trigger) · `set_vision_obstacle` accepts a duplicate impediment name (no uniqueness rule
-  in SPEC) · a sprint past its `end_date` still reads `status = 'active'`, so the wizard
-  calls the area "active" while the sidebar says "Ended" — F10 owns the transition ·
+  in SPEC) · ~~a sprint past its `end_date` still reads `status = 'active'`~~ (done in
+  F10: Finish the sprint moves it, and the sidebar reads `Ended · Needs review`) ·
   `save_vision` has no body length limit.
 
 - **`friendlyError` matches codes as substrings of the whole message**, so a PostgREST
@@ -27,7 +72,9 @@
 - **`JWT issued at future` on the first request after a magic-link sign-in** (one desktop e2e run; the phone run and every rerun passed). PostgREST in the Docker stack rejected a token the host had just minted, so `/sprints` rendered the error boundary. A clock-skew flake between Docker and the host, not app code; if it recurs, compare `date -u` with `docker exec supabase_db_Hustlemania date -u` and restart Docker Desktop.
 ## Noted during the F8 interview (2026-09-07)
 
-- **F10 input — the postmortem lists each closed day's tasks** (done and not done, read-only). The journal's closed rows stay one line (F8, user's call); after a day closes its tasks are readable nowhere until F10 renders them. Add to the F10 entry when `/interview` rewrites it.
+- ~~**F10 input — the postmortem lists each closed day's tasks**~~ **Done (F10,
+  2026-09-08):** the postmortem's Day-by-day block renders every day with its tasks, done
+  and not done.
 - **F8 note for F10/F11:** `sprint_invalid_reason` still reports `no_focus_cue` on sprints seeded by `insertSprintRows` (no memberships); nothing calls it on them today.
 
 ## Found during F7 (2026-09-07), not fixed there
@@ -137,10 +184,11 @@ The ranked backlog itself is `docs/audits/full-audit-2026-09-05.md` (47 findings
 
 ## Found during F5 (2026-09-05), not fixed there
 
-- **The streak must stop at the closure date once F10 (was F6) adds early completion.**
-  `sprint_streak_at` walks every day with date ≤ today; after "Complete Sprint" on day 9
-  the cancelled days 10–14 would read as missed and the streak as 0. F10 (was F6) owns this in the
-  migration that adds the closure timestamp (DECISIONS, F5 entry).
+- ~~**The streak must stop at the closure date once F10 adds early completion.**~~
+  **Done (F10, 2026-09-08):** `sprint_streak_at` clamps its horizon to the closure date
+  and excludes cancelled days; `tests/db/completion.test.ts` asserts a sprint completed on
+  its day 9 still reads 9 two days later, and the live mutation that removes the exclusion
+  turns it red.
 - **A backfill offers the day's own items but not the day's own intention or tasks**:
   the dialog closes a missed day with Actual, hurt/helped and notes; the Intention and
   Tasks cards keep showing today's day. Reading a past day in full is the History view

@@ -6,6 +6,57 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-08 — Ten new F10 functions were executable by `anon`
+
+**Problem.** Postgres grants EXECUTE to PUBLIC on every newly created function, and PUBLIC
+reaches the `anon` role. `0012_sprint_completion.sql` granted its ten entry points to
+`authenticated` but never revoked the implicit grant, so `complete_sprint`,
+`end_sprint_early`, `finish_sprint`, `finish_review`, `sprint_best_streak`, the four
+insight calculations and `sprint_review_summary` were all callable by an unauthenticated
+request. `0002_function_privileges.sql` records the same finding for 0001's functions —
+the note was there and the new migration did not follow it. Found by the existing pin in
+`tests/db/grants.test.ts` ("anon can execute no function in public") on the first run
+after the migration applied.
+
+**Fix.** `0013_f10_function_privileges.sql` revokes all ten from `public, anon` and
+re-applies the `authenticated` grants (revoking from PUBLIC also drops what a role held
+only through it). Nothing was exploitable in practice — every one of these raises
+`not_authenticated` on a null `auth.uid()` — but the invariant is "anon can execute no
+function in public", and a future function that forgets its own check would have had no
+second line of defence.
+
+**Regression test.** Already existed and is what caught it: `tests/db/grants.test.ts`
+asserts the anon-executable set is empty and pins the authenticated set, which now names
+the ten additions.
+
+**Where found.** F10 build, first `npm run test:db` after `0012` applied.
+
+---
+
+## 2026-09-08 — The postmortem's "Reviewed" date was a day ahead of the sidebar's
+
+**Problem.** The read-only postmortem rendered its stamp as
+`formatIsoDate(review.completed_at.slice(0, 10))`. `completed_at` is a UTC timestamp, so
+slicing the ISO string takes the **UTC** calendar date and prints it as if it were a local
+one. The Insights sidebar used `stampDate`, which converts at the edge. Between 5pm and
+midnight Pacific the same review therefore read "Reviewed September 8" on the page and
+"Reviewed Sep 7" in the sidebar. Found in the Chrome desktop check, by reading the two
+lines on one screen.
+
+**Fix.** The postmortem uses `stampDate(review.completed_at)`, the same helper as every
+other timestamp stamp in the app (the global rule: times are UTC in the database, convert
+at the edge). `formatIsoDate` stays for `date` columns, which are calendar dates with no
+zone.
+
+**Regression test.** None added: the failure is a clock-dependent rendering difference
+that a test would have to freeze the clock and the zone to catch, and the durable fix is
+that no timestamp column is formatted with `formatIsoDate` anywhere. Recorded here so the
+next `.slice(0, 10)` on a timestamptz is recognised on sight.
+
+**Where found.** F10 build, Chrome desktop check of the finished postmortem.
+
+---
+
 ## 2026-09-07 — Creating the vision's obstacle by name failed with the "main obstacle" copy
 
 **Problem.** `setVisionObstacle` passed `p_impediment_id: undefined` when the user named a

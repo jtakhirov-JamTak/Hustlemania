@@ -62,3 +62,15 @@ export function streakLabel(streak: number): string {
   if (streak <= 0) return "No streak";
   return `${streak}-day streak`;
 }
+
+/**
+ * How prominent the Celebration card is (PRD §10: "subtly more visible as success
+ * approaches and prominent on successful completion"). `met` once the closed days cover
+ * the goal, `near` from 80%, `away` below that.
+ */
+export function celebrationState(cumulative: number, goal: number): "away" | "near" | "met" {
+  if (goal <= 0) return "away";
+  const share = cumulative / goal;
+  if (share >= 1) return "met";
+  return share >= 0.8 ? "near" : "away";
+}

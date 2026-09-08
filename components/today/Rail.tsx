@@ -3,13 +3,16 @@
 import { ErrorBar } from "@/components/ErrorBar";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { removeSprintItem, saveProofPoint, setFocusCue, setHighestImpediment } from "@/app/(app)/actions/library";
+import { completeSprint, endSprintEarly } from "@/app/(app)/actions/review";
 import { saveMantra } from "@/app/(app)/actions/sprint";
 import { ItemPicker } from "@/components/ItemPicker";
 import { ProofInputs } from "@/components/ProofInputs";
 import { AddItemPicker, candidatesFor } from "@/components/today/AddItemPicker";
+import { TwoTap } from "@/components/TwoTap";
 import { callAction } from "@/lib/callAction";
 import { proofComplete, proofSummary, type ItemKind, type LibraryItem, type SprintItems } from "@/lib/data";
 import { formatAmount, type Measured } from "@/lib/format";
+import { celebrationState } from "@/lib/sprintDay";
 
 const PROOF_HINT = "WHEN, THEN and the recovery criterion are all required.";
 
@@ -17,8 +20,8 @@ type UsageRow = { label: string; amount: number };
 
 /**
  * The journal's right rail (F8, v8 README): mantra + streak, the highest impediment with
- * the other impediments under it, the cues, the celebration, the usage of funds.
- * Complete sprint and End sprint early arrive with F10.
+ * the other impediments under it, the cues, the celebration, the usage of funds. F10 adds
+ * the pinned lesson, Complete sprint once the goal is reached, and End sprint early.
  */
 export function Rail({
   sprintId,
@@ -30,6 +33,11 @@ export function Rail({
   celebration,
   measured,
   usage,
+  goalReached,
+  cumulative,
+  goal,
+  lastLesson,
+  areaLabel,
 }: {
   sprintId: string;
   mantra: string;
@@ -41,23 +49,111 @@ export function Rail({
   celebration: string;
   measured: Measured;
   usage: UsageRow[];
+  /** The closed days total the goal: Complete sprint is available (PRD §10). */
+  goalReached: boolean;
+  cumulative: number;
+  goal: number;
+  /** F10: this Area's last postmortem lesson, shown on Day 1 only. */
+  lastLesson: string | null;
+  areaLabel: string;
 }) {
   return (
     <aside className="rail" data-testid="rail" aria-label="Sprint">
       <MantraCard sprintId={sprintId} initial={mantra} streakText={streakText} />
+      {lastLesson ? (
+        <section className="r-card" data-testid="last-lesson">
+          <span className="t-kicker">Lesson from the last {areaLabel} sprint</span>
+          <div className="r-lesson">“{lastLesson}”</div>
+        </section>
+      ) : null}
       <HighestCard sprintId={sprintId} impediments={items.impediments} library={library} locked={locked} />
       <CuesCard sprintId={sprintId} cues={items.cues} library={library} locked={locked} />
-      <div className="r-card" data-testid="celebration-card">
-        <span className="t-kicker">Celebration</span>
-        <div className="r-text">{celebration}</div>
-      </div>
+      {goalReached && !locked ? <CompleteCard sprintId={sprintId} measured={measured} cumulative={cumulative} goal={goal} /> : null}
+      <Celebration text={celebration} cumulative={cumulative} goal={goal} />
       {measured.measurement === "money" && usage.length > 0 ? (
         <div className="r-card" data-testid="usage-card">
           <span className="t-kicker">Usage of funds</span>
           <div className="r-text">{usage.map((u) => `${formatAmount(measured, u.amount).replace(` ${measured.currency ?? ""}`, "")} ${u.label}`).join(" · ")}</div>
         </div>
       ) : null}
+      {!locked ? <EndEarly sprintId={sprintId} /> : null}
     </aside>
+  );
+}
+
+/**
+ * "Celebration becomes subtly more visible as success approaches and prominent on
+ * successful completion" (PRD §10): 600 weight and the share reached from 80%, green
+ * with the `Goal reached ·` prefix once the closed days cover the goal.
+ */
+function Celebration({ text, cumulative, goal }: { text: string; cumulative: number; goal: number }) {
+  const share = goal > 0 ? cumulative / goal : 0;
+  const state = celebrationState(cumulative, goal);
+  return (
+    <div className="r-card" data-testid="celebration-card">
+      <span className="t-kicker">Celebration</span>
+      <div className={state === "met" ? "r-celebration-met" : state === "near" ? "r-celebration-near" : "r-text"} data-state={state} data-testid="celebration-text">
+        {state === "met" ? "Goal reached · " : state === "near" ? `${Math.round(share * 100)}% there · ` : ""}
+        {text}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Reaching the goal unlocks Complete sprint; it never fires on its own (PRD §10). The
+ * remaining days are cancelled, not missed, and the copy says so before the press.
+ */
+function CompleteCard({ sprintId, measured, cumulative, goal }: { sprintId: string; measured: Measured; cumulative: number; goal: number }) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <section className="r-goal" data-testid="complete-sprint">
+      <div className="r-goal-line">
+        Goal reached · {formatAmount(measured, cumulative)} of {formatAmount(measured, goal)}. Remaining days are cancelled, not missed.
+      </div>
+      {error ? <ErrorBar className="mt-10">{error}</ErrorBar> : null}
+      <button
+        type="button"
+        className="btn btn-primary mt-10"
+        aria-disabled={pending}
+        onClick={() => {
+          if (pending) return;
+          setError(null);
+          start(async () => {
+            const res = await callAction(() => completeSprint(sprintId));
+            if (res.error) setError(res.error);
+          });
+        }}
+      >
+        {pending ? "Completing…" : "Complete sprint"}
+      </button>
+    </section>
+  );
+}
+
+/** End sprint early: destructive, so it is the two-tap (reconciliation B16). */
+function EndEarly({ sprintId }: { sprintId: string }) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <div className="r-foot">
+      {error ? <ErrorBar className="mb-6">{error}</ErrorBar> : null}
+      <TwoTap
+        className="r-foot-link"
+        testId="end-sprint-early"
+        label="End sprint early"
+        armedLabel="Tap again to end this sprint now"
+        disabled={pending}
+        onFire={() => {
+          setError(null);
+          start(async () => {
+            const res = await callAction(() => endSprintEarly(sprintId));
+            if (res.error) setError(res.error);
+          });
+        }}
+      />
+    </div>
   );
 }
 

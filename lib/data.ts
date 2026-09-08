@@ -400,3 +400,362 @@ export async function loadSprintObservations(supabase: Client, dayIds: string[])
 export function observationsOf(map: Map<string, DayObservations>, dayId: string): DayObservations {
   return map.get(dayId) ?? NO_OBSERVATIONS;
 }
+
+// ---------------------------------------------------------------------------
+// F10 — sprint completion, the postmortem and the Area kit.
+// ---------------------------------------------------------------------------
+
+/** The four completion statuses, and the words each one puts on the gate card. */
+export const COMPLETION_LABEL: Record<string, string> = {
+  completed: "sprint complete",
+  completed_early: "completed early",
+  ended: "sprint ended",
+  ended_early: "ended early",
+};
+
+export type FinishedSprint = {
+  id: string;
+  area: AreaKey;
+  outcome: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  reviewedAt: string | null;
+};
+
+/**
+ * Every finished sprint, newest first, with whether its postmortem is written. Drives
+ * the Insights sidebar and the review gate. Two reads: the review rows are a separate
+ * table and there is no join grant to lean on.
+ */
+export const loadFinishedSprints = cache(async (supabase: Client): Promise<FinishedSprint[]> => {
+  const [sprints, reviews] = await Promise.all([
+    supabase.from("sprints").select("id, area, outcome, status, start_date, end_date, closed_at").neq("status", "active").order("closed_at", { ascending: false }).order("id"),
+    supabase.from("reviews").select("sprint_id, completed_at"),
+  ]);
+  if (sprints.error) throw new Error(`sprints: ${sprints.error.message}`);
+  if (reviews.error) throw new Error(`reviews: ${reviews.error.message}`);
+  const reviewed = new Map(reviews.data.map((r) => [r.sprint_id, r.completed_at]));
+  return sprints.data.map((s) => ({
+    id: s.id,
+    area: s.area as AreaKey,
+    outcome: s.outcome,
+    status: s.status,
+    start_date: s.start_date,
+    end_date: s.end_date,
+    reviewedAt: reviewed.get(s.id) ?? null,
+  }));
+});
+
+export type ImpactRow = {
+  item_id: string;
+  name: string;
+  is_highest: boolean;
+  present_days: number;
+  absent_days: number;
+  logged_days: number;
+  unsure_days: number;
+  median_present: number | null;
+  median_absent: number | null;
+  delta_pts: number | null;
+  enough: boolean;
+  felt_a_lot: number;
+  felt_some: number;
+  felt_nothing: number;
+};
+
+export type FollowThroughRow = {
+  item_id: string;
+  name: string;
+  proof_then: string | null;
+  occurrences: number;
+  answered: number;
+  ran: number;
+  didnt: number;
+  partially: number;
+  unsure: number;
+  rate: number | null;
+  enough: boolean;
+};
+
+export type RecoveryRow = {
+  item_id: string;
+  name: string;
+  proof_recover: string | null;
+  with_response: number;
+  with_recovered: number;
+  without_response: number;
+  without_recovered: number;
+  answered: number;
+  rate: number | null;
+  enough: boolean;
+  median_recovered: number | null;
+  median_not: number | null;
+  outcome_enough: boolean;
+};
+
+export type CueRow = {
+  item_id: string;
+  name: string;
+  is_focus: boolean;
+  used_days: number;
+  unused_days: number;
+  logged_days: number;
+  unsure_days: number;
+  median_used: number | null;
+  median_unused: number | null;
+  delta_pts: number | null;
+  enough: boolean;
+};
+
+export type ReviewSummary = {
+  total: number;
+  goal: number;
+  pct: number;
+  met: boolean;
+  closed_days: number;
+  missed_days: number;
+  cancelled_days: number;
+  best_streak: number;
+  status: string;
+};
+
+export type ReviewDecision = { kind: ItemKind; item_id: string; decision: string };
+
+export type SavedReview = {
+  id: string;
+  lesson: string;
+  moved_vision: boolean;
+  verdict: string | null;
+  completed_at: string;
+  decisions: ReviewDecision[];
+};
+
+/** One day of the sprint as the postmortem's day-by-day block reads it, tasks included. */
+export type ClosedDay = {
+  day_index: number;
+  date: string;
+  target: number;
+  actual: number | null;
+  cancelled: boolean;
+  closed: boolean;
+  tasks: { text: string; done: boolean }[];
+};
+
+export type Postmortem = {
+  sprint: Sprint;
+  summary: ReviewSummary | null;
+  impact: ImpactRow[];
+  followThrough: FollowThroughRow[];
+  recovery: RecoveryRow[];
+  cues: CueRow[];
+  items: SprintItems;
+  days: ClosedDay[];
+  review: SavedReview | null;
+  /**
+   * True when the highest impediment occurred on at least one effective day: the
+   * verdict is asked exactly then, which is finish_review's own rule.
+   */
+  verdictApplies: boolean;
+};
+
+/** `numeric` arrives from PostgREST as a string; every median here is a ratio. */
+function numeric(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Everything the postmortem renders. The five calculations are SECURITY DEFINER
+ * functions that check ownership themselves, so a sprint that is not the caller's
+ * fails loudly instead of rendering an empty page.
+ */
+export async function loadPostmortem(supabase: Client, sprintId: string): Promise<Postmortem | null> {
+  const sprint = await supabase.from("sprints").select("*").eq("id", sprintId).maybeSingle();
+  if (sprint.error) throw new Error(`sprint: ${sprint.error.message}`);
+  if (!sprint.data || sprint.data.status === "active") return null;
+
+  const [summary, impact, follow, recovery, cues, items, days, review] = await allOrThrow([
+    supabase.rpc("sprint_review_summary", { p_sprint_id: sprintId }),
+    supabase.rpc("insight_impediment_impact", { p_sprint_id: sprintId }),
+    supabase.rpc("insight_response_followthrough", { p_sprint_id: sprintId }),
+    supabase.rpc("insight_response_recovery", { p_sprint_id: sprintId }),
+    supabase.rpc("insight_cue_usefulness", { p_sprint_id: sprintId }),
+    loadSprintMembers(supabase, sprintId),
+    loadClosedDays(supabase, sprintId),
+    loadReview(supabase, sprintId),
+  ]);
+  for (const [name, res] of [
+    ["sprint_review_summary", summary],
+    ["insight_impediment_impact", impact],
+    ["insight_response_followthrough", follow],
+    ["insight_response_recovery", recovery],
+    ["insight_cue_usefulness", cues],
+  ] as const) {
+    if (res.error) throw new Error(`${name}: ${res.error.message}`);
+  }
+
+  const rows = (res: { data: unknown }): Record<string, unknown>[] => (res.data ?? []) as Record<string, unknown>[];
+  const impactRows = rows(impact).map((r) => ({ ...r, median_present: numeric(r.median_present), median_absent: numeric(r.median_absent) }) as unknown as ImpactRow);
+  const cueRows = rows(cues).map((r) => ({ ...r, median_used: numeric(r.median_used), median_unused: numeric(r.median_unused) }) as unknown as CueRow);
+  const recoveryRows = rows(recovery).map((r) => ({ ...r, median_recovered: numeric(r.median_recovered), median_not: numeric(r.median_not) }) as unknown as RecoveryRow);
+  const followRows = rows(follow) as unknown as FollowThroughRow[];
+
+  return {
+    sprint: sprint.data,
+    summary: (rows(summary)[0] as unknown as ReviewSummary) ?? null,
+    impact: impactRows,
+    followThrough: followRows,
+    recovery: recoveryRows,
+    cues: cueRows,
+    items,
+    days,
+    review,
+    verdictApplies: followRows.some((r) => r.occurrences > 0),
+  };
+}
+
+/**
+ * The sprint's members including any removed mid-sprint: the postmortem decides what
+ * carries forward, and an item dropped on day 3 was still part of the record.
+ */
+export async function loadSprintMembers(supabase: Client, sprintId: string): Promise<SprintItems> {
+  const [cues, imps] = await Promise.all([
+    supabase.from("sprint_cues").select("cue_id, is_focus, cues(*)").eq("sprint_id", sprintId),
+    supabase.from("sprint_impediments").select("impediment_id, is_highest, impediments(*)").eq("sprint_id", sprintId),
+  ]);
+  if (cues.error) throw new Error(`sprint_cues: ${cues.error.message}`);
+  if (imps.error) throw new Error(`sprint_impediments: ${imps.error.message}`);
+  return {
+    cues: cues.data.filter((m) => m.cues).map((m) => ({ ...toItem("cue", m.cues as Cue, IN_SPRINT), is_focus: m.is_focus })).sort(byRank),
+    impediments: imps.data.filter((m) => m.impediments).map((m) => ({ ...toItem("impediment", m.impediments as Impediment, IN_SPRINT), is_highest: m.is_highest })).sort(byRank),
+  };
+}
+
+/** Every day of the sprint with its tasks — the one place a closed day's tasks are read. */
+export async function loadClosedDays(supabase: Client, sprintId: string): Promise<ClosedDay[]> {
+  const days = await supabase.from("sprint_days").select("id, day_index, date, target, actual, cancelled, closed_at").eq("sprint_id", sprintId).order("day_index");
+  if (days.error) throw new Error(`sprint_days: ${days.error.message}`);
+  const ids = days.data.map((d) => d.id);
+  const tasks = ids.length
+    ? await supabase.from("tasks").select("sprint_day_id, text, done").in("sprint_day_id", ids).is("archived_at", null).order("created_at").order("id")
+    : { data: [] as { sprint_day_id: string; text: string; done: boolean }[], error: null };
+  if (tasks.error) throw new Error(`tasks: ${tasks.error.message}`);
+  const byDay = new Map<string, { text: string; done: boolean }[]>();
+  for (const t of tasks.data) {
+    const list = byDay.get(t.sprint_day_id) ?? [];
+    list.push({ text: t.text, done: t.done });
+    byDay.set(t.sprint_day_id, list);
+  }
+  return days.data.map((d) => ({
+    day_index: d.day_index,
+    date: d.date,
+    target: Number(d.target),
+    actual: d.actual === null ? null : Number(d.actual),
+    cancelled: d.cancelled,
+    closed: d.closed_at !== null,
+    tasks: byDay.get(d.id) ?? [],
+  }));
+}
+
+export async function loadReview(supabase: Client, sprintId: string): Promise<SavedReview | null> {
+  const review = await supabase.from("reviews").select("id, lesson, moved_vision, verdict, completed_at").eq("sprint_id", sprintId).maybeSingle();
+  if (review.error) throw new Error(`reviews: ${review.error.message}`);
+  if (!review.data) return null;
+  const decisions = await supabase.from("review_decisions").select("kind, item_id, decision").eq("review_id", review.data.id);
+  if (decisions.error) throw new Error(`review_decisions: ${decisions.error.message}`);
+  return { ...review.data, decisions: decisions.data as ReviewDecision[] };
+}
+
+/** The kit the next sprint in an Area starts from: the last finished review's keepers. */
+export type AreaKit = {
+  sprintId: string;
+  lesson: string;
+  cueIds: string[];
+  impedimentIds: string[];
+  highestId: string | null;
+};
+
+/**
+ * The last completed review in this Area, reduced to what the wizard pre-checks and
+ * the rail pins on Day 1. Archived items are filtered out (rule 24), so a kit never
+ * pre-selects something start_sprint would then reject.
+ */
+export async function loadAreaKit(supabase: Client, area: AreaKey): Promise<AreaKit | null> {
+  const sprints = await supabase.from("sprints").select("id").eq("area", area).neq("status", "active");
+  if (sprints.error) throw new Error(`sprints: ${sprints.error.message}`);
+  if (sprints.data.length === 0) return null;
+
+  const review = await supabase
+    .from("reviews")
+    .select("id, sprint_id, lesson")
+    .in("sprint_id", sprints.data.map((s) => s.id))
+    .order("completed_at", { ascending: false })
+    .order("id")
+    .limit(1)
+    .maybeSingle();
+  if (review.error) throw new Error(`reviews: ${review.error.message}`);
+  if (!review.data) return null;
+
+  const decisions = await supabase.from("review_decisions").select("kind, item_id, decision").eq("review_id", review.data.id);
+  if (decisions.error) throw new Error(`review_decisions: ${decisions.error.message}`);
+  const kept = decisions.data.filter((d) => d.decision !== "drop");
+  const cueIds = kept.filter((d) => d.kind === "cue").map((d) => d.item_id);
+  const impIds = kept.filter((d) => d.kind === "impediment").map((d) => d.item_id);
+
+  // Rule 24: an item archived since the review must not reappear in a selection list.
+  const [liveCues, liveImps] = await Promise.all([
+    cueIds.length ? supabase.from("cues").select("id").in("id", cueIds).is("archived_at", null) : { data: [] as { id: string }[], error: null },
+    impIds.length ? supabase.from("impediments").select("id").in("id", impIds).is("archived_at", null) : { data: [] as { id: string }[], error: null },
+  ]);
+  if (liveCues.error) throw new Error(`cues: ${liveCues.error.message}`);
+  if (liveImps.error) throw new Error(`impediments: ${liveImps.error.message}`);
+  const liveCueIds = new Set(liveCues.data.map((c) => c.id));
+  const liveImpIds = new Set(liveImps.data.map((i) => i.id));
+  const highest = kept.find((d) => d.decision === "highest")?.item_id ?? null;
+
+  return {
+    sprintId: review.data.sprint_id,
+    lesson: review.data.lesson,
+    cueIds: cueIds.filter((id) => liveCueIds.has(id)),
+    impedimentIds: impIds.filter((id) => liveImpIds.has(id)),
+    highestId: highest && liveImpIds.has(highest) ? highest : null,
+  };
+}
+
+export type ReviewStats = { sprints: number; daysOnTargetPct: number | null; goalsMet: number; lessons: number };
+
+/**
+ * The three numbers on the postmortem rail's "Across n finished sprints" card. This is
+ * the only cross-sprint reading F10 does: three counts, no comparison. Every per-item
+ * comparison across sprints is F11's, and pooling them is explicitly not done here.
+ * Reads `sprint_days_effective`, so cancelled, open and zero-target days are out.
+ */
+export async function loadReviewStats(supabase: Client): Promise<ReviewStats> {
+  const [sprints, days, reviews] = await Promise.all([
+    supabase.from("sprints").select("id, amount").neq("status", "active"),
+    supabase.from("sprint_days_effective").select("sprint_id, target, actual"),
+    supabase.from("reviews").select("id"),
+  ]);
+  if (sprints.error) throw new Error(`sprints: ${sprints.error.message}`);
+  if (days.error) throw new Error(`sprint_days_effective: ${days.error.message}`);
+  if (reviews.error) throw new Error(`reviews: ${reviews.error.message}`);
+
+  const finished = new Set(sprints.data.map((s) => s.id));
+  // A view's columns are all nullable in the generated types, so the id is narrowed
+  // here rather than asserted; a row without one could not be attributed anyway.
+  const mine = days.data.flatMap((d) => (d.sprint_id && finished.has(d.sprint_id) ? [{ sprintId: d.sprint_id, target: Number(d.target), actual: Number(d.actual) }] : []));
+  const onTarget = mine.filter((d) => d.actual >= d.target).length;
+  const totals = new Map<string, number>();
+  for (const d of mine) totals.set(d.sprintId, (totals.get(d.sprintId) ?? 0) + d.actual);
+
+  return {
+    sprints: sprints.data.length,
+    daysOnTargetPct: mine.length ? Math.round((onTarget / mine.length) * 100) : null,
+    // Rule 25: goals are compared as met / not met, never by summing across
+    // measurements — a money sprint and an hours sprint are counted, not added.
+    goalsMet: sprints.data.filter((s) => (totals.get(s.id) ?? 0) >= Number(s.amount)).length,
+    lessons: reviews.data.length,
+  };
+}

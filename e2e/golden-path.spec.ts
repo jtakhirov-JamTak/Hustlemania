@@ -597,4 +597,162 @@ test.describe("golden path", () => {
     const noImp = await admin.from("day_impediment_observations").select("name, occurred, was_highest").eq("sprint_day_id", closed.data!.id);
     expect(noImp.data).toEqual([{ name: "Impulse spend", occurred: "no", was_highest: true }]);
   });
+
+  test("F10: finish a sprint → the gate → the postmortem → the kit pre-fills the next sprint", async ({ page }) => {
+    // The postmortem is a two-column grid with four cards and a bar chart in each: at
+    // 390px it must stack, not scroll sideways.
+    const noOverflow = async () => {
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
+    };
+
+    // A Relationships sprint whose 14 days are all in the past: the window has run out, so the
+    // Today slot offers Finish the sprint and nothing has closed it on a page load.
+    const todayUtc = localDateIn("UTC", new Date());
+    const start = addDays(todayUtc, -20);
+    const sprint = await insertSprintRows(admin, user.id, {
+      startDate: start,
+      tz: "UTC",
+      area: "relationships",
+      target: 10_000,
+      outcome: "Run 40 km",
+      mantra: "Slow is still a run.",
+    });
+
+    const cue = await admin.from("cues").insert({ user_id: user.id, name: "Shoes by the door", cue_when: "I get home" }).select("id").single();
+    const imp = await admin
+      .from("impediments")
+      .insert({ user_id: user.id, name: "Late meetings", proof_when: "a meeting runs past 6", proof_then: "I run the short loop", proof_recover: "I am out of the door within 20 minutes" })
+      .select("id")
+      .single();
+    if (cue.error || imp.error) throw new Error((cue.error ?? imp.error)!.message);
+    const addedAt = `${start}T00:00:00Z`;
+    const members = await Promise.all([
+      admin.from("sprint_cues").insert({ sprint_id: sprint.sprintId, user_id: user.id, cue_id: cue.data.id, is_focus: true, added_at: addedAt }),
+      admin.from("sprint_impediments").insert({ sprint_id: sprint.sprintId, user_id: user.id, impediment_id: imp.data.id, is_highest: true, added_at: addedAt }),
+    ]);
+    for (const m of members) if (m.error) throw new Error(m.error.message);
+
+    // Day 1 carried a task, written before the day closes (a closed day is locked, F4).
+    // The postmortem is the only place it can be read back (F8 left closed rows one line).
+    const task = await admin.from("tasks").insert({ sprint_day_id: sprint.dayIds[0], user_id: user.id, text: "Lay out the kit", done: true });
+    if (task.error) throw new Error(task.error.message);
+
+    // Eight closed days: the highest showed up on four of them, so the verdict is asked.
+    // Days 9–14 were never closed and stay missed — finishing does not cancel a past day.
+    const actuals = [5_000, 6_000, 7_000, 8_000, 20_000, 15_000, 13_000, 12_000]; // 860 USD in minor units
+    for (let i = 0; i < actuals.length; i++) {
+      const occurred = i < 4 ? "yes" : "no";
+      const day = await admin
+        .from("sprint_days")
+        .update({
+          actual: actuals[i],
+          closed_at: new Date().toISOString(),
+          closed_on_time: true,
+          highest_impediment_id: imp.data.id,
+          proof_when: "a meeting runs past 6",
+          proof_then: "I run the short loop",
+          proof_recover: "I am out of the door within 20 minutes",
+          ...(i < 4 ? { response: i < 2 ? "yes" : "no", recovered: i % 2 === 0 ? "yes" : "no", impact: "some" } : {}),
+        })
+        .eq("id", sprint.dayIds[i])
+        .select("id")
+        .single();
+      if (day.error) throw new Error(day.error.message);
+      const rows = await Promise.all([
+        admin.from("day_impediment_observations").insert({ sprint_day_id: day.data.id, user_id: user.id, impediment_id: imp.data.id, name: "Late meetings", occurred, was_highest: true }),
+        admin.from("day_cue_observations").insert({ sprint_day_id: day.data.id, user_id: user.id, cue_id: cue.data.id, name: "Shoes by the door", used: i % 2 === 0 ? "yes" : "no", was_focus: true }),
+      ]);
+      for (const r of rows) if (r.error) throw new Error(r.error.message);
+    }
+    await signInViaMagicLink(page, user.email);
+    await page.goto("/sprints/relationships");
+
+    // The window has passed and the sprint is still open: nothing closed it on load.
+    const finish = page.getByTestId("sprint-ended");
+    await expect(finish).toContainText("All 14 days have passed");
+    await expect(finish).toContainText("8 of 14 days closed");
+    await page.getByTestId("finish-sprint").click();
+
+    // The gate replaces the journal, and the sidebar says the area needs a review.
+    const gate = page.getByTestId("review-gate");
+    await expect(gate).toContainText("Relationships · sprint ended");
+    await expect(gate).toContainText("stays locked until its postmortem is finished");
+    await expect(page.getByTestId("gate-meta")).toContainText("860 of 1,400 USD · under · 8 of 14 days closed");
+    await noOverflow();
+
+    await gate.getByRole("link", { name: "Open the postmortem" }).click();
+    await expect(page).toHaveURL(new RegExp(`/insights/reviews/${sprint.sprintId}$`));
+
+    const pm = page.getByTestId("postmortem");
+    await expect(page.getByTestId("result-total")).toContainText("860");
+    await expect(page.getByTestId("result-meta")).toContainText("61% · under · 8 days closed · 6 not closed · best streak 8");
+    await expect(pm.getByTestId("card-impact")).toBeVisible();
+    await expect(pm.getByTestId("card-followthrough")).toContainText("4 occurrences · 4 answered");
+    await expect(pm.getByTestId("card-recovery")).toBeVisible();
+    await expect(pm.getByTestId("card-cues")).toContainText("Shoes by the door");
+    await expect(pm.getByTestId("proof-observation")).toContainText("Showed up on 4 logged days · response ran 2 of 4 answered");
+    await noOverflow();
+
+    // The one place a closed day's tasks are readable.
+    await pm.getByTestId("day-by-day").getByText("Day by day").click();
+    await expect(pm.getByTestId("day-by-day")).toContainText("Lay out the kit");
+
+    // Blocked until the lesson, the vision answer and the verdict are all given.
+    const finishReview = page.getByTestId("finish-review");
+    await expect(finishReview).toHaveAttribute("aria-disabled", "true");
+    await expect(page.locator("#pm-hint")).toHaveText("One lesson, the vision answer and a proof-point verdict are required.");
+    await pm.getByLabel("Key lesson").fill("Runs happen when the shoes are already by the door.");
+    await pm.getByRole("button", { name: "Yes, it advanced it" }).click();
+    await expect(finishReview).toHaveAttribute("aria-disabled", "true");
+    await pm.getByRole("button", { name: "Partly worked" }).click();
+    await expect(finishReview).toHaveAttribute("aria-disabled", "false");
+
+    // The kit preview follows the decisions before anything is saved.
+    await expect(page.getByTestId("kit-card")).toContainText("Late meetings");
+    await pm.getByTestId("carry-row").filter({ hasText: "Late meetings" }).getByRole("button", { name: "Promote to highest" }).click();
+
+    await finishReview.click();
+    await expect(page.getByTestId("reviewed-line")).toContainText("Reviewed");
+    await expect(page.getByLabel("Key lesson")).toHaveCount(0);
+    await noOverflow();
+
+    // The sidebar row flips, and the Area's gate is gone.
+    await expect(page.locator('[data-sidebar]').getByText("Needs review")).toHaveCount(0);
+    await page.goto("/sprints/relationships");
+    await expect(page.getByTestId("empty-state")).toContainText("No sprint running in Relationships");
+    await expect(page.getByTestId("last-postmortem")).toBeVisible();
+
+    // The next Relationships sprint starts from the kit.
+    await page.goto("/sprints/new?area=relationships");
+    await page.getByLabel("Sprint outcome").fill("Run 50 km");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByLabel(/Sprint goal/).fill("1400");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByRole("button", { name: "Confidence 7" }).click();
+    await page.getByLabel("Why this sprint matters").fill("Because the streak is the point.");
+    await page.getByLabel(/Celebration/).fill("New shoes");
+    await page.getByLabel(/Mantra/).fill("Slow is still a run.");
+    await page.getByRole("button", { name: "Continue" }).click();
+
+    await expect(page.getByTestId("wizard-kit")).toContainText("Pre-filled from your last Relationships review");
+    await expect(page.getByTestId("wizard-impediments").getByRole("checkbox", { name: /Late meetings/ })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByTestId("wizard-highest").getByRole("radio", { name: /Late meetings/ })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByTestId("wizard-cues").getByRole("checkbox", { name: /Shoes by the door/ })).toHaveAttribute("aria-checked", "true");
+
+    // What the database actually holds.
+    const finished = await admin.from("sprints").select("status, closed_at").eq("id", sprint.sprintId).single();
+    expect(finished.data).toMatchObject({ status: "ended" });
+    expect(finished.data!.closed_at).not.toBeNull();
+    const review = await admin.from("reviews").select("id, lesson, moved_vision, verdict").eq("sprint_id", sprint.sprintId).single();
+    expect(review.data).toMatchObject({ moved_vision: true, verdict: "partly" });
+    const decisions = await admin.from("review_decisions").select("kind, decision").eq("review_id", review.data!.id);
+    expect(decisions.data!.sort((a, b) => a.kind.localeCompare(b.kind))).toEqual([
+      { kind: "cue", decision: "keep" },
+      { kind: "impediment", decision: "highest" },
+    ]);
+    // Finishing after the window cancels nothing: the six unclosed days stay missed.
+    const cancelled = await admin.from("sprint_days").select("day_index").eq("sprint_id", sprint.sprintId).eq("cancelled", true);
+    expect(cancelled.data).toEqual([]);
+  });
 });

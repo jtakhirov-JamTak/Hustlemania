@@ -122,6 +122,13 @@ export type Database = {
             referencedRelation: "sprint_days"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "day_cue_observations_sprint_day_id_fkey"
+            columns: ["sprint_day_id"]
+            isOneToOne: false
+            referencedRelation: "sprint_days_effective"
+            referencedColumns: ["id"]
+          },
         ]
       }
       day_impediment_observations: {
@@ -168,6 +175,13 @@ export type Database = {
             columns: ["sprint_day_id"]
             isOneToOne: false
             referencedRelation: "sprint_days"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "day_impediment_observations_sprint_day_id_fkey"
+            columns: ["sprint_day_id"]
+            isOneToOne: false
+            referencedRelation: "sprint_days_effective"
             referencedColumns: ["id"]
           },
         ]
@@ -217,6 +231,85 @@ export type Database = {
         }
         Relationships: []
       }
+      review_decisions: {
+        Row: {
+          created_at: string
+          decision: string
+          id: string
+          item_id: string
+          kind: string
+          review_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          decision: string
+          id?: string
+          item_id: string
+          kind: string
+          review_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          decision?: string
+          id?: string
+          item_id?: string
+          kind?: string
+          review_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_decisions_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "reviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reviews: {
+        Row: {
+          completed_at: string
+          created_at: string
+          id: string
+          lesson: string
+          moved_vision: boolean
+          sprint_id: string
+          user_id: string
+          verdict: string | null
+        }
+        Insert: {
+          completed_at?: string
+          created_at?: string
+          id?: string
+          lesson: string
+          moved_vision: boolean
+          sprint_id: string
+          user_id: string
+          verdict?: string | null
+        }
+        Update: {
+          completed_at?: string
+          created_at?: string
+          id?: string
+          lesson?: string
+          moved_vision?: boolean
+          sprint_id?: string
+          user_id?: string
+          verdict?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_sprint_id_fkey"
+            columns: ["sprint_id"]
+            isOneToOne: true
+            referencedRelation: "sprints"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sprint_cues: {
         Row: {
           added_at: string
@@ -265,6 +358,7 @@ export type Database = {
       sprint_days: {
         Row: {
           actual: number | null
+          cancelled: boolean
           closed_at: string | null
           closed_on_time: boolean | null
           created_at: string
@@ -287,6 +381,7 @@ export type Database = {
         }
         Insert: {
           actual?: number | null
+          cancelled?: boolean
           closed_at?: string | null
           closed_on_time?: boolean | null
           created_at?: string
@@ -309,6 +404,7 @@ export type Database = {
         }
         Update: {
           actual?: number | null
+          cancelled?: boolean
           closed_at?: string | null
           closed_on_time?: boolean | null
           created_at?: string
@@ -396,6 +492,7 @@ export type Database = {
           amount: number
           area: string
           celebration: string
+          closed_at: string | null
           confidence: number
           created_at: string
           currency: string | null
@@ -419,6 +516,7 @@ export type Database = {
           amount: number
           area: string
           celebration: string
+          closed_at?: string | null
           confidence: number
           created_at?: string
           currency?: string | null
@@ -442,6 +540,7 @@ export type Database = {
           amount?: number
           area?: string
           celebration?: string
+          closed_at?: string | null
           confidence?: number
           created_at?: string
           currency?: string | null
@@ -508,6 +607,13 @@ export type Database = {
             columns: ["sprint_day_id"]
             isOneToOne: false
             referencedRelation: "sprint_days"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_sprint_day_id_fkey"
+            columns: ["sprint_day_id"]
+            isOneToOne: false
+            referencedRelation: "sprint_days_effective"
             referencedColumns: ["id"]
           },
         ]
@@ -608,6 +714,69 @@ export type Database = {
         }
         Relationships: []
       }
+      sprint_days_effective: {
+        Row: {
+          actual: number | null
+          attainment: number | null
+          closed_on_time: boolean | null
+          date: string | null
+          day_index: number | null
+          highest_impediment_id: string | null
+          id: string | null
+          impact: string | null
+          recovered: string | null
+          response: string | null
+          sprint_id: string | null
+          target: number | null
+          user_id: string | null
+        }
+        Insert: {
+          actual?: number | null
+          attainment?: never
+          closed_on_time?: boolean | null
+          date?: string | null
+          day_index?: number | null
+          highest_impediment_id?: string | null
+          id?: string | null
+          impact?: string | null
+          recovered?: string | null
+          response?: string | null
+          sprint_id?: string | null
+          target?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          actual?: number | null
+          attainment?: never
+          closed_on_time?: boolean | null
+          date?: string | null
+          day_index?: number | null
+          highest_impediment_id?: string | null
+          id?: string | null
+          impact?: string | null
+          recovered?: string | null
+          response?: string | null
+          sprint_id?: string | null
+          target?: number | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sprint_days_highest_impediment_id_fkey"
+            columns: ["highest_impediment_id"]
+            isOneToOne: false
+            referencedRelation: "impediments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sprint_days_sprint_id_fkey"
+            columns: ["sprint_id"]
+            isOneToOne: false
+            referencedRelation: "sprints"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       add_sprint_item: {
@@ -635,6 +804,11 @@ export type Database = {
         }
         Returns: number
       }
+      close_sprint_rows: {
+        Args: { p_date: string; p_sprint_id: string; p_status: string }
+        Returns: undefined
+      }
+      complete_sprint: { Args: { p_sprint_id: string }; Returns: undefined }
       day_offered_items: {
         Args: { p_sprint_day_id: string }
         Returns: {
@@ -649,6 +823,92 @@ export type Database = {
           proof_when: string
           rank: number
         }[]
+      }
+      end_sprint_early: { Args: { p_sprint_id: string }; Returns: undefined }
+      finish_review: {
+        Args: {
+          p_decisions?: Json
+          p_lesson: string
+          p_moved: boolean
+          p_sprint_id: string
+          p_verdict?: string
+        }
+        Returns: string
+      }
+      finish_sprint: { Args: { p_sprint_id: string }; Returns: undefined }
+      insight_cue_usefulness: {
+        Args: { p_sprint_id: string }
+        Returns: {
+          delta_pts: number
+          enough: boolean
+          is_focus: boolean
+          item_id: string
+          logged_days: number
+          median_unused: number
+          median_used: number
+          name: string
+          unsure_days: number
+          unused_days: number
+          used_days: number
+        }[]
+      }
+      insight_impediment_impact: {
+        Args: { p_sprint_id: string }
+        Returns: {
+          absent_days: number
+          delta_pts: number
+          enough: boolean
+          felt_a_lot: number
+          felt_nothing: number
+          felt_some: number
+          is_highest: boolean
+          item_id: string
+          logged_days: number
+          median_absent: number
+          median_present: number
+          name: string
+          present_days: number
+          unsure_days: number
+        }[]
+      }
+      insight_min_days: { Args: never; Returns: number }
+      insight_response_followthrough: {
+        Args: { p_sprint_id: string }
+        Returns: {
+          answered: number
+          didnt: number
+          enough: boolean
+          item_id: string
+          name: string
+          occurrences: number
+          partially: number
+          proof_then: string
+          ran: number
+          rate: number
+          unsure: number
+        }[]
+      }
+      insight_response_recovery: {
+        Args: { p_sprint_id: string }
+        Returns: {
+          answered: number
+          enough: boolean
+          item_id: string
+          median_not: number
+          median_recovered: number
+          name: string
+          outcome_enough: boolean
+          proof_recover: string
+          rate: number
+          with_recovered: number
+          with_response: number
+          without_recovered: number
+          without_response: number
+        }[]
+      }
+      insight_sprint_owned: {
+        Args: { p_sprint_id: string }
+        Returns: undefined
       }
       measurement_step: { Args: { p_measurement: string }; Returns: number }
       move_item: {
@@ -716,9 +976,35 @@ export type Database = {
         Args: { p_recover: string; p_then: string; p_when: string }
         Returns: undefined
       }
+      sprint_best_streak: { Args: { p_sprint_id: string }; Returns: number }
+      sprint_for_closure: {
+        Args: { p_sprint_id: string }
+        Returns: {
+          amount: number
+          end_date: string
+          id: string
+          today: string
+          total: number
+          tz: string
+        }[]
+      }
       sprint_invalid_reason: {
         Args: { p_exclude_item?: string; p_kind?: string; p_sprint_id: string }
         Returns: string
+      }
+      sprint_review_summary: {
+        Args: { p_sprint_id: string }
+        Returns: {
+          best_streak: number
+          cancelled_days: number
+          closed_days: number
+          goal: number
+          met: boolean
+          missed_days: number
+          pct: number
+          status: string
+          total: number
+        }[]
       }
       sprint_streak_at: {
         Args: { p_asof: string; p_sprint_id: string }

@@ -1,5 +1,6 @@
 "use client";
 
+import { FinishSprint } from "@/components/today/FinishSprint";
 import { Rail } from "@/components/today/Rail";
 import { Timeline } from "@/components/today/Timeline";
 import { TodayCard } from "@/components/today/TodayCard";
@@ -27,6 +28,7 @@ export function Journal({
   tasks,
   streak,
   observations,
+  lastLesson,
 }: {
   sprint: Sprint;
   days: SprintDay[];
@@ -37,6 +39,8 @@ export function Journal({
   tasks: Task[];
   streak: number;
   observations: Map<string, DayObservations>;
+  /** F10: the lesson from this Area's last postmortem, pinned on Day 1 only. */
+  lastLesson: string | null;
 }) {
   const measured: Measured = { measurement: sprint.measurement as Measured["measurement"], currency: sprint.currency, unit: sprint.unit };
   const goal = Number(sprint.amount);
@@ -97,11 +101,7 @@ export function Journal({
           sprintOver={sprintOver}
           today={
             sprintOver ? (
-              <div className="j-ended" data-testid="sprint-ended">
-                <span>
-                  Sprint window ended · {closedCount} of 14 days closed. A missed day can still be added above.
-                </span>
-              </div>
+              <FinishSprint sprintId={sprint.id} closedCount={closedCount} />
             ) : (
               <TodayCard
                 key={day.id}
@@ -136,6 +136,11 @@ export function Journal({
         celebration={sprint.celebration}
         measured={measured}
         usage={usage}
+        goalReached={cumulative >= goal}
+        cumulative={cumulative}
+        goal={goal}
+        lastLesson={focusIndex === 1 ? lastLesson : null}
+        areaLabel={areaName(sprint.area as AreaKey)}
       />
     </div>
   );

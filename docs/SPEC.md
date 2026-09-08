@@ -1242,44 +1242,286 @@ restyle (from F8).
   `docs/mockups/f9-vision/` with the screenshots before the build.
 
 ### F10 — Sprint completion, End Early, postmortem, kit, next-sprint gate (was F6)
-*Re-scoped 2026-09-06 (rows B10 B17 C6); the text below is the v1 entry and is
-rewritten by `/interview`.* Adds to v1: Complete sprint in the rail's Celebration card;
-End sprint early two-tap in its footer; a Review gate card → "Open the postmortem";
-postmortem = result card + the four insight cards + proof-point verdict (Worked /
-Partly / Didn't) + one lesson + moved-the-vision + carry-forward per item (Keep /
-Promote to highest / Drop; Keep / test more / Drop) stored as the Area's kit, which
-pre-fills the next New Sprint's step 4; the lesson is pinned on Day 1 of the next
-sprint in that Area.
-*Review notes 2026-09-07:* F10 also owns, from F5's decisions (recorded there as
-"F6", the old number): the closure timestamp, `sprint_streak_at` stopping at the
-closure date (cancelled days are neither missed nor counted), and backfill closing
-with the sprint. The **single-sprint insight calculations** (one SQL function per
-card: impediment impact, response follow-through, response recovery, cue usefulness,
-with the C5 rules) are built here, since the postmortem renders the cards; F11 adds
-the cross-sprint view. The postmortem reads the highest's proof from the sprint's
-last closed day snapshot, not live from `impediments`. Kit pre-fill filters archived
-items (rule 24). Review gate card, Celebration-card actions and the two-tap component
-arrive here.
-- **Behavior (v1).** Reaching the Goal enables Complete Sprint (not automatic). End Sprint
-  Early is always available. Both cancel future days (not counted as missed), set the
-  status, show Celebration on success, and open the Review, which must be completed
-  before the next Sprint in that Area can start. Review shows the PRD §10 summary and
-  captures one key lesson and whether the Vision was advanced. Completing Review shows
-  Start Next Sprint.
+*Specified 2026-09-08 by `/interview` (feature mode). Scope:
+`docs/RECONCILIATION-2026-09-06.md` rows B10 B17 C6 and the C5 calculation rules for the
+single-sprint view; plus the three F5 follow-ups this feature owns (closure timestamp,
+`sprint_streak_at` stopping at the closure date, backfill closing with the sprint) and the
+BACKLOG "F10 input — the postmortem lists each closed day's tasks". In-session calls
+(2026-09-08): **a passed window does not close itself** — after day 14 the sprint stays
+`active` and the Today slot offers **Finish the sprint**, so backfill stays open until the
+user acts and no page load mutates data · **the wizard takes the kit pre-fill only** — the
+v8 800px dialog restyle is deferred to its own entry (BACKLOG), since F10 already carries
+two user-data tables, five SQL calculations, the postmortem and the gate · **the postmortem
+lives at `/insights/reviews/[sprintId]`** with a minimal Insights sidebar; `/insights`
+itself stays the F1 placeholder and F11 builds Across sprints and restyles the rows ·
+**a finished sprint shows the gate card, not a read-only journal** — the record is read in
+the postmortem · **carry-forward defaults to Keep** and Finish review requires only the
+lesson, the vision answer and (when applicable) the verdict · **no verdict is asked when
+the highest impediment never occurred** on a logged day · **the closure date's own open day
+is cancelled** with the future ones, so ending a sprint at 3pm does not book today as
+missed · **End sprint early works before day 1** and cancels all 14.*
+
+- **Behavior.** A sprint ends in one of three ways, each from the journal: **Complete
+  sprint** appears in the rail once the closed days total the goal; **End sprint early** is
+  always available as a two-tap in the rail's footer; and once all 14 days have passed the
+  Today slot offers **Finish the sprint**. All three stamp a closure time, cancel every
+  still-open day dated on or after the closure date (cancelled, never missed), and lock the
+  sprint. The Area then shows a full-width review gate: the next sprint there stays locked
+  until the postmortem is finished. The postmortem is the sprint's record and its
+  decisions — the result against the goal, four insight cards, a verdict on the highest
+  impediment's proof point, one key lesson, whether it moved the vision, and a Keep /
+  Promote / Drop choice per item — and finishing it stores that set as the Area's kit,
+  which pre-fills the next New Sprint and pins the lesson on its Day 1.
+
 - **Acceptance criteria.**
-  - `complete_sprint` rejects when cumulative actual < goal; sets `status` to
-    `completed` or `completed_early` (if before day 14) and `cancelled = true` on
-    future days. `end_sprint_early` sets `ended_early`. Tests for each transition and
-    for the invalid one; status transitions guarded by trigger (no other UPDATE).
-  - Table `reviews` (RLS). `start_sprint` rejects while a non-active sprint in the
-    Area has no completed review (rule 26); test.
-  - Celebration text visible only when `status ∈ {completed, completed_early}`.
-  - Review page renders goal, total actual, % achieved, per-day target/actual, most
-    useful cues, most damaging impediments, highest impediment + proof point.
-- **Non-goals.** Editing a review after completion.
-- **Risks.** "Cancelled" vs "missed" days confused in streak/insights — `cancelled`
-  days excluded everywhere by one view `sprint_days_effective`.
-- **Evaluator.** migration creating a user-data table.
+  - **Migrations `0012_sprint_completion.sql`, `0013_f10_function_privileges.sql` and
+    `0014_insight_calculations_fix.sql`** (forward-only, applied by `db reset`). 0013 and
+    0014 exist because 0012 was already applied when its two defects were found: the
+    implicit PUBLIC execute grant on ten new functions (caught by the grants pin) and
+    three errors in the calculations (caught by the insight fixture). Each is documented
+    in its own header.
+    - `sprints` gains `closed_at timestamptz`; the status check is replaced with
+      `status in ('active','completed','completed_early','ended','ended_early')` —
+      `'review'` is dropped unused (the gate is "finished and unreviewed", not a status)
+      and `'ended'` is added for a window that ran out under the goal. Test: an update to
+      `'review'` is rejected.
+    - `sprint_days` gains `cancelled boolean not null default false` with
+      `check (not (cancelled and closed_at is not null))`. Test: both directions.
+    - Trigger `sprints_status_transition` (before update): `status` may only move from
+      `'active'` to one of the four finished values, `closed_at` may only go from null to
+      not-null, and both are frozen once finished — `sprint_finished`. Tests for a finished
+      → active update, a second `closed_at` write, and a finished → other-finished update.
+    - `sprint_days_immutable_after_close` redefined **from its 0007 body** plus `cancelled`
+      (locked once true). The pin test in `tests/db/streaks.test.ts` that lists the triggers
+      on `sprint_days` stays green, and the F5 stale-body case is re-covered: the existing
+      libraries and streaks suites must pass unchanged.
+    - View `sprint_days_effective` (`security_invoker = true`): closed, non-cancelled days
+      with `target > 0`, carrying `sprint_id, id, day_index, date, target, actual,
+      closed_on_time, response, recovered, impact, highest_impediment_id` and
+      `attainment numeric` = `actual::numeric / target`. **The four card functions read
+      this view and nothing else**; `sprint_review_summary` reads `sprint_days` directly
+      because it counts the missed and cancelled days the view exists to exclude. Test:
+      a `pg_get_functiondef` scan of the four card functions finds no reference to
+      `public.sprint_days` and at least one to `sprint_days_effective`.
+    - **`reviews`** (RLS, one row per sprint, written only by `finish_review`): `id`,
+      `user_id`, `sprint_id uuid not null unique references sprints(id)`, `lesson text not
+      null check (btrim(lesson) <> '')` (private user text), `moved_vision boolean not
+      null`, `verdict text check (verdict in ('worked','partly','didnt'))` (nullable),
+      `completed_at timestamptz not null default now()`, `created_at`. SELECT own rows
+      only; no INSERT / UPDATE / DELETE grant to `authenticated`.
+    - **`review_decisions`** (RLS, same write rule): `id`, `review_id`, `user_id`,
+      `kind text check (kind in ('cue','impediment'))`, `item_id uuid not null`,
+      `decision text not null`, `unique (review_id, kind, item_id)`, plus
+      `check ((kind = 'impediment' and decision in ('keep','highest','drop')) or
+      (kind = 'cue' and decision in ('keep','test_more','drop')))`. There is **no kit
+      table**: the kit is these rows plus the review's lesson, read back per Area.
+    - Tests on both tables: user B selects 0 of A's rows (and the test fails with RLS
+      disabled); an authenticated UPDATE of `lesson` on an own row errors
+      (`permission denied`) and the row is unchanged; the row count only grows.
+  - **Closure functions** (SECURITY DEFINER, identity from `auth.uid()`,
+    `set search_path = ''`, `grant execute` to `authenticated`). Each takes `p_sprint_id`,
+    requires the caller's own `status = 'active'` sprint (`sprint_not_found` /
+    `sprint_not_active`), computes `v_date = (now() at time zone tz)::date`, writes
+    `closed_at = now()`, and sets `cancelled = true` on every day with
+    `date >= v_date and closed_at is null`. Their windows do not overlap:
+    - `complete_sprint()` — only while `v_date <= end_date`; rejects `goal_not_reached`
+      when the sum of `actual` over closed, non-cancelled days is `< amount`; sets
+      `completed_early` when `v_date < end_date`, else `completed`. Tests: the rejection,
+      both statuses, and that a day already closed on `v_date` is **not** cancelled.
+    - `end_sprint_early()` — only while `v_date <= end_date`, no goal check, sets
+      `ended_early`. Tests: goal not required; called the day before day 1, all 14 days
+      cancelled and 0 closed; called after the window, `window_passed`.
+    - `finish_sprint()` — only when `v_date > end_date` (else `sprint_running`); sets
+      `completed` when the total reaches the goal, else `ended`. Tests for both.
+    - `close_day` is **not** redefined: its existing `status <> 'active'` guard is what
+      makes "no backfill after closure" true (PRD §9). Test: backfill a missed day, close
+      the sprint, the same call now errors `sprint_not_active`.
+  - **`sprint_streak_at(p_sprint_id, p_asof)` redefined from its 0007 body**: the horizon
+    is `least(asof date in tz, closure date in tz)` and cancelled days are excluded
+    entirely. Tests added to `tests/db/streaks.test.ts`: a sprint completed on day 9 with
+    days 1–9 on time reads 9 on day 11 (was 0 — the F5 defect this closes); a cancelled
+    day never breaks a run; the ten existing fixed-clock scenarios stay green.
+  - **`sprint_best_streak(p_sprint_id)`** (definer, owner-checked, granted): the longest
+    run of consecutive `closed_on_time = true` among non-cancelled days. Test: a sprint
+    with runs 4 / 2 / 3 returns 4; another user gets `sprint_not_found`.
+  - **`start_sprint` redefined from its 0011 body**, same signature, one new check before
+    `active_sprint_exists`: raise `review_required` when the caller has a sprint in
+    `p_area` whose `status <> 'active'` and which has no `reviews` row (rule 26). Tests:
+    the rejection, that it clears once `finish_review` runs, and that every existing
+    `start_sprint` test stays green.
+  - **`finish_review(p_sprint_id, p_lesson, p_moved boolean, p_verdict text,
+    p_decisions jsonb) → uuid`** (definer, granted). One transaction:
+    - own sprint, `status <> 'active'` (`sprint_running`), no existing review
+      (`review_exists`); `p_lesson` non-blank after trim (`lesson_required`); `p_moved`
+      not null (`vision_answer_required`).
+    - `p_verdict` is required exactly when the sprint's highest impediment has at least one
+      `day_impediment_observations` row with `was_highest and occurred = 'yes'` on a
+      non-cancelled closed day — otherwise it must be null. Errors `verdict_required` and
+      `verdict_not_applicable`; an unknown value raises `invalid_verdict`.
+    - `p_decisions` is an array of `{kind, item_id, decision}`. Every `item_id` must be a
+      membership row of this sprint (`item_not_in_sprint`); at most one impediment may be
+      `'highest'` (`one_highest_only`); items not named default to `'keep'`, so the stored
+      set always covers every member. Tests for each rejection, for the default fill, and
+      that a rejected call leaves `reviews` empty (atomicity).
+  - **`insight_response_followthrough.answered` counts `yes`, `no` and `partially`**;
+    only `unsure` and an unanswered day leave a denominator (0015, after eval-06 P2-3).
+    `ran` stays `yes` alone, so the rate falls when the response only half ran. Test: a
+    sprint answered `yes / no / partially` reports 3 answered, rate 33, `enough` true.
+  - **`sprint_best_streak` renumbers the non-cancelled days before looking for gaps**, so
+    it answers the same question as `sprint_streak_at` (0015, after eval-06 P2-5). Test:
+    days 1–3 and 5–7 on time with day 4 cancelled reads 6 from both functions.
+  - **Insight calculations** — four functions, one per card, each
+    `(p_sprint_id) returns table`, definer, owner-checked, granted, reading only
+    `sprint_days_effective`. Metric is **median daily attainment** (D4). Comparison rows
+    need ≥ 3 days on each side; tri-state rows need ≥ 3 answered; `unsure` and
+    `unanswered` are excluded from every denominator but counted in coverage.
+    - `insight_impediment_impact` — per sprint impediment: `present_days`, `absent_days`,
+      `median_present`, `median_absent`, `delta_pts`, `enough`, `is_highest`, and the
+      `impact` tally (`a_lot`, `some`, `nothing`).
+    - `insight_response_followthrough` — for the highest: `occurrences`, `answered`,
+      `ran`, `didnt`, `partially`, `unsure`, `rate`, `enough`.
+    - `insight_response_recovery` — `recovered` vs `didnt` split by whether the response
+      ran, plus median attainment on recovered vs not when each side has ≥ 2.
+    - `insight_cue_usefulness` — per sprint cue: the same shape as impediment impact with
+      `used_days` / `unused_days` and `is_focus`.
+    - `sprint_review_summary` — total actual, goal, pct, closed / missed / cancelled
+      counts, best streak, completion type.
+    - Fixture test (`tests/db/insights.test.ts`): one seeded 14-day sprint with a known
+      day matrix; each function's numbers asserted against hand-computed values; a
+      cancelled day and an `unsure` day are both present and must not move any figure;
+      the `enough` flag flips at exactly 3.
+  - **Reads** (`lib/data.ts`): `loadFinishedSprints()` (finished sprints newest first with
+    their review state, for the Insights sidebar and the gate) · `loadPostmortem(sprintId)`
+    (summary, the four card result sets, the highest's proof snapshot, the sprint's
+    members with their day counts, the existing review and its decisions) ·
+    `loadClosedDayDetail(sprintId)` (each closed day with its target, actual and tasks —
+    the BACKLOG "read a closed day's tasks" item) · `loadAreaKit(area)` (the last completed
+    review's decisions and lesson, archived items filtered out per rule 24).
+  - **Journal and rail.** Rail gains, above Celebration, a tinted **Complete sprint** card
+    (testid `complete-sprint`) shown only when the closed total reaches the goal:
+    "Goal reached · {cum} of {goal}. Remaining days are cancelled, not missed." The
+    Celebration card's text turns green and gains the `Goal reached · ` prefix at 100%
+    (600 weight from 80%). The rail footer carries **End sprint early** as `TwoTap`
+    ("Tap again to end this sprint now", `end-sprint-early`), hidden once the window has
+    passed — `end_sprint_early` would only raise `window_passed` there, and the Today
+    slot offers Finish the sprint instead. On Day 1, when the Area has a finished review, a **Lesson from the last
+    {Area} sprint** card (testid `last-lesson`) quotes it. The `sprint-ended` slot becomes
+    the Finish card (testid still `sprint-ended`): "All 14 days have passed. Add any
+    missed day above, then finish the sprint. Unclosed days stay as they are once it is
+    finished." + **Finish the sprint**.
+  - **Review gate.** `/sprints/[area]` with a finished, unreviewed sprint renders the gate
+    (testid `review-gate`): kicker `{Area} · sprint complete | completed early | ended
+    early | sprint ended` (`COMPLETION_LABEL`), outcome 28px/700, the v8 copy "This sprint has ended. The next {Area}
+    sprint stays locked until its postmortem is finished — what hurt, what helped, one
+    lesson, and what to carry forward.", primary **Open the postmortem** and a quiet meta
+    line `{actual} of {goal} · met|under · n of 14 days closed`. Once reviewed the existing
+    `empty-state` card returns with a quiet **Read the last postmortem** link beside the
+    primary. The Sprints sidebar reads `Ended` in the accent with sub `Needs review`
+    until it is reviewed, never `Ready` — the row must not invite a start that rule 26
+    refuses.
+  - **Postmortem** (`/insights/reviews/[sprintId]`, testid `postmortem`; grid
+    `minmax(0,1fr) 300px`, max-width 1120). Main: outcome 30px + `Postmortem · {Area} ·
+    {dates}`; result card (44px total in met green / under red, `of {goal}`, meta
+    `{pct}% · met|under · n days closed · n not closed · best streak n`, 14-cell strip);
+    the **four insight cards** in a 2-column grid (kicker coloured red / accent / accent /
+    green, right-aligned coverage, question, rows with `HIGHEST` / `FOCUS` tags, two bars
+    each with a 170px label column, tail in points, note in accent-ink when the sample is
+    short); the **proof-point** card (WHEN → THEN, RECOVERED WHEN, the observation line
+    "Showed up on n logged days · response ran a of b answered · recovered c of d
+    answered." or "It never showed up on a logged day. No verdict is asked.", and the three
+    verdict chips when it did); **One key lesson** (textarea + "Did it move the vision?"
+    with two chips); **Carry forward · decide for the next {Area} sprint** with one row per
+    member (`Keep · Promote to highest · Drop` for impediments, `Keep[ · test more] · Drop`
+    for cues, sub `present n days` / `used n days`), then **Finish review** with the hint
+    "Unlocks the next {Area} sprint · the kit on the right becomes its default." (or, when
+    blocked, "One lesson, the vision answer and a proof-point verdict are required.");
+    and a **Day by day** block listing each closed day with its actual, target and tasks
+    (done and not done). Rail: the accent **Next {Area} sprint starts with** kit card
+    (highest, also watching, cues, the pinned lesson) and an **Across n finished sprints**
+    card. A finished review renders read-only with `Reviewed {date}` and the kit card
+    titled "Next {Area} sprint starts with".
+  - **Insights sidebar** (`app/(app)/insights/layout.tsx`): finished sprints newest first
+    (label = outcome, meta `Needs review` in accent or `Reviewed {date}`, sub
+    `{Area} · {dates}`), then an **Across sprints** section linking `/insights`, which
+    keeps its F1 placeholder. Running sprints never appear.
+  - **Wizard kit pre-fill.** Step 4 pre-checks the Area kit's impediments and cues
+    (decision ≠ `drop`, archived filtered out per rule 24), pre-selects the `highest`
+    decision as the highest impediment, and shows "Pre-filled from your last {Area}
+    review" above the impediment group. Changing the Area re-reads the kit. Everything
+    else in the wizard is unchanged. Unit test: the pre-fill mapping (drop excluded,
+    highest promoted, archived filtered, no kit → empty).
+  - **e2e** (`e2e/golden-path.spec.ts`, desktop + phone): a seeded past-dated Wealth sprint
+    with closed days is completed from the rail; the area shows the gate; the postmortem
+    renders the result card, four cards and the day-by-day tasks; Finish review is blocked
+    with an empty lesson and its hint shows; filling the lesson, the vision answer and the
+    verdict finishes it; the sidebar row flips to `Reviewed {today}`; the New Sprint wizard
+    for that Area now opens with the kit pre-checked; Day 1 of the new sprint shows the
+    pinned lesson. DB assertions: one `reviews` row, one `review_decisions` row per member,
+    the sprint's status and `closed_at`, and every day after the closure date `cancelled`.
+    The night-mode round trip and the F5–F9 assertions stay.
+  - **Live mutations** (each turns a named test red, then restored from disk). Note that
+    a cancelled day is never a closed day (the CHECK forbids it), so "the view counts
+    cancelled days" is a mutation that *cannot* fail — the load-bearing filters are the
+    view's `target > 0` and the streak's own `not cancelled`, and those are what is
+    mutated:
+    - `complete_sprint` accepts a total below the goal.
+    - `close_sprint_rows` drops `closed_at is null`, so the closure day's own close is
+      cancelled (the CHECK then rejects the write).
+    - `sprint_streak_at` counts cancelled days again — the F5 defect, restored.
+    - `sprint_days_effective` drops `target > 0`, so a zero-target closed day divides by
+      zero and every calculation raises.
+    - `start_sprint` drops the rule-26 gate.
+    - `finish_review` allows a second review for the same sprint.
+    - `insight_impediment_impact` attributes the day's `impact` answer to every
+      impediment row, not only the highest.
+    - `prefillFromKit` returns nothing, and the e2e's wizard assertions go red.
+    - RLS: `reviews` and `review_decisions` each have an in-suite disable/enable check
+      that fails when the policy is off.
+  - **The Celebration card grows before it lands** (PRD §10): the share reached and 600
+    weight from 80% of goal, green with the `Goal reached · ` prefix at 100%.
+  - Visual match against the v8 artboard (Insights → Reviews, the review gate, the rail's
+    Celebration actions) in Chrome at desktop width in Dusk and Night; phone via the
+    Playwright phone project with a zero-overflow check at 390px on the postmortem, the
+    gate and the rail. `npm run verify` green.
+
+- **Non-goals.** The Across-sprints view, the Insights sidebar's Met / Under and % of goal
+  rows, and any cross-sprint "recurring" note (F11) · the v8 800px New Sprint dialog
+  restyle (its own entry, BACKLOG) · editing or deleting a review after it is finished ·
+  requiring a decision on every carry-forward row · a `review` sprint status · a stored kit
+  table · task completion vs result (BACKLOG, D10) · AI narrative · a read-only journal for
+  a finished sprint · re-opening a finished sprint.
+
+- **Risks.** (1) `start_sprint`, `sprint_streak_at` and `sprint_days_immutable_after_close`
+  are each redefined, and the F5 defect was exactly a redefinition copied from a stale body
+  — each is copied from its current migration (0011, 0007, 0007), the existing suites for
+  all three must pass unchanged, and the trigger-list pin already fails if a trigger is
+  lost. (2) Cancelled days leak into one calculation and every number quietly shifts — one
+  `sprint_days_effective` view is the only day source for the five functions, pinned by a
+  `pg_get_functiondef` scan, and the fixture sprint carries a cancelled day whose removal
+  would move the asserted figures. (3) A median over three days reads as evidence — every
+  row prints both group sizes, hides its comparison below n = 3, and the card copy states
+  the threshold; no card says "caused". (4) The gate is bypassed by starting a sprint some
+  other way — `authenticated` holds only `update (mantra)` on `sprints`, so `start_sprint`
+  is the sole insert path, and the rule-26 test asserts the rejection through the API role.
+  (5) Cancelling the closure day loses a real close — the cancellation predicate skips days
+  that already have `closed_at`, and a test closes the day first, then completes.
+
+- **Evaluator.** Migration creating user-data tables (`reviews`, `review_decisions`) · a
+  migration altering a table that holds user data (the `sprints` status check, the
+  `sprint_days` column and the redefined immutability trigger). One run for the feature.
+
+- **UI.** Primary action: Finish review. Viewport: both, desktop-first (Chrome at desktop
+  width against the artboard; phone via the Playwright phone project). States: empty cards
+  with a stated reason, error with every input preserved, read-only after finishing.
+  References: `docs/mockups/ui-v2/handoff_sprint_ui_v8/README.md` §Reviews, §Review gate
+  and §Right rail item 4, and the v8 artboard. Departures the artboard does not draw: the
+  Finish-the-sprint card for a window that ran out, the `ended` status, the Day-by-day
+  block with tasks, the gate card's result meta line, and "No verdict is asked" when the
+  highest never occurred. Mockup: `app/mockup/postmortem/` (thin page in the stack,
+  hardcoded data, `?view=gate-open|gate|gate-reviewed|rail|rail-lesson|postmortem|
+  postmortem-error|postmortem-done|postmortem-empty`, `?armed=1`; the real Dusk / Night
+  toggle) — captured at desktop width in both palettes and copied to
+  `docs/mockups/f10-postmortem/` with three screenshots before the build.
 
 ### F11 — Insights v2: four cards, Reviews and Across sprints (was F7)
 *Re-scoped 2026-09-06 (rows B9 C5 D4 D9 D10); the text below is the v1 entry and is

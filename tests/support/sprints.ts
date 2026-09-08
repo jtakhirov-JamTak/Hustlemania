@@ -20,7 +20,18 @@ async function activeVision(admin: AdminClient, userId: string): Promise<string>
 export async function insertSprintRows(
   admin: AdminClient,
   userId: string,
-  opts: { startDate: string; tz: string; area?: string; target?: number; outcome?: string; mantra?: string },
+  opts: {
+    startDate: string;
+    tz: string;
+    area?: string;
+    target?: number;
+    outcome?: string;
+    mantra?: string;
+    /** Per-day targets by index (0 = day 1); entries left undefined use `target`. A zero
+     *  is a real custom plan (rules 10–12), and the target lock (0005) refuses to set one
+     *  after the day has begun, so it has to be written here. */
+    targets?: (number | undefined)[];
+  },
 ): Promise<{ sprintId: string; dayIds: string[] }> {
   const area = opts.area ?? "wealth";
   const target = opts.target ?? 100;
@@ -46,7 +57,13 @@ export async function insertSprintRows(
     .select("id")
     .single();
   if (sprint.error) throw new Error(sprint.error.message);
-  const rows = Array.from({ length: 14 }, (_, i) => ({ sprint_id: sprint.data.id, user_id: userId, day_index: i + 1, date: addDays(opts.startDate, i), target }));
+  const rows = Array.from({ length: 14 }, (_, i) => ({
+    sprint_id: sprint.data.id,
+    user_id: userId,
+    day_index: i + 1,
+    date: addDays(opts.startDate, i),
+    target: opts.targets?.[i] ?? target,
+  }));
   const days = await admin.from("sprint_days").insert(rows).select("id, day_index");
   if (days.error) throw new Error(days.error.message);
   return { sprintId: sprint.data.id, dayIds: days.data.sort((a, b) => a.day_index - b.day_index).map((d) => d.id) };

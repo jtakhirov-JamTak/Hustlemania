@@ -1,0 +1,619 @@
+import { cookies } from "next/headers";
+import "./mockup.css";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { THEME_COOKIE, themeFromCookie } from "@/lib/theme";
+
+/**
+ * F10 mockup — throwaway scaffolding for the feature gate. Hardcoded Wealth sprint.
+ * `?view=gate-open|gate|gate-reviewed|rail|rail-lesson|postmortem|postmortem-error|postmortem-done|postmortem-empty`,
+ * `?armed=1` arms End sprint early on the rail view. The header's Dusk / Night toggle is the
+ * real one. Deleted once F10 is approved.
+ */
+
+type View = "gate-open" | "gate" | "gate-reviewed" | "rail" | "rail-lesson" | "postmortem" | "postmortem-error" | "postmortem-done" | "postmortem-empty";
+const VIEWS: View[] = ["gate-open", "gate", "gate-reviewed", "rail", "rail-lesson", "postmortem", "postmortem-error", "postmortem-done", "postmortem-empty"];
+
+const OUTCOME = "Land three retainer clients";
+const LESSON = "Outreach only happens when it is the first thing on the list; every day it slipped, a one-off request had taken the slot.";
+
+export default async function PostmortemMockup({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = await searchParams;
+  const theme = themeFromCookie((await cookies()).get(THEME_COOKIE)?.value);
+  const view: View = VIEWS.includes(sp.view as View) ? (sp.view as View) : "postmortem";
+  const armed = sp.armed === "1";
+  const insights = view.startsWith("postmortem");
+
+  return (
+    <div className="page" data-mock>
+      <header className="app-header">
+        <div className="brand">
+          <span className="brand-dot" />
+          <span className="heading brand-name">Hustlemania</span>
+        </div>
+        <nav className="tabs" aria-label="Sections">
+          <a className={`tab ${insights ? "" : "tab-on"}`} href="#">
+            Sprints
+          </a>
+          <a className="tab" href="#">
+            Vision
+          </a>
+          <a className={`tab ${insights ? "tab-on" : ""}`} href="#">
+            Insights
+          </a>
+        </nav>
+        <div className="header-spacer" />
+        <ThemeToggle theme={theme} />
+        <div className="header-user">
+          <span className="header-email hide-narrow">you@example.com</span>
+          <span className="link-quiet nowrap">Sign out</span>
+        </div>
+      </header>
+
+      <div className="shell" data-shell>
+        {insights ? <InsightsSidebar done={view === "postmortem-done"} empty={view === "postmortem-empty"} /> : <SprintsSidebar view={view} />}
+
+        <main className="main">
+          <div className="workspace">
+            <nav className="mk-views" aria-label="Mockup views">
+              {VIEWS.map((v) => (
+                <a key={v} href={`/mockup/postmortem?view=${v}`} aria-current={v === view && !armed ? "page" : undefined}>
+                  {v}
+                </a>
+              ))}
+              <a href="/mockup/postmortem?view=rail&armed=1" aria-current={armed ? "page" : undefined}>
+                end early armed
+              </a>
+            </nav>
+
+            {view === "gate-open" ? <GateOpen /> : null}
+            {view === "gate" ? <Gate /> : null}
+            {view === "gate-reviewed" ? <GateReviewed /> : null}
+            {view === "rail" ? <RailDemo armed={armed} lesson={false} /> : null}
+            {view === "rail-lesson" ? <RailDemo armed={false} lesson /> : null}
+            {view === "postmortem" ? <Postmortem mode="edit" /> : null}
+            {view === "postmortem-error" ? <Postmortem mode="error" /> : null}
+            {view === "postmortem-done" ? <Postmortem mode="done" /> : null}
+            {view === "postmortem-empty" ? <Postmortem mode="empty" /> : null}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function SprintsSidebar({ view }: { view: View }) {
+  const wealthMeta = view === "gate-open" ? "Ended" : view === "gate" ? "Ended" : view === "gate-reviewed" ? "Ready" : view === "rail-lesson" ? "Day 1/14" : "Day 13/14";
+  const wealthSub = view === "gate" ? "Needs review" : view === "gate-reviewed" ? "No active sprint" : OUTCOME;
+  return (
+    <aside data-sidebar>
+      <div className="label-muted side-title">Sprints</div>
+      <a className="side-link" href="#">
+        <span className="side-link-head">
+          <span className="side-label">Health</span>
+          <span className="side-meta">Day 4/14</span>
+        </span>
+        <span className="side-sub">Run 40 km</span>
+      </a>
+      <a className="side-link side-link-on" href="#" aria-current="page">
+        <span className="side-link-head">
+          <span className="side-label">Wealth</span>
+          <span className={`side-meta ${view === "gate" ? "side-meta-accent" : ""}`}>{wealthMeta}</span>
+        </span>
+        <span className="side-sub">{wealthSub}</span>
+      </a>
+      <a className="side-link" href="#">
+        <span className="side-link-head">
+          <span className="side-label">Relationships</span>
+          <span className="side-meta">Ready</span>
+        </span>
+        <span className="side-sub">No active sprint</span>
+      </a>
+    </aside>
+  );
+}
+
+function InsightsSidebar({ done, empty }: { done: boolean; empty: boolean }) {
+  return (
+    <aside data-sidebar>
+      <div className="label-muted side-title">Reviews</div>
+      <a className="side-link side-link-on" href="#" aria-current="page">
+        <span className="side-link-head">
+          <span className="side-label">{empty ? "Ship the course" : OUTCOME}</span>
+          <span className={`side-meta ${done ? "" : "side-meta-accent"}`}>{done ? "Reviewed Sep 15" : "Needs review"}</span>
+        </span>
+        <span className="side-sub">{empty ? "Relationships · ended early · Sep 6" : "Wealth · Sep 1 → Sep 14"}</span>
+      </a>
+      <a className="side-link" href="#">
+        <span className="side-link-head">
+          <span className="side-label">Clear the credit card</span>
+          <span className="side-meta">Reviewed Aug 30</span>
+        </span>
+        <span className="side-sub">Wealth · Aug 16 → Aug 29</span>
+      </a>
+      <div className="label-muted side-title side-title-more">Across sprints</div>
+      <a className="side-link" href="#">
+        <span className="side-link-head">
+          <span className="side-label">What works for you</span>
+          <span className="side-meta">2 sprints</span>
+        </span>
+      </a>
+    </aside>
+  );
+}
+
+/* ---------- Sprints tab: the window has passed, the sprint is still open ---------- */
+
+function GateOpen() {
+  return (
+    <div style={{ maxWidth: 760 }}>
+      <span className="tag tag-accent">Wealth</span>
+      <h1 className="heading" style={{ fontSize: 30, margin: "10px 0 0", lineHeight: 1.15 }}>
+        {OUTCOME}
+      </h1>
+      <div className="j-meta">Wealth · Sep 1 → Sep 14 · 13 of 14 days closed</div>
+      <div className="r-placeholder" style={{ marginTop: 20 }}>
+        timeline: all 14 rows past (folded) · Day 12 missed → add
+      </div>
+      <div className="g-slot" style={{ marginTop: 16 }} data-testid="sprint-ended">
+        <span className="g-slot-text">
+          <strong>All 14 days have passed.</strong> Add any missed day above, then finish the sprint. Unclosed days stay as they are once it is finished.
+        </span>
+        <button type="button" className="btn btn-primary">
+          Finish the sprint
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Sprints tab: finished, unreviewed ---------- */
+
+function Gate() {
+  return (
+    <div className="card g-card" data-testid="review-gate">
+      <span className="t-kicker">Wealth · sprint complete</span>
+      <h1 className="heading g-title">{OUTCOME}</h1>
+      <p className="g-copy">
+        This sprint has ended. The next Wealth sprint stays locked until its postmortem is finished — what hurt, what helped, one lesson, and what
+        to carry forward.
+      </p>
+      <div className="g-actions">
+        <a href="/mockup/postmortem?view=postmortem" className="btn btn-primary btn-link">
+          Open the postmortem
+        </a>
+        <span className="g-hint">$10,400 of $9,000 · met · 13 of 14 days closed</span>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Sprints tab: reviewed, no sprint running ---------- */
+
+function GateReviewed() {
+  return (
+    <div className="card card-page poster" data-testid="empty-state">
+      <span className="tag tag-accent">Wealth</span>
+      <h1 className="heading page-title mt-12">No sprint running in Wealth</h1>
+      <p className="lede lede-narrow">Pick one numeric goal that moves the vision, lock it for 14 days, and close every day with an honest actual.</p>
+      <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", marginTop: 18 }}>
+        <a href="#" className="btn btn-primary btn-link">
+          Create a Wealth sprint
+        </a>
+        <a href="/mockup/postmortem?view=postmortem-done" className="link-quiet" style={{ color: "inherit", opacity: 0.85 }}>
+          Read the last postmortem
+        </a>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Rail with the goal reached ---------- */
+
+function RailDemo({ armed, lesson }: { armed: boolean; lesson: boolean }) {
+  return (
+    <div className="rail-demo">
+      <div className="r-placeholder" style={{ minHeight: 420 }}>
+        journal (unchanged): header · timeline · Today card
+        <br />
+        {lesson ? "Day 1 of 14" : "Day 13 of 14 · $10,400 of $9,000 · goal reached"}
+      </div>
+      <aside className="pm-rail" data-testid="rail">
+        <div className="r-card">
+          <div style={{ fontSize: 18, fontStyle: "italic", fontWeight: 500, color: "var(--accent-ink)", lineHeight: 1.35 }}>“Ask before you build.”</div>
+          <div className="j-progress-streak" style={{ color: "var(--muted)", marginTop: 8 }}>{lesson ? "Streak starts with day 1" : "6-day streak"}</div>
+        </div>
+        {lesson ? (
+          <div className="r-card" data-testid="last-lesson">
+            <span className="t-kicker">Lesson from the last Wealth sprint</span>
+            <div className="r-lesson">“{LESSON}”</div>
+          </div>
+        ) : null}
+        <div className="r-placeholder" style={{ padding: "24px 22px" }}>
+          Highest impediment card (unchanged)
+        </div>
+        <div className="r-placeholder" style={{ padding: "24px 22px" }}>
+          Execution cues card (unchanged)
+        </div>
+        {lesson ? null : (
+          <div className="r-goal" data-testid="complete-sprint">
+            <div className="r-goal-line">Goal reached · $10,400 of $9,000. Remaining days are cancelled, not missed.</div>
+            <button type="button" className="btn btn-primary">
+              Complete sprint
+            </button>
+          </div>
+        )}
+        <div className="r-card" data-testid="celebration-card">
+          <span className="t-kicker">Celebration</span>
+          <div className={lesson ? "r-text" : "r-celeb-met"}>{lesson ? "Dinner at Nopa with M." : "Goal reached · Dinner at Nopa with M."}</div>
+        </div>
+        <div className="r-foot">
+          <button type="button" className={armed ? "two-tap-armed" : ""} aria-pressed={armed}>
+            {armed ? "Tap again to end this sprint now" : "End sprint early"}
+          </button>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+/* ---------- Postmortem ---------- */
+
+type Mode = "edit" | "error" | "done" | "empty";
+
+function Postmortem({ mode }: { mode: Mode }) {
+  const editable = mode === "edit" || mode === "error" || mode === "empty";
+  const empty = mode === "empty";
+  const outcome = empty ? "Ship the course" : OUTCOME;
+  const kicker = empty ? "Postmortem · Relationships · Sep 6 · ended early" : "Postmortem · Wealth · Sep 1 → Sep 14";
+  return (
+    <div className="pm" data-testid="postmortem">
+      <div className="pm-main">
+        <div className="pm-head">
+          <h1 className="heading pm-title">{outcome}</h1>
+          <span className="pm-kicker">{kicker}</span>
+        </div>
+
+        <div className="card pm-card pm-result" data-testid="result-card">
+          <div className="pm-result-row">
+            <span className="heading pm-big" data-state={empty ? "under" : "met"}>
+              {empty ? "0" : "$10,400"} <small>of {empty ? "20 hours" : "$9,000"}</small>
+            </span>
+            <span className="pm-meta">{empty ? "0% · under · ended early on day 1 · 0 days closed · 14 cancelled" : "116% · met · 13 days closed · 1 not closed · best streak 6"}</span>
+          </div>
+          <div className="pm-strip" role="img" aria-label={empty ? "0 of 14 days closed" : "13 of 14 days closed"}>
+            {Array.from({ length: 14 }, (_, i) => {
+              const state = empty ? "cancelled" : i === 11 ? "missed" : [2, 5, 9].includes(i) ? "under" : "met";
+              return <span key={i} data-state={state} />;
+            })}
+          </div>
+        </div>
+
+        <div className="pm-cards" data-testid="insight-cards">
+          <InsightCard
+            tone="impediment"
+            title="Impediment impact"
+            coverage={empty ? "Logged 0 of 0 closed days" : "Logged 12 of 13 closed days · 1 unsure"}
+            question="Median daily attainment on days an obstacle was present vs absent."
+            empty={empty ? "No closed days. Nothing to compare." : null}
+            rows={[
+              {
+                name: "Saying yes to one-off projects",
+                tag: "HIGHEST",
+                tail: "−27 pts",
+                tailTone: "bad",
+                sub: "Present on 8 of 12 logged days",
+                bars: [
+                  { value: "104%", label: "attainment when present", pct: 52, tone: "bad" },
+                  { value: "131%", label: "attainment when absent", pct: 65 },
+                ],
+                note: "Felt: 3 a lot, 4 some",
+              },
+              {
+                name: "Phone distraction",
+                tail: "Not enough data",
+                sub: "Present on 2 of 12 logged days",
+                bars: [
+                  { value: "—", label: "attainment when present", pct: 0, tone: "bad" },
+                  { value: "118%", label: "attainment when absent", pct: 59 },
+                ],
+                note: "Needs 3 days with and 3 without · has 2 and 10",
+                warn: true,
+              },
+            ]}
+          />
+          <InsightCard
+            tone="response"
+            title="Response follow-through"
+            coverage={empty ? "0 occurrences" : "8 occurrences · 7 answered"}
+            question="When the highest impediment showed up, did the WHEN → THEN response run?"
+            empty={empty ? "The highest impediment never showed up on a logged day." : null}
+            rows={[
+              {
+                name: "Saying yes to one-off projects",
+                tail: "71% ran",
+                tailTone: "good",
+                sub: "THEN reply with the retainer offer or a no, within the hour",
+                bars: [
+                  { value: "5", label: "ran the response", pct: 71, tone: "good" },
+                  { value: "2", label: "didn't run it", pct: 29, tone: "bad" },
+                ],
+                note: "1 partially · 1 unsure",
+              },
+            ]}
+          />
+          <InsightCard
+            tone="response"
+            title="Response recovery"
+            coverage={empty ? "0 responses" : "7 answered · 5 ran"}
+            question="Was the recovery criterion met, with the response vs without it?"
+            empty={empty ? "No response was ever asked about." : null}
+            rows={[
+              {
+                name: "Saying yes to one-off projects",
+                tail: "60% recovered",
+                tailTone: "good",
+                sub: "Recovered when back on the outreach list within 15 minutes",
+                bars: [
+                  { value: "3 of 5", label: "recovered with the response", pct: 60, tone: "good" },
+                  { value: "0 of 2", label: "recovered without it", pct: 0 },
+                ],
+                note: "Attainment 118% when recovered vs 92% when not",
+              },
+            ]}
+          />
+          <InsightCard
+            tone="cue"
+            title="Cue usefulness"
+            coverage={empty ? "Logged 0 of 0 closed days" : "Logged 13 of 13 closed days"}
+            question="Median daily attainment on days a cue was used vs not used."
+            empty={empty ? "No closed days. Nothing to compare." : null}
+            rows={[
+              {
+                name: "Ask how much this pays",
+                tag: "FOCUS",
+                tail: "+22 pts",
+                tailTone: "good",
+                sub: "Used on 9 of 13 logged days",
+                bars: [
+                  { value: "126%", label: "attainment when used", pct: 63, tone: "good" },
+                  { value: "104%", label: "attainment when not used", pct: 52 },
+                ],
+                note: null,
+              },
+              {
+                name: "Outreach block at 9",
+                tail: "Not enough data",
+                sub: "Used on 11 of 13 logged days",
+                bars: [
+                  { value: "121%", label: "attainment when used", pct: 60, tone: "good" },
+                  { value: "—", label: "attainment when not used", pct: 0 },
+                ],
+                note: "Needs 3 days with and 3 without · has 11 and 2",
+                warn: true,
+              },
+            ]}
+          />
+        </div>
+
+        <div className="card pm-card" data-testid="proof-card">
+          <div className="pm-proof-head">
+            <span className="t-kicker">Proof point on the highest impediment</span>
+            <span className="pm-proof-name">{empty ? "Skipping the call" : "Saying yes to one-off projects"}</span>
+          </div>
+          <div className="pm-rule">
+            <strong>WHEN</strong> {empty ? "the call feels awkward" : "a one-off request lands in my inbox"} → <strong>THEN</strong>{" "}
+            {empty ? "I dial anyway and say so" : "I reply with the retainer offer or a no, within the hour"}
+          </div>
+          <div className="pm-rule-sub">
+            <strong>RECOVERED WHEN</strong> {empty ? "the call is on the calendar for tomorrow" : "I am back on the outreach list within 15 minutes"}
+          </div>
+          <div className="pm-obs">
+            {empty ? "It never showed up on a logged day. No verdict is asked." : "Showed up on 8 logged days · response ran 5 of 7 answered · recovered 3 of 5 answered."}
+          </div>
+          {empty ? null : (
+            <div className="pm-chips" role="group" aria-label="Proof-point verdict">
+              {["Worked", "Partly worked", "Didn't work"].map((l, i) => (
+                <button key={l} type="button" className={`chip ${i === 1 ? "chip-on" : ""}`} aria-pressed={i === 1} disabled={!editable}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card pm-card" data-testid="lesson-card">
+          <span className="t-kicker">One key lesson</span>
+          {editable ? (
+            <textarea className="input pm-lesson" rows={3} placeholder="The one thing this sprint proved." aria-label="Key lesson" defaultValue={empty ? "" : LESSON} />
+          ) : (
+            <div className="pm-lesson-quote">“{LESSON}”</div>
+          )}
+          <div className="pm-moved" role="group" aria-label="Did it move the vision?">
+            <span>Did it move the vision?</span>
+            {["Yes, it advanced it", "No, it did not"].map((l, i) => (
+              <button key={l} type="button" className={`chip ${!empty && i === 0 ? "chip-on" : ""}`} aria-pressed={!empty && i === 0} disabled={!editable}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="card pm-card" data-testid="carry-card">
+          <span className="t-kicker">{editable ? `Carry forward · decide for the next ${empty ? "Relationships" : "Wealth"} sprint` : "Carried forward"}</span>
+          <div style={{ marginTop: 4 }}>
+            <Decision name="Saying yes to one-off projects" sub={empty ? "impediment · never showed up" : "impediment · present 8 days"} opts={["Keep", "Promote to highest", "Drop"]} on={1} editable={editable} />
+            <Decision name="Phone distraction" sub={empty ? "impediment · never showed up" : "impediment · present 2 days"} opts={["Keep", "Promote to highest", "Drop"]} on={2} editable={editable} />
+            <Decision name="Ask how much this pays" sub={empty ? "cue · never used" : "cue · used 9 days"} opts={["Keep", "Drop"]} on={0} editable={editable} />
+            <Decision name="Outreach block at 9" sub={empty ? "cue · never used" : "cue · used 11 days"} opts={[empty ? "Keep · test more" : "Keep", "Drop"]} on={0} editable={editable} />
+          </div>
+          {mode === "error" ? (
+            <div className="error-bar" role="alert" style={{ marginTop: 16 }}>
+              <span>The review could not be saved. Your lesson and choices are still here.</span>
+              <button type="button" className="link-quiet error-bar-action">
+                Retry
+              </button>
+            </div>
+          ) : null}
+          {editable ? (
+            <div className="pm-finish">
+              <button type="button" className="btn btn-primary" aria-disabled={empty ? "true" : undefined}>
+                Finish review
+              </button>
+              <span className="pm-hint" data-accent={empty ? "true" : "false"}>
+                {empty ? "One lesson and the vision answer are required." : "Unlocks the next Wealth sprint · the kit on the right becomes its default."}
+              </span>
+            </div>
+          ) : (
+            <div className="pm-reviewed">Reviewed September 15, 2026</div>
+          )}
+        </div>
+
+        <details className="card pm-card pm-days" open={!empty} data-testid="day-by-day">
+          <summary>{empty ? "Day by day · 0 closed days" : "Day by day · 13 closed days · show"}</summary>
+          {empty ? null : (
+            <div style={{ marginTop: 10 }}>
+              <Day n={1} date="Mon, Sep 1" actual="$900" target="$643" state="met" tasks={[["Send retainer offer to Alma", true], ["Draft pricing page", true]]} />
+              <Day n={2} date="Tue, Sep 2" actual="$0" target="$643" state="under" tasks={[["Call back the agency", false], ["Outreach block at 9", true]]} />
+              <Day n={3} date="Wed, Sep 3" actual="$1,200" target="$643" state="met" tasks={[["Send retainer offer to Bo", true]]} />
+              <Day n={12} date="Fri, Sep 12" actual="Missed" target="$643" state="missed" tasks={[]} />
+              <div className="pm-day-label" style={{ paddingTop: 8 }}>… 9 more closed days</div>
+            </div>
+          )}
+        </details>
+      </div>
+
+      <aside className="pm-rail" data-testid="kit-card">
+        <div className="kit">
+          <div className="kit-kicker">{editable ? `Next ${empty ? "Relationships" : "Wealth"} sprint starts with` : "Next Wealth sprint starts with"}</div>
+          <div className="kit-label">Highest impediment</div>
+          <div className="kit-highest">{empty ? "None chosen" : "Saying yes to one-off projects"}</div>
+          <div className="kit-note">{empty ? "Pick one when the sprint is created" : "Consider a new WHEN → THEN"}</div>
+          <div className="kit-label">Also watching</div>
+          <div className="kit-list">{empty ? "Skipping the call" : "—"}</div>
+          <div className="kit-label">Cues</div>
+          <div className="kit-list">{empty ? "Send the invite first" : "Ask how much this pays\nOutreach block at 9"}</div>
+          <div className="kit-lesson">{empty ? "The lesson you write here is pinned to Day 1 of the next sprint." : `Lesson pinned to Day 1: “${LESSON}”`}</div>
+        </div>
+        <div className="r-card">
+          <span className="t-kicker">Across 2 finished sprints</span>
+          <div className="across">
+            <div>
+              <div className="heading across-n">64%</div>
+              <div className="across-l">days on target</div>
+            </div>
+            <div>
+              <div className="heading across-n">1 of 2</div>
+              <div className="across-l">goals met</div>
+            </div>
+            <div>
+              <div className="heading across-n">2</div>
+              <div className="across-l">lessons kept</div>
+            </div>
+          </div>
+          <div className="across-note">Reviews are the only place a lesson is written. Each one shows up on Day 1 of the next sprint in that area.</div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+type Row = {
+  name: string;
+  tag?: string;
+  tail: string;
+  tailTone?: "good" | "bad";
+  sub: string;
+  bars: { value: string; label: string; pct: number; tone?: "good" | "bad" }[];
+  note: string | null;
+  warn?: boolean;
+};
+
+function InsightCard({ tone, title, coverage, question, empty, rows }: { tone: "impediment" | "response" | "cue"; title: string; coverage: string; question: string; empty: string | null; rows: Row[] }) {
+  return (
+    <div className="card ic">
+      <div className="ic-head">
+        <span className="ic-kicker" data-tone={tone}>
+          {title}
+        </span>
+        <span className="ic-coverage">{coverage}</span>
+      </div>
+      <div className="ic-question">{question}</div>
+      {empty ? <div className="ic-empty">{empty}</div> : null}
+      {empty
+        ? null
+        : rows.map((r) => (
+            <div key={r.name} className="ic-row">
+              <div className="ic-row-head">
+                <span className="ic-name">
+                  {r.name}
+                  {r.tag ? <span className="ic-tag">{r.tag}</span> : null}
+                </span>
+                <span className="ic-tail" data-tone={r.tailTone}>
+                  {r.tail}
+                </span>
+              </div>
+              <div className="ic-sub">{r.sub}</div>
+              {r.bars.map((b) => (
+                <div key={b.label} className="ic-bar">
+                  <div className="ic-track">
+                    <span className="ic-fill" data-tone={b.tone} style={{ width: `${b.pct}%` }} />
+                  </div>
+                  <span className="ic-bar-label">
+                    <strong>{b.value}</strong> {b.label}
+                  </span>
+                </div>
+              ))}
+              {r.note ? (
+                <div className="ic-note" data-warn={r.warn ? "true" : "false"}>
+                  {r.note}
+                </div>
+              ) : null}
+            </div>
+          ))}
+    </div>
+  );
+}
+
+function Decision({ name, sub, opts, on, editable }: { name: string; sub: string; opts: string[]; on: number; editable: boolean }) {
+  return (
+    <div className="pm-dec">
+      <span>
+        <span className="pm-dec-name">{name}</span> <span className="pm-dec-sub">{sub}</span>
+      </span>
+      <span className="pm-dec-opts" role="group" aria-label={`Carry forward ${name}`}>
+        {opts.map((o, i) => (
+          <button key={o} type="button" className={`chip chip-mini ${o === "Drop" ? "chip-drop" : ""} ${i === on ? "chip-on" : ""}`} aria-pressed={i === on} disabled={!editable}>
+            {o}
+          </button>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+function Day({ n, date, actual, target, state, tasks }: { n: number; date: string; actual: string; target: string; state: "met" | "under" | "missed"; tasks: [string, boolean][] }) {
+  return (
+    <div className="pm-day">
+      <div className="pm-day-label">
+        Day {n}
+        <br />
+        {date}
+      </div>
+      <div>
+        <span className="pm-day-actual" data-state={state}>
+          {actual}
+        </span>{" "}
+        <span className="pm-day-label">{state === "missed" ? `· target ${target}` : `of ${target}`}</span>
+        {tasks.length ? (
+          <ul className="pm-day-tasks">
+            {tasks.map(([t, done]) => (
+              <li key={t} data-done={done ? "true" : "false"}>
+                {t}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </div>
+  );
+}

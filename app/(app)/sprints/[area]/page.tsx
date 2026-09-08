@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ReviewGate } from "@/components/ReviewGate";
 import { Journal } from "@/components/today/Journal";
 import { areaName, isAreaKey } from "@/lib/areas";
 import {
@@ -8,7 +9,9 @@ import {
   eligibleFor,
   loadActiveLibrary,
   loadActiveSprint,
+  loadAreaKit,
   loadDayOfferedItems,
+  loadFinishedSprints,
   loadOverview,
   loadSprintItems,
   loadSprintObservations,
@@ -16,6 +19,7 @@ import {
   loadTasks,
   streakOf,
 } from "@/lib/data";
+import type { Measured } from "@/lib/format";
 import { sprintDayFor } from "@/lib/sprintDay";
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,7 +37,34 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
   const name = areaName(area);
 
   if (!active) {
-    const { vision } = await loadOverview(supabase);
+    // F10: a finished sprint whose postmortem is unwritten blocks the next one here
+    // (rule 26), so the gate replaces the empty card until the review is finished.
+    const [{ vision }, finished] = await allOrThrow([loadOverview(supabase), loadFinishedSprints(supabase)]);
+    const inArea = finished.filter((s) => s.area === area);
+    const unreviewed = inArea.find((s) => s.reviewedAt === null);
+    if (unreviewed) {
+      const sprint = await supabase.from("sprints").select("measurement, currency, unit").eq("id", unreviewed.id).single();
+      if (sprint.error) throw new Error(`sprint: ${sprint.error.message}`);
+      const summary = await supabase.rpc("sprint_review_summary", { p_sprint_id: unreviewed.id });
+      if (summary.error) throw new Error(`sprint_review_summary: ${summary.error.message}`);
+      const measured: Measured = {
+        measurement: sprint.data.measurement as Measured["measurement"],
+        currency: sprint.data.currency,
+        unit: sprint.data.unit,
+      };
+      return (
+        <ReviewGate
+          sprintId={unreviewed.id}
+          area={area}
+          outcome={unreviewed.outcome}
+          status={unreviewed.status}
+          summary={(summary.data ?? [])[0] ?? null}
+          measured={measured}
+        />
+      );
+    }
+
+    const lastReviewed = inArea.find((s) => s.reviewedAt !== null) ?? null;
     return (
       <div className="card card-page poster" data-testid="empty-state">
         <span className="tag tag-accent">{name}</span>
@@ -43,9 +74,16 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
             ? "Pick one numeric goal that moves the vision, lock it for 14 days, and close every day with an honest actual."
             : "A sprint has to advance the vision. Write it first; it takes three short steps."}
         </p>
-        <Link href={vision ? `/sprints/new?area=${area}` : "/vision"} className="btn btn-primary btn-link mt-18">
-          {vision ? `Create a ${name} sprint` : "Write the vision"}
-        </Link>
+        <div className="poster-actions">
+          <Link href={vision ? `/sprints/new?area=${area}` : "/vision"} className="btn btn-primary btn-link">
+            {vision ? `Create a ${name} sprint` : "Write the vision"}
+          </Link>
+          {lastReviewed ? (
+            <Link href={`/insights/reviews/${lastReviewed.id}`} className="poster-link" data-testid="last-postmortem">
+              Read the last postmortem
+            </Link>
+          ) : null}
+        </div>
       </div>
     );
   }
@@ -57,13 +95,14 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
 
   // allSettled: when one read fails the others still finish, so the failure reported
   // is the real one and no sibling rejection goes unhandled (BACKLOG, F4).
-  const [items, fullLibrary, offered, tasks, streaks, observations] = await allOrThrow([
+  const [items, fullLibrary, offered, tasks, streaks, observations, kit] = await allOrThrow([
     loadSprintItems(supabase, active.sprint.id),
     loadActiveLibrary(supabase),
     loadDayOfferedItems(supabase, focusDay.id),
     loadTasks(supabase, focusDay.id),
     loadStreaks(supabase),
     loadSprintObservations(supabase, closedIds),
+    loadAreaKit(supabase, area),
   ]);
   const library = { cues: fullLibrary.cues.filter(eligibleFor(area)), impediments: fullLibrary.impediments.filter(eligibleFor(area)) };
 
@@ -78,6 +117,7 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
       tasks={tasks}
       streak={streakOf(streaks, active.sprint.id)}
       observations={observations}
+      lastLesson={kit?.lesson ?? null}
     />
   );
 }

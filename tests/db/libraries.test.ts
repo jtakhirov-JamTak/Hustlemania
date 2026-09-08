@@ -925,7 +925,7 @@ describe("F7 legacy days and 0010 guards", () => {
     // This suite's own active sprints trip the second guard, so the first must fire before it.
     expect(await run(async (tx) => { await tx`insert into public.day_cue_helped values (1)`; })).toMatch(/legacy_selections_present/);
     expect(await run(async () => {})).toMatch(/focus_backfill_required/);
-    expect(await run(async (tx) => { await tx`update public.sprints set status = 'ended_early' where status = 'active'`; })).toBe("");
+    expect(await run(async (tx) => { await tx`update public.sprints set status = 'ended_early', closed_at = now() where status = 'active'`; })).toBe("");
   });
 });
 

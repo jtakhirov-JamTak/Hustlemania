@@ -157,7 +157,10 @@ export async function startSprint(user: TestUser, args: StartSprintArgs): Promis
  * with the e2e suite). start_sprint only accepts today or tomorrow, so this is how the
  * suite gets days that are already missed.
  */
-export async function insertSprintRows(user: TestUser, opts: { startDate: string; tz: string; area?: string; target?: number }): Promise<{ sprintId: string; dayIds: string[] }> {
+export async function insertSprintRows(
+  user: TestUser,
+  opts: { startDate: string; tz: string; area?: string; target?: number; targets?: (number | undefined)[] },
+): Promise<{ sprintId: string; dayIds: string[] }> {
   return seedSprintRows(admin, user.id, opts);
 }
 

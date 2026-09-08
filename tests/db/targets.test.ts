@@ -143,12 +143,11 @@ describe("F3 targets: save_targets, locking, ownership", () => {
     });
 
     it("rejects a save once the sprint is no longer active", async () => {
-      await sql`update public.sprints set status = 'ended_early' where id = ${sprintId}`;
-      try {
-        await expectRpcError(u, "save_targets", { p_sprint_id: sprintId, p_targets: await targetsOf(sprintId) }, "sprint_not_active");
-      } finally {
-        await sql`update public.sprints set status = 'active' where id = ${sprintId}`;
-      }
+      // Last test in this describe, and nothing else uses this Wealth sprint: the
+      // closure is left in place. sprints_status_transition (0012) refuses the way back.
+      const targets = await targetsOf(sprintId);
+      await sql`update public.sprints set status = 'ended_early', closed_at = now() where id = ${sprintId}`;
+      await expectRpcError(u, "save_targets", { p_sprint_id: sprintId, p_targets: targets }, "sprint_not_active");
     });
   });
 

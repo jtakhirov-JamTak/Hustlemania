@@ -8,9 +8,10 @@ import { createItem } from "@/app/(app)/actions/library";
 import { startSprintAction, type StartSprintInput } from "@/app/(app)/actions/sprint";
 import { OptionRow } from "@/components/OptionRow";
 import { effectivePlan, PlanGrid, type PlanCell } from "@/components/PlanGrid";
-import type { AreaKey } from "@/lib/areas";
+import { areaName, type AreaKey } from "@/lib/areas";
 import { callAction } from "@/lib/callAction";
-import { cueSummary, eligibleFor, proofComplete, proofSummary, type LibraryItem } from "@/lib/data";
+import { cueSummary, eligibleFor, proofComplete, proofSummary, type AreaKit, type LibraryItem } from "@/lib/data";
+import { prefillFromKit } from "@/lib/kit";
 import { formatIsoDate } from "@/lib/dates";
 import { toBaseUnits, unitLabel, type Measurement, type Measured } from "@/lib/format";
 import { addDays, localDateIn } from "@/lib/sprintDay";
@@ -53,8 +54,25 @@ type Library = { cues: LibraryItem[]; impediments: LibraryItem[] };
 
 const STEPS = ["Area & outcome", "Measure & goal", "Confidence & mantra", "Plan & start"];
 
-/** F9: `vision` is the account's one vision (its text) or null; without it no Area can start. */
-export function NewSprintWizard({ areas, initialArea, library: initialLibrary, vision }: { areas: AreaOption[]; initialArea: AreaKey | null; library: Library; vision: string | null }) {
+/**
+ * F9: `vision` is the account's one vision (its text) or null; without it no Area can
+ * start. F10: `kits` carries each Area's last postmortem decisions, which pre-check
+ * step 4 — picking an Area re-reads its own kit, so switching Areas never carries the
+ * previous one's items across.
+ */
+export function NewSprintWizard({
+  areas,
+  initialArea,
+  library: initialLibrary,
+  vision,
+  kits,
+}: {
+  areas: AreaOption[];
+  initialArea: AreaKey | null;
+  library: Library;
+  vision: string | null;
+  kits: Partial<Record<AreaKey, AreaKit | null>>;
+}) {
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [library, setLibrary] = useState<Library>(initialLibrary);
@@ -63,6 +81,13 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary, v
   const [newCueWhen, setNewCueWhen] = useState("");
   const [creating, setCreating] = useState<"cue" | "impediment" | null>(null);
   const [pending, start] = useTransition();
+  /**
+   * Step 4's starting picks for an Area: the kit from its last postmortem, filtered to
+   * what that Area's library still offers. No kit means an empty step 4, exactly as
+   * before F10.
+   */
+  const prefillFor = (area: AreaKey) => prefillFromKit(kits[area], { cues: initialLibrary.cues.filter(eligibleFor(area)), impediments: initialLibrary.impediments.filter(eligibleFor(area)) });
+
   const [d, setD] = useState<Draft>({
     area: initialArea,
     outcome: "",
@@ -81,13 +106,10 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary, v
     intentions: Array(14).fill(""),
     mode: "same",
     custom: Array(14).fill(""),
-    impedimentIds: [],
-    highestId: null,
     proofWhen: "",
     proofThen: "",
     proofRecover: "",
-    cueIds: [],
-    focusId: null,
+    ...(initialArea ? prefillFromKit(kits[initialArea], { cues: initialLibrary.cues.filter(eligibleFor(initialArea)), impediments: initialLibrary.impediments.filter(eligibleFor(initialArea)) }) : { impedimentIds: [], highestId: null, cueIds: [], focusId: null }),
     aligned: false,
   });
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
@@ -310,7 +332,7 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary, v
                     className={`chip ${d.area === a.key ? "chip-on" : ""}`}
                     aria-pressed={d.area === a.key}
                     disabled={disabled}
-                    onClick={() => setD((p) => ({ ...p, area: a.key, impedimentIds: [], highestId: null, cueIds: [], focusId: null }))}
+                    onClick={() => setD((p) => ({ ...p, area: a.key, ...prefillFor(a.key) }))}
                     title={a.hasSprint ? "A sprint is already active here" : undefined}
                   >
                     {a.name}
@@ -478,6 +500,12 @@ export function NewSprintWizard({ areas, initialArea, library: initialLibrary, v
                   ? `The goal does not split evenly, so the first days carry one extra ${unitLabel(measured)}.`
                   : "Goal ÷ 14, the same every day. Choose Custom to set days individually."}
             </div>
+
+            {d.area && kits[d.area] ? (
+              <div className="wz-kit" data-testid="wizard-kit">
+                Pre-filled from your last {areaName(d.area)} review. Change anything you like.
+              </div>
+            ) : null}
 
             <div className="wz-section" data-testid="wizard-impediments">
               <div className="wz-between">

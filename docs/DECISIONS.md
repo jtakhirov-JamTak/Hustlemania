@@ -6,6 +6,75 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-08 — F10 sprint completion: a passed window is finished by hand, the kit is the review rows, the postmortem lives on Insights
+
+**Decision.** F10 interviewed in feature mode (`docs/SPEC.md` F10) and approved at the
+feature gate 2026-09-08; the user chose to build in the same session. Eight calls settled
+in the interview:
+
+1. **A passed window does not close itself.** After day 14 the sprint stays `active` and
+   the Today slot offers **Finish the sprint** (`finish_sprint`, which lands on
+   `completed` or the new `ended` status). Rejected: a settle function that closes any
+   overdue sprint on the next page load.
+2. **The wizard takes the kit pre-fill only.** The v8 800px dialog restyle is deferred to
+   its own entry (BACKLOG), reversing the F9 note that said it would ride with F10.
+3. **The postmortem lives at `/insights/reviews/[sprintId]`** with a minimal Insights
+   sidebar; `/insights` keeps its placeholder and F11 builds Across sprints.
+4. **A finished sprint shows the gate card, not a read-only journal.** The record is read
+   in the postmortem.
+5. **Carry-forward defaults to Keep.** Finish review requires the lesson, the vision
+   answer and — only when it applies — the proof-point verdict.
+6. **No verdict is asked when the highest impediment never occurred** on a logged day;
+   `finish_review` raises `verdict_not_applicable` if one is sent anyway.
+7. **The closure day's own open day is cancelled** with the future ones, so ending a
+   sprint at 3pm does not book today as missed. A day already closed keeps its close.
+8. **End sprint early works before day 1** and cancels all 14.
+
+Three structural decisions inside the build:
+
+- **There is no kit table.** The Area kit is the last completed review's
+  `review_decisions` rows plus its lesson, read back per Area and filtered for archived
+  items (rule 24). A stored kit would be a second copy that drifts from the review that
+  wrote it.
+- **The `review` sprint status is dropped and `ended` added.** The gate is "finished and
+  unreviewed", which is a fact about the `reviews` table, not a status. `ended` names a
+  window that ran out under the goal, which the old five values could not express.
+- **One view, `sprint_days_effective`, is the only day source for the five
+  calculations**, pinned by a `pg_get_functiondef` scan. Note that a cancelled day can
+  never be a closed day (the CHECK forbids it), so the view's `not cancelled` is
+  belt-and-braces; the load-bearing filters are its `target > 0` and the streak's own
+  `not cancelled`, and those are the ones the live mutations break.
+
+**Why.** PRD §9 says backfill is available "while the Sprint remains open", so something
+has to decide when a sprint stops being open; a page load is the wrong place for a
+mutation, and an explicit button keeps the UI and the DB agreeing on one definition.
+F10 already carried two user-data tables, five SQL calculations, a new screen and the
+gate — adding the wizard restyle was the scope risk the F9 entry had warned about in the
+other direction.
+
+**Rejected.** Automatic closure on page load. A read-only journal beside the postmortem.
+Requiring a decision on every carry-forward row. A stored kit table. Keeping `review` as
+a status. Attributing the day's `impact` answer to every impediment row (it is the answer
+about the highest, and 0014 confines it there).
+
+**Numbers.** DB 224 → 268 (`completion.test.ts` 34, `insights.test.ts` 10); unit 64 → 80
+(`insightCards.test.ts` 16); e2e 8 → 10 on desktop + phone. Seven live mutations each
+turned a named test red and were restored from disk; the two new tables each carry an
+in-suite RLS disable/enable check. `npm run verify` green: hooks 60/21/23 + 6/5, unit 80,
+DB 268, e2e 10.
+
+**Three migrations, not one.** 0012 was already applied when two of its defects surfaced,
+so 0013 (the PUBLIC execute grant, FIX_LOG) and 0014 (three calculation errors) are
+forward-only corrections rather than edits. The write guard blocks editing an applied
+migration, which is the rule that produced this shape.
+
+**Departures from the artboard, recorded in the SPEC entry.** The Finish-the-sprint card
+for a window that ran out · the `ended` status · the Day-by-day block with tasks (the
+BACKLOG item that closed a closed day's tasks being unreadable) · the gate card's result
+meta line · "No verdict is asked" when the highest never occurred.
+
+---
+
 ## 2026-09-08 — F9 vision v2: step 1 unlocks sprints, edits are in place, the wizard keeps its look until F10
 
 **Decision.** F9 interviewed in feature mode (`docs/SPEC.md` F9). One vision for the

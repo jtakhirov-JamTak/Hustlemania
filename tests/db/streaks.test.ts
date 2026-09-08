@@ -175,7 +175,7 @@ describe("streaks", () => {
     });
 
     it("no backfill after the sprint is closed", async () => {
-      await sql`update public.sprints set status = 'completed' where id = ${live.sprintId}`;
+      await sql`update public.sprints set status = 'completed', closed_at = now() where id = ${live.sprintId}`;
       await expectRpcError(a, "close_day", { p_sprint_day_id: live.dayIds[0], p_actual: 5 }, "sprint_not_active");
     });
   });

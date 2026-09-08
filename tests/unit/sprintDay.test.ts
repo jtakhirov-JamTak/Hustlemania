@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, daysBetween, localDateIn, sprintDayFor, streakLabel } from "@/lib/sprintDay";
+import { addDays, celebrationState, daysBetween, localDateIn, sprintDayFor, streakLabel } from "@/lib/sprintDay";
 
 describe("localDateIn", () => {
   it("uses the sprint zone, not UTC", () => {
@@ -53,5 +53,26 @@ describe("streakLabel", () => {
     expect(streakLabel(0)).toBe("No streak");
     expect(streakLabel(1)).toBe("1-day streak");
     expect(streakLabel(7)).toBe("7-day streak");
+  });
+});
+
+describe("celebrationState (PRD §10: the celebration grows as the goal approaches)", () => {
+  it("is away below 80% of the goal", () => {
+    expect(celebrationState(0, 1000)).toBe("away");
+    expect(celebrationState(799, 1000)).toBe("away");
+  });
+
+  it("turns near at exactly 80% and stays there until the goal is covered", () => {
+    expect(celebrationState(800, 1000)).toBe("near");
+    expect(celebrationState(999, 1000)).toBe("near");
+  });
+
+  it("is met once the closed days cover the goal, and beyond", () => {
+    expect(celebrationState(1000, 1000)).toBe("met");
+    expect(celebrationState(1400, 1000)).toBe("met");
+  });
+
+  it("a zero goal cannot be reached by dividing by it", () => {
+    expect(celebrationState(0, 0)).toBe("away");
   });
 });

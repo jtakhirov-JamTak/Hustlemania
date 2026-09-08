@@ -3044,3 +3044,732 @@ body:has(dialog[open]) {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   F10 — the review gate, the rail's completion actions and the postmortem.
+   --------------------------------------------------------------------------- */
+
+.mt-16 {
+  margin-top: 16px;
+}
+
+.mb-6 {
+  margin-bottom: 6px;
+}
+
+/* The empty-area poster gains a second, quiet action once a postmortem exists. */
+.poster-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.poster-link {
+  font-size: 13px;
+  color: var(--on-accent);
+  opacity: 0.85;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.side-empty {
+  padding: 4px 12px 8px;
+}
+
+/* ---- Review gate ---- */
+
+.g-card {
+  max-width: 720px;
+  padding: 26px 28px;
+}
+
+.g-title {
+  font-size: 28px;
+  line-height: 1.15;
+  margin: 8px 0 0;
+}
+
+.g-copy {
+  font-size: 13.5px;
+  color: var(--muted);
+  margin: 10px 0 0;
+  line-height: 1.55;
+  max-width: 56ch;
+}
+
+.g-actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.g-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---- Journal: the Today slot once the window has passed ---- */
+
+.j-finish {
+  flex: 1;
+  min-width: 0;
+  border: 1.5px dashed var(--control-border);
+  border-radius: 20px;
+  padding: 18px 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+}
+
+.j-finish-text {
+  font-size: 13.5px;
+  line-height: 1.5;
+  max-width: 48ch;
+  display: block;
+}
+
+.j-finish-text strong {
+  font-weight: 600;
+}
+
+.j-finish-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+/* ---- Rail additions ---- */
+
+.r-lesson {
+  font-size: 13.5px;
+  line-height: 1.5;
+  margin-top: 6px;
+  font-style: italic;
+}
+
+.r-goal {
+  border: 1px solid var(--accent);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.r-goal-line {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.r-celebration-met {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--success);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.r-foot {
+  padding: 0 4px;
+}
+
+.r-foot-link {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.r-foot-link.two-tap-armed {
+  color: var(--under);
+  font-weight: 600;
+}
+
+/* ---- Postmortem ---- */
+
+.pm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 32px;
+  align-items: start;
+  max-width: 1120px;
+}
+
+.pm-main {
+  min-width: 0;
+}
+
+.pm-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.pm-title {
+  font-size: 30px;
+  line-height: 1.15;
+  margin: 0;
+  min-width: 0;
+}
+
+.pm-kicker {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pm-card {
+  margin-top: 20px;
+  padding: 20px 22px;
+}
+
+.pm-result {
+  padding: 18px 22px;
+}
+
+.pm-result-row {
+  display: flex;
+  gap: 18px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.pm-big {
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.pm-big[data-state="met"] {
+  color: var(--success);
+}
+
+.pm-big[data-state="under"] {
+  color: var(--under);
+}
+
+.pm-big small {
+  font-size: 18px;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.pm-meta {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.pm-strip {
+  display: flex;
+  gap: 3px;
+  margin-top: 14px;
+}
+
+.pm-strip span {
+  flex: 1;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--faint);
+}
+
+.pm-strip span[data-state="met"] {
+  background: var(--success);
+}
+
+.pm-strip span[data-state="under"] {
+  background: var(--under);
+}
+
+.pm-strip span[data-state="missed"] {
+  background: var(--under);
+  opacity: 0.35;
+}
+
+.pm-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+/* ---- The shared insight card ---- */
+
+.ic {
+  padding: 18px 22px 6px;
+  min-width: 0;
+}
+
+.ic-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.ic-kicker {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.ic-kicker[data-tone="impediment"] {
+  color: var(--under);
+}
+
+.ic-kicker[data-tone="response"] {
+  color: var(--accent);
+}
+
+.ic-kicker[data-tone="cue"] {
+  color: var(--success);
+}
+
+.ic-coverage {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ic-question {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 4px;
+  line-height: 1.45;
+  padding-bottom: 10px;
+}
+
+.ic-empty {
+  margin-bottom: 14px;
+  border: 1px dashed var(--divider);
+  border-radius: 14px;
+  padding: 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.ic-row {
+  padding: 12px 0 14px;
+  border-top: 1px solid var(--divider);
+}
+
+.ic-row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.ic-name {
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.ic-tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.ic-tail {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.ic-tail[data-tone="bad"] {
+  color: var(--under);
+}
+
+.ic-tail[data-tone="good"] {
+  color: var(--success);
+}
+
+.ic-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+
+.ic-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px;
+  gap: 10px;
+  align-items: center;
+  margin-top: 7px;
+}
+
+.ic-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--faint);
+  overflow: hidden;
+}
+
+.ic-fill {
+  display: block;
+  height: 100%;
+  background: color-mix(in srgb, var(--ink) 30%, transparent);
+}
+
+.ic-fill[data-tone="bad"] {
+  background: var(--under);
+}
+
+.ic-fill[data-tone="good"] {
+  background: var(--success);
+}
+
+.ic-bar-label {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ic-bar-label strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.ic-note {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 8px;
+  line-height: 1.45;
+}
+
+.ic-note[data-warn="true"] {
+  color: var(--accent-ink);
+}
+
+/* ---- Proof point, lesson, carry forward ---- */
+
+.pm-proof-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pm-proof-name {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pm-rule {
+  font-size: 15px;
+  line-height: 1.5;
+  margin-top: 8px;
+}
+
+.pm-rule-sub {
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.pm-rule strong,
+.pm-rule-sub strong {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.03em;
+}
+
+.pm-obs {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+.pm-chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.pm-lesson {
+  width: 100%;
+  margin-top: 10px;
+  box-sizing: border-box;
+}
+
+.pm-lesson-quote {
+  font-size: 15px;
+  line-height: 1.5;
+  margin-top: 8px;
+  font-style: italic;
+}
+
+.pm-moved {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.pm-dec {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--divider);
+  font-size: 14px;
+  flex-wrap: wrap;
+}
+
+.pm-dec-name {
+  font-weight: 600;
+}
+
+.pm-dec-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pm-dec-opts {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.chip-mini {
+  padding: 5px 10px;
+  font-size: 11.5px;
+}
+
+.chip-drop.chip-on {
+  background: var(--under);
+  border-color: var(--under);
+  color: var(--on-accent);
+}
+
+.pm-finish {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.pm-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pm-hint[data-accent="true"] {
+  color: var(--accent-ink);
+}
+
+.pm-reviewed {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---- Day by day: the one place a closed day's tasks are readable ---- */
+
+.pm-days summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pm-day {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--divider);
+  font-size: 13px;
+}
+
+.pm-day-label {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pm-day-actual {
+  font-weight: 600;
+}
+
+.pm-day-actual[data-state="met"] {
+  color: var(--success);
+}
+
+.pm-day-actual[data-state="under"],
+.pm-day-actual[data-state="missed"] {
+  color: var(--under);
+}
+
+.pm-day-tasks {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.pm-day-tasks li[data-done="true"]::before {
+  content: "✓ ";
+  color: var(--success);
+}
+
+.pm-day-tasks li[data-done="false"]::before {
+  content: "○ ";
+}
+
+/* ---- The kit rail ---- */
+
+.pm-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 78px;
+  min-width: 0;
+}
+
+.kit {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: 20px;
+  padding: 20px 22px;
+}
+
+.kit-kicker {
+  font-size: 10.5px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.kit-label {
+  margin-top: 12px;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.kit-highest {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.kit-note {
+  font-size: 12px;
+  margin-top: 4px;
+  opacity: 0.9;
+  font-style: italic;
+}
+
+.kit-list {
+  font-size: 14px;
+  margin-top: 2px;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.kit-lesson {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--on-accent) 35%, transparent);
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.92;
+}
+
+.across {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.across-n {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.across-l {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.across-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+@media (max-width: 1240px) {
+  .pm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pm-rail {
+    position: static;
+  }
+}
+
+@media (max-width: 940px) {
+  .pm-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ic-bar {
+    grid-template-columns: minmax(0, 1fr) 130px;
+  }
+  .pm-day {
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+  .pm-big {
+    font-size: 38px;
+  }
+}
+
+/* F10: step 4 says where its pre-checked picks came from. */
+.wz-kit {
+  margin-top: 22px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent-ink);
+  padding: 10px 14px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* PRD §10: the celebration grows as the goal approaches, before it turns green. */
+.r-celebration-near {
+  font-size: 15px;
+  font-weight: 600;
+  margin-top: 4px;
+  line-height: 1.4;
+}
