@@ -1523,44 +1523,187 @@ missed · **End sprint early works before day 1** and cancels all 14.*
   toggle) — captured at desktop width in both palettes and copied to
   `docs/mockups/f10-postmortem/` with three screenshots before the build.
 
-### F11 — Insights v2: four cards, Reviews and Across sprints (was F7)
-*Re-scoped 2026-09-06 (rows B9 C5 D4 D9 D10); the text below is the v1 entry and is
-rewritten by `/interview`.* Replaces v1's area pages and history table with the four
-cards — Impediment impact · Response follow-through · Response recovery · Cue
-usefulness — in two views: Reviews (single-sprint postmortem, F10) and Across sprints
-(scope chips by Area, Suggested kit, How to read this). Metric: **median daily
-attainment** (Actual ÷ Target on positive-target days) with vs without, in the README's
-card shape. Follow-through and recovery rates; partial reported separately; recovery
-with vs without the response. Every card shows both group sizes, logging coverage over
-elapsed eligible days, backfill count; unsure and unanswered excluded from
-denominators; closed, non-cancelled days only; cross-sprint lists each sprint's own
-comparison grouped by item + version + Area, never pooled; "n ≥ 3 does not establish
-reliability" stated; associations, never causes. Finished-sprint sidebar rows carry
-Met / Under and % of goal (the §1 measurement). Task completion vs result → BACKLOG.
-*Review notes 2026-09-07:* the single-sprint calculations are F10's; F11 = the
-Across-sprints view (per-sprint comparisons grouped by item + version + Area, where
-version is the proof text tuple on the day snapshot), Suggested kit, How to read
-this, and the Insights sidebar (moved from F8) whose finished-sprint rows carry Met /
-Under, % of goal and the completion type (normal / early / ended early, the Part 1
-measurement). Card copy is rewritten for median attainment (the README strings are
-for on-target rate) and the recovery card compares with vs without the response
-(D3b / C5), not only "after the response ran". The FOCUS tag marks the focus cue on
-the Cue usefulness card, pinned first.
-- **Behavior (v1).** Insights tab: Health, Wealth, Relationships, All Areas, Sprint History.
-  Per area and overall: % of Goal per sprint, impediment/cue frequency on lowest- vs
-  highest-result days, most damaging / most useful items, task completion vs result.
-  Findings are phrased as associations with counts ("Starting late appeared on 4 of
-  your 5 lowest-result days"). History shows every sprint's full record including
-  archived items and the closed-day snapshots.
-- **Acceptance criteria.** Each insight is a pure SQL view or function with a fixture
-  test; areas compared only by % of goal, never summed across measurements (rule 25;
-  test: no query sums `amount` across differing `measurement`). Global items keep the
-  source area per observation. Insights read only closed, non-cancelled days. Text
-  never contains "caused". Empty state when < 1 closed sprint.
-- **Non-goals.** AI narrative (later feature), charts beyond simple bars.
-- **Risks.** Insights that mislead on tiny samples — each shows its n and hides
-  below n = 3.
-- **Evaluator.** none.
+### F11 — Insights v2: Across sprints, Suggested kit, the measurement rows (was F7)
+*Specified 2026-09-09 by `/interview` (feature mode), replacing the v1 entry. Scope:
+`docs/RECONCILIATION-2026-09-06.md` rows B9 C5 D4 D9 D10 minus everything F10 already
+built — the four cards, their calculations and the single-sprint postmortem are done, so
+F11 is the Across-sprints view, the Suggested kit, How to read this, and the measurement
+on the sidebar rows. Eight in-session calls (2026-09-09): **the row is one aggregate row
+per item with a recurring note**, the v8 card shape, not C5's per-sprint listing · **its
+two bars come from the most recent sprint that clears n≥3**, named in the sub, falling
+back to the most recent sprint with the tail "Not enough data" when none does · **the
+cross-sprint numbers are the existing per-sprint SQL fanned out per finished sprint and
+grouped in TypeScript** — no new SQL, so Across and Reviews cannot disagree · **version
+splits the response cards only** (item + proof tuple), while impediment impact and cue
+usefulness group by item alone · **Area is part of the key**, so a global item used in two
+areas is two rows · **the Suggested kit is deterministic sentences** off the ranked rows ·
+**0 finished sprints keeps the placeholder, 1 gets real cards, recurring notes need 2** ·
+**`/insights` stays a stable destination** — it never redirects to a pending postmortem.*
+
+- **Behavior.** `/insights` becomes **Across sprints**: "What actually works for you", an
+  evidence line counting sprints, closed days and days on target, four scope chips (All
+  areas · Health · Wealth · Relationships), the same four insight cards reading every
+  finished sprint in scope, and a bottom row of **Suggested kit for the next sprint**
+  beside **How to read this**. Each card row is one item, and its note says in how many
+  sprints the pattern repeated — the two bars are one sprint's comparison, named in the
+  row, because pooling days from sprints with different goals would invent a number no
+  postmortem could confirm. The Insights sidebar's finished-sprint rows gain the outcome
+  measurement (Part 2 §1): Met or Under, % of goal, and how the sprint ended. The page is
+  read-only; the chip is its only control.
+
+- **Acceptance criteria.**
+  - **No migration.** Every number comes from the five functions and the view F10 already
+    built. Test: `git diff --name-only` for the feature touches no file under
+    `supabase/migrations/`, and `supabase_migrations.schema_migrations` still tops out at
+    `0015` after the feature's suites run.
+  - **`loadAcross(scope)`** (`lib/data.ts`) — one read of the finished sprints in scope
+    (`status <> 'active'`, area-filtered when the scope is not `all`), then, per sprint,
+    the four existing `insight_*` functions. Groups the returned rows into cards:
+    - `insight_impediment_impact` and `insight_cue_usefulness` group by `item_id` and, on
+      the All-areas scope, by `area` — the same item in Health and in Wealth is two rows.
+    - `insight_response_followthrough` and `insight_response_recovery` group by `item_id`
+      **plus the version** — the function's reported `proof_then` / `proof_recover` for
+      that sprint. Two rows may therefore carry the same item name; the sub distinguishes
+      them. Test: two sprints sharing an impediment with different `proof_then` produce
+      two follow-through rows, and with identical `proof_then` produce one.
+    - The bars are the **most recent sprint in the group with `enough = true`**, and the
+      sub names it (`· from Wealth · Aug 12 → 25`). When no sprint in the group qualifies,
+      the row still renders, the tail reads `Not enough data`, **the `from` attribution is
+      absent** (nothing is being quoted) and the note carries the shortfall. Tests for all
+      three: qualifying newest wins over a qualifying older one; a thin newest sprint does
+      not suppress an older qualifying one; no qualifying sprint leaves no attribution.
+    - **"Most recent" means the sprint that ran most recently — `end_date` descending —**
+      not the order `loadFinishedSprints` returns (`closed_at` desc) and not the array
+      position. A window that ran out in July and was finished by hand in September is
+      still the older sprint. (Settled 2026-09-09 during the build: the two orderings
+      agree for sprints closed on time and disagreed visibly on seeded data.) Test: a
+      history whose array order contradicts `end_date` still quotes the later sprint.
+    - **On the All-areas scope every row is prefixed with its Area** (`Wealth · Present on
+      5 of 12 logged days · …`). Two rows of the same item name with nothing between them
+      is worse than either merging or splitting, so the Area label is what makes the
+      per-Area grouping legible. Scoped, the prefix is omitted — the chip already says it.
+      Test: All areas yields `Wealth` and `Health` prefixes; a scoped render has none.
+    - **Row order: rows with a comparison first, thin rows last** — impediments worst
+      delta first, cues best delta first. Tests on both: a three-row card orders
+      worst/best, then mild, then the `Not enough data` row.
+  - **Recurring notes** (unit-tested in `lib/insightCards.ts`, cross-sprint mode):
+    - Comparison cards: `{Helped|Hurt} in {k} of {n} sprints with enough days`, plus
+      ` — recurring` only when `k = n` and `n ≥ 2`. A sprint counts toward `n` when it has
+      **≥ 2 days on each side** — a deliberately looser bar than the n≥3 a displayed
+      comparison needs, because "did it repeat" is a different question from "what was the
+      delta". `Hurt` when the sprint's delta is negative, `Helped` when positive.
+    - When no sprint reaches 2 on each side: `In {n} sprints · no single sprint has enough
+      days yet`.
+    - Tri-state cards: `{Ran|Recovered} at least half the time in {k} of {n} sprints`,
+      counting a sprint when its own `answered ≥ 2` and its yes-share is `≥ 0.5`.
+      `answered` is each card's own denominator — `yes|no|partially` for follow-through
+      (0015) and `yes|no` for recovery — so the note can never disagree with the rate the
+      card displays. (Corrected 2026-09-09 during the build: the first draft of this line
+      said `yes + no ≥ 2`, which would have used a different denominator from the rate.)
+    - The sub gains ` · {n} sprints`. Tests: the recurring suffix appears at 2 of 2 and is
+      absent at 2 of 3 and at 1 of 1; the k/n counts are asserted on a fixture.
+  - **Suggested kit** — deterministic sentences, at most three, in this order, from the
+    ranked rows of the scope: the worst impediment (`enough`, `delta_pts ≤ −10`) →
+    "Keep {name} as the highest impediment; days it shows up run {|delta|} points lower.";
+    the first `enough` follow-through row → below 50%, "The response for {name} ran on only
+    {rate}% of occurrences — make the THEN smaller.", otherwise "The response for {name}
+    runs {rate}% of the time[ and recovers {rate}% of the time]."; the best cue (`enough`,
+    `delta_pts ≥ +10`) → "Keep {name} — +{delta} points on the days it's used." With no
+    closed day: "Nothing to suggest yet — close a few days first." With closed days but no
+    qualifying row: "Not enough logged days yet. Each comparison needs 3 days on each
+    side." Unit tests for each branch and for the two empty states; no sentence is emitted
+    from a row whose `enough` is false.
+  - **How to read this** — the v8 text rewritten for median attainment (the README's
+    strings are for the on-target rate D4 replaced): it states the with/without
+    comparison, that unsure days count toward coverage and not the comparison, both
+    thresholds, that the bars come from the most recent qualifying sprint, and that three
+    days is not reliability. Test: the copy contains neither "on-target rate" nor "caused".
+  - **Header evidence line** — `{n} sprints · {c} closed days · {h} on target ({p}%)` and
+    the kicker `Evidence · {first start} → today`, scoped by the chip, counted over
+    `sprint_days_effective` (so a zero-target closed day is out, as it is everywhere else
+    on this page). `loadReviewStats` is **not** touched: the rail's card needs goals-met
+    and lessons-kept, which this line does not show, and the two numbers it shares are
+    cheaper to count in `loadAcross` than to thread a scope through a function whose other
+    outputs would be discarded. (Corrected 2026-09-09 during the build; the first draft of
+    this line said `loadReviewStats` would gain an optional scope.) Test: the on-target
+    count for `all` equals the sum of the three area scopes, and `loadReviewStats` has no
+    new parameter.
+  - **Scope chips** — always all four, in the order All areas · Health · Wealth ·
+    Relationships; the active chip is `chip-on`; the scope is a URL search param so the
+    page stays a server component and the chip is a link. Test: `?scope=health` renders
+    Health active and only Health sprints' rows; an unknown scope value falls back to
+    `all` rather than erroring.
+  - **States.** 0 finished sprints → the existing placeholder card, unchanged. Finished
+    sprints but no qualifying row → cards render with every row's shortfall stated and the
+    thin Suggested-kit sentence. A chip whose area has no finished sprint → each card shows
+    the dashed empty block with its reason and the evidence line reads
+    `No finished {Area} sprint`. Tests for all three.
+  - **Sidebar rows** (`app/(app)/insights/layout.tsx`) — `loadFinishedSprints` gains `pct`
+    and `met` per sprint: the total `actual` over `sprint_days_effective` against the
+    sprint's `amount`, `met = total ≥ amount` (rule 25 — compared per sprint, never summed
+    across measurements). The row keeps its label and its `Reviewed {date}` / `Needs
+    review` meta, and gains a second sub line: `{Met|Under} · {pct}% of goal ·
+    {COMPLETION_LABEL[status]}`, with Met in `--success` and Under in `--under`. `SideItem`
+    takes one new optional field for that line; no other caller passes it. Tests: a sprint
+    whose closed days total exactly the goal reads `Met · 100% of goal`; one short of it
+    reads `Under`; a money and an hours sprint are never added together.
+  - **e2e** (`e2e/golden-path.spec.ts`, desktop + phone): after the existing F10 walk
+    finishes a review, `/insights` shows the Across page with the finished sprint's own
+    numbers, the sidebar row reads `Met|Under · n% of goal`, and a scope chip filters the
+    rows. Zero-overflow assertion at 390px on the Across page.
+  - **Live mutations** (each turns a named test red, then restored from disk): the
+    qualifying-sprint pick returns the oldest instead of the newest · the `from`
+    attribution is emitted with no qualifying sprint · the recurring suffix drops its
+    `k = n` condition · the version key drops `proof_then`, merging two responses into one
+    row · `met` compares against the wrong sprint's `amount`.
+  - Visual match against the v8 artboard's Across page in Chrome at desktop width in Dusk
+    and Night; phone via the Playwright phone project. `npm run verify` green.
+
+- **Non-goals.** New SQL for the cross-sprint numbers (the per-sprint functions are fanned
+  out instead) · C5's per-sprint listing under each row, and any pooling of days across
+  sprints into one comparison · splitting a version **inside** one sprint (see Risks) ·
+  any action on this page: no "start a sprint with this kit", no link from a row to the
+  sprint it quotes · a history table (D9 is satisfied by the sidebar rows) · task
+  completion vs result (BACKLOG, D10) · AI narrative · a per-row sparkline or trend over
+  time · the v8 800px New Sprint dialog restyle (its own entry, BACKLOG).
+
+- **Risks.** (1) **A mid-sprint response rewrite is invisible.**
+  `insight_response_followthrough` reports `max(o.proof_then)` per sprint, so if the WHEN →
+  THEN text changed inside one sprint, that sprint contributes one row under the lexically
+  greatest tuple and its counts span both versions. Version grouping therefore separates
+  sprints, not days. Stated in How to read this; splitting inside a sprint would need the
+  new SQL this feature deliberately did not write, and it goes to BACKLOG.
+  (2) **The aggregate row reads as a pooled result.** Every row names the sprint its bars
+  came from and prints that sprint's group sizes; the recurring note is the only figure
+  that spans sprints, and it counts sprints, never days.
+  (3) **The fan-out is N+1 reads.** N is the user's finished sprints (<10 for years at 14
+  days a sprint, and the reads are `Promise.all`-batched per sprint); if it ever bites, the
+  fix is the SQL this entry rejected, not a cache.
+  (4) **Met / Under disagrees with the postmortem's result card.** Both must read the same
+  total over `sprint_days_effective`; the test asserts the sidebar's pct equals
+  `sprint_review_summary`'s for the same sprint.
+  (5) **A thin first user sees a wall of "Not enough data".** That is the chosen state, and
+  the Suggested kit says what is missing in one sentence instead of repeating it per row.
+
+- **Evaluator.** **none.** No migration, no new function, no policy or grant change: every
+  read goes through F10's already-evaluated definer functions and the RLS on the tables
+  behind them. (Had the cross-sprint numbers been written as new SQL, the new definer
+  functions would have made this an authorization surface and triggered a pass — one
+  reason the fan-out was chosen.)
+
+- **UI.** Primary action: switch scope and read — the page has no button. Viewport: both,
+  desktop-first (Chrome at desktop width against the artboard; phone via the Playwright
+  phone project). States: empty (no finished sprint), thin (nothing clears n≥3), per-chip
+  empty (an area with no finished sprint). References: the v8 artboard's Across-sprints
+  page in `docs/mockups/ui-v2/handoff_sprint_ui_v8/Sprint App v8 Libraries.dc.html` and
+  §Insights → §Across sprints of its README, plus `docs/mockups/f10-postmortem/` for card
+  consistency. Departures from the artboard, deliberate: its cross mode **pools** every
+  in-scope day into one comparison and this one quotes a single sprint (C5) · its card copy
+  says "on-target rate" and this one says median attainment (D4) · two rows may share a
+  name when a response was rewritten · the footer pair stacks below 1024px. Mockup:
+  `app/mockup/across/` (thin page in the stack, hardcoded, `?view=full|thin|chip-empty|none`,
+  `?scope=…`, the real Dusk / Night toggle and the real `InsightCard`), captured to
+  `docs/mockups/f11-across/`.
 
 ### F12 — Circles: invites and accountability view (was F8)
 - **Behavior.** A member creates a circle and invites emails; the invite creates the

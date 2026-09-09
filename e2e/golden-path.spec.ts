@@ -754,5 +754,35 @@ test.describe("golden path", () => {
     // Finishing after the window cancels nothing: the six unclosed days stay missed.
     const cancelled = await admin.from("sprint_days").select("day_index").eq("sprint_id", sprint.sprintId).eq("cancelled", true);
     expect(cancelled.data).toEqual([]);
+
+    // F11: the finished sprint is now the whole history, so Across sprints reads it and
+    // the sidebar row carries the measurement Part 2 §1 is read from.
+    await page.goto("/insights");
+    const across = page.getByTestId("across");
+    await expect(across).toBeVisible();
+    await expect(page.getByTestId("across-evidence")).toHaveText(/^1 sprint · \d+ closed days · \d+ on target/);
+    await expect(page.locator("[data-sidebar] .side-result").first()).toHaveText(/^(Met|Under) · \d+% of goal · sprint ended$/);
+    // This sprint's closed days DO clear n≥3, so the kit speaks — and every number in it
+    // is one the cards above print. Asserted as the exact sentence set: a loose regex here
+    // passed while the expected branch was wrong, which is worse than no assertion.
+    await expect(page.getByTestId("suggested-kit")).toContainText(
+      "Keep Late meetings as the highest impediment; days it shows up run 75 points lower. " +
+        "The response for Late meetings runs 50% of the time and recovers 50% of the time.",
+    );
+    await expect(page.getByTestId("suggested-kit")).not.toContainText("Not enough logged days yet");
+    await noOverflow();
+
+    // A scope with no finished sprint states the reason rather than emptying the page.
+    await page.goto("/insights?scope=health");
+    await expect(page.getByTestId("across-evidence")).toHaveText("No finished Health sprint");
+    await expect(page.getByTestId("card-impact")).toContainText("No finished Health sprint yet.");
+    await expect(page.getByTestId("suggested-kit")).toContainText("Nothing to suggest yet");
+    await noOverflow();
+
+    // Back to the area that has the history, and a junk scope is not a broken page.
+    await page.goto("/insights?scope=relationships");
+    await expect(page.getByTestId("across-evidence")).toHaveText(/^1 sprint/);
+    await page.goto("/insights?scope=nonsense");
+    await expect(page.getByTestId("across-evidence")).toHaveText(/^1 sprint/);
   });
 });

@@ -9,6 +9,12 @@ export type SideItem = {
   meta?: string;
   metaAccent?: boolean;
   sub?: string;
+  /**
+   * A second sub line carrying an outcome (F11): the Insights rows put Met / Under, % of
+   * goal and how the sprint ended here, because Part 2 §1 makes these rows the product's
+   * measurement. `lead` is emphasised and tinted by `tone`.
+   */
+  result?: { lead: string; tone: "met" | "under"; rest: string };
 };
 
 export function SideNavList({ items }: { items: SideItem[] }) {
@@ -24,6 +30,11 @@ export function SideNavList({ items }: { items: SideItem[] }) {
               {it.meta ? <span className={`side-meta ${it.metaAccent ? "side-meta-accent" : ""}`}>{it.meta}</span> : null}
             </span>
             {it.sub ? <span className="side-sub">{it.sub}</span> : null}
+            {it.result ? (
+              <span className="side-result">
+                <strong data-state={it.result.tone}>{it.result.lead}</strong> · {it.result.rest}
+              </span>
+            ) : null}
           </Link>
         );
       })}

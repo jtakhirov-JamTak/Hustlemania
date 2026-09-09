@@ -1,0 +1,139 @@
+/* F11 mockup — throwaway. Scoped under [data-mock]; nothing here reaches the app. */
+
+[data-mock] .mk-views {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  margin-bottom: 18px;
+  color: var(--muted);
+}
+
+[data-mock] .mk-views a {
+  color: var(--muted);
+  text-decoration: none;
+  border: 1px solid var(--divider);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+
+[data-mock] .mk-views a[aria-current="page"] {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+/* ---- The Across-sprints header: title left, evidence line right ---- */
+
+.lg-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.lg-kicker {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.lg-stats {
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.lg-caveat {
+  font-size: 11.5px;
+  color: var(--muted);
+  text-align: right;
+  margin-top: 3px;
+}
+
+/* ---- Scope chips ---- */
+
+.lg-scopes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 18px 0 4px;
+}
+
+/* ---- The bottom row: suggested kit beside how-to-read ---- */
+
+.lg-foot {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.lg-foot .card {
+  padding: 18px 22px 20px;
+  min-width: 0;
+}
+
+.lg-suggest {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+
+.lg-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.lg-body {
+  font-size: 12.5px;
+  line-height: 1.65;
+  margin-top: 8px;
+}
+
+.lg-suggest .lg-body {
+  opacity: 0.94;
+}
+
+.lg-read .lg-body {
+  color: var(--muted);
+}
+
+/* The sidebar's finished-sprint rows carry the measurement (D9). */
+
+.side-result {
+  font-size: 11.5px;
+  color: var(--muted);
+  display: block;
+  margin-top: 2px;
+}
+
+.side-result strong {
+  font-weight: 700;
+}
+
+.side-result strong[data-state="met"] {
+  color: var(--success);
+}
+
+.side-result strong[data-state="under"] {
+  color: var(--under);
+}
+
+/* Two footer cards need ~360px each; the workspace is 777px at a 1138px viewport, so
+   they pair from here up and stack only when the sidebar has already become chips. */
+@media (max-width: 1024px) {
+  .lg-foot {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .lg-head {
+    align-items: flex-start;
+  }
+  .lg-stats,
+  .lg-caveat {
+    text-align: left;
+  }
+}

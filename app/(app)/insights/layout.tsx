@@ -1,18 +1,21 @@
 import { SideNav, SideNavList, type SideItem } from "@/components/SideNav";
 import { areaName } from "@/lib/areas";
-import { loadFinishedSprints } from "@/lib/data";
+import { COMPLETION_LABEL, loadMeasuredSprints } from "@/lib/data";
 import { formatIsoDate, stampDate } from "@/lib/dates";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * The Insights sidebar (F10): finished sprints newest first, each either awaiting its
+ * The Insights sidebar: finished sprints newest first, each either awaiting its
  * postmortem or carrying the date it was written. Running sprints never appear — a
- * review belongs to a sprint that is over. F11 adds Met / Under and % of goal to these
- * rows and builds the Across-sprints view the last entry points at.
+ * review belongs to a sprint that is over.
+ *
+ * The second sub line is the product's measurement (F11, D9): Part 2 §1 says these rows
+ * are how "a meaningful share reach their locked Goal" gets read, so Met / Under, % of
+ * goal and how the sprint ended live here rather than on a screen of their own.
  */
 export default async function InsightsLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
-  const finished = await loadFinishedSprints(supabase);
+  const finished = await loadMeasuredSprints(supabase);
 
   const short = (iso: string) => formatIsoDate(iso, { month: "short", day: "numeric" });
   const reviews: SideItem[] = finished.map((s) => ({
@@ -21,6 +24,11 @@ export default async function InsightsLayout({ children }: { children: React.Rea
     meta: s.reviewedAt ? `Reviewed ${stampDate(s.reviewedAt)}` : "Needs review",
     metaAccent: s.reviewedAt === null,
     sub: `${areaName(s.area)} · ${short(s.start_date)} → ${short(s.end_date)}`,
+    result: {
+      lead: s.met ? "Met" : "Under",
+      tone: s.met ? ("met" as const) : ("under" as const),
+      rest: `${s.pct}% of goal · ${COMPLETION_LABEL[s.status] ?? s.status}`,
+    },
   }));
 
   return (

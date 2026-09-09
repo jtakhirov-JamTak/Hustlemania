@@ -2,6 +2,27 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## Found during F11 (2026-09-09), not fixed there
+
+- **A response rewritten *inside* one sprint cannot be split into its own row.**
+  `insight_response_followthrough` and `insight_response_recovery` report
+  `max(o.proof_then)` / `max(o.proof_recover)` per sprint, so if the WHEN → THEN text
+  changed on day 7 that sprint contributes one row under the lexically greater text with
+  counts spanning both versions. F11's version key therefore separates sprints, not days.
+  Splitting inside a sprint needs the cross-sprint SQL F11 deliberately did not write
+  (DECISIONS 2026-09-09); "How to read this" does not claim otherwise.
+- **The shared insight card truncates a long bar label** — "recovered with the resp…" at a
+  777px workspace, because `.ic-bar-label` is a fixed 170px column with ellipsis. Predates
+  F11 (F10 ships the same rows) and only bites below the artboard's width; the fix is
+  either a wrapping label or a shorter string.
+- **Harness, not app:** `"sprints: JWT issued at future"` appeared once on `/sprints`
+  during the F11 capture run — clock skew between the host and the auth container, not a
+  code path. The page recovered; worth remembering before blaming a session bug.
+- **The Across page's footer pair stacks below 1024px viewport**, chosen because the
+  workspace is 777px at the 1138px ceiling Chrome allows in this harness — so the paired
+  layout the artboard draws was never observed in a browser, only in Playwright at 1440px.
+  Worth an eye at a real desktop width before release.
+
 ## Found during F10 (2026-09-08), not fixed there
 
 - **eval-06 findings** (no P0/P1; eight P2s). Fixed before green: the missing "Across n
@@ -99,8 +120,13 @@
   artboard**; F8 (rail cue card) and F9 should draw them rather than keep the
   improvised rows.
 - **`friendlyError` matches codes by substring in insertion order**: a new code that
-  contains an older one (none today) would map to the older copy. Consider exact-token
-  matching when the table grows again.
+  contains an older one maps to the older copy. ~~(none today)~~ **One exists as of F10,
+  found 2026-09-09 by enumerating the 73 codes through the real matching loop:**
+  `item_not_in_sprint` (raised in `0012_sprint_completion.sql:671`) resolves to
+  `not_in_sprint`'s copy, so the message reads "That item is not in this sprint." instead
+  of "That item was not part of this sprint." Cosmetic — the two sentences mean the same
+  thing — but the collision class is now real, not hypothetical. Fix with the word-boundary
+  matching the F9 entry above already prescribes.
 
 ## Found during audit remediation phases 4–6 (2026-09-06), not fixed there
 

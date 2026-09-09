@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cache } from "react";
+import type { Scope, SprintInsights } from "@/lib/across";
 import { AREAS, type AreaKey } from "@/lib/areas";
 import type { Database, Tables } from "@/lib/database.types";
 import { NO_OBSERVATIONS, type DayObservations } from "@/lib/daySummary";
@@ -447,6 +448,49 @@ export const loadFinishedSprints = cache(async (supabase: Client): Promise<Finis
   }));
 });
 
+export type MeasuredSprint = FinishedSprint & {
+  /** % of goal, from `sprint_review_summary` — the same number the postmortem prints. */
+  pct: number;
+  met: boolean;
+};
+
+/**
+ * The Insights sidebar's rows with the outcome measurement on them (F11, D9 — Part 2 §1
+ * says these rows ARE the measurement). `pct` and `met` come from
+ * `sprint_review_summary`, not from a second calculation over the same days: two
+ * arithmetics for one number is how the sidebar and the postmortem come to disagree.
+ *
+ * Only the Insights tab pays for this. `loadFinishedSprints` stays as it was, so the
+ * Sprints sidebar and the review gate do not gain a read per finished sprint.
+ */
+export const loadMeasuredSprints = cache(async (supabase: Client): Promise<MeasuredSprint[]> => {
+  const finished = await loadFinishedSprints(supabase);
+  if (finished.length === 0) return [];
+
+  const summaries = await allOrThrow(finished.map((s) => supabase.rpc("sprint_review_summary", { p_sprint_id: s.id }).then((res) => ({ id: s.id, res }))));
+  const byId = new Map<string, ReviewSummary | null>();
+  for (const { id, res } of summaries) {
+    if (res.error) throw new Error(`sprint_review_summary: ${res.error.message}`);
+    byId.set(id, ((res.data ?? [])[0] ?? null) as ReviewSummary | null);
+  }
+  return mergeMeasures(finished, byId);
+});
+
+/**
+ * Pair each finished sprint with its own summary. Keyed by sprint id rather than by
+ * position: a measurement attached to the wrong row would be a quiet lie on the one
+ * screen Part 2 §1 calls the product's measurement, and an id lookup cannot slip.
+ *
+ * A sprint with no summary row reads 0% and Under rather than throwing — the row still
+ * has to render, and "Under · 0% of goal" is true of a sprint with no closed day.
+ */
+export function mergeMeasures(finished: FinishedSprint[], byId: Map<string, ReviewSummary | null>): MeasuredSprint[] {
+  return finished.map((sprint) => {
+    const row = byId.get(sprint.id) ?? null;
+    return { ...sprint, pct: row?.pct ?? 0, met: row?.met ?? false };
+  });
+}
+
 export type ImpactRow = {
   item_id: string;
   name: string;
@@ -725,6 +769,68 @@ export async function loadAreaKit(supabase: Client, area: AreaKey): Promise<Area
 }
 
 export type ReviewStats = { sprints: number; daysOnTargetPct: number | null; goalsMet: number; lessons: number };
+
+export type AcrossData = {
+  history: SprintInsights[];
+  sprints: number;
+  closedDays: number;
+  onTarget: number;
+  /** The earliest in-scope start date, for the `Evidence · {date} → today` kicker. */
+  firstStart: string | null;
+};
+
+/**
+ * Across sprints (F11). The four per-sprint calculations F10 already wrote, fanned out
+ * over every finished sprint in scope; the grouping is `lib/across.ts` and the numbers
+ * are never recomputed. Deliberately N reads rather than four new cross-sprint SQL
+ * functions: the same SQL that fills a postmortem fills this page, so the two cannot
+ * drift, and no new SECURITY DEFINER surface is introduced.
+ *
+ * N is the user's finished sprints — at 14 days a sprint, single digits for years.
+ */
+export async function loadAcross(supabase: Client, scope: Scope): Promise<AcrossData> {
+  const finished = (await loadFinishedSprints(supabase)).filter((s) => scope === "all" || s.area === scope);
+
+  const days = await supabase.from("sprint_days_effective").select("sprint_id, target, actual");
+  if (days.error) throw new Error(`sprint_days_effective: ${days.error.message}`);
+  const inScope = new Set(finished.map((s) => s.id));
+  const mine = days.data.filter((d) => d.sprint_id && inScope.has(d.sprint_id));
+
+  const history = await allOrThrow(
+    finished.map(async (sprint): Promise<SprintInsights> => {
+      const [impact, follow, recovery, cues] = await allOrThrow([
+        supabase.rpc("insight_impediment_impact", { p_sprint_id: sprint.id }),
+        supabase.rpc("insight_response_followthrough", { p_sprint_id: sprint.id }),
+        supabase.rpc("insight_response_recovery", { p_sprint_id: sprint.id }),
+        supabase.rpc("insight_cue_usefulness", { p_sprint_id: sprint.id }),
+      ]);
+      for (const [name, res] of [
+        ["insight_impediment_impact", impact],
+        ["insight_response_followthrough", follow],
+        ["insight_response_recovery", recovery],
+        ["insight_cue_usefulness", cues],
+      ] as const) {
+        if (res.error) throw new Error(`${name}: ${res.error.message}`);
+      }
+      const rows = (res: { data: unknown }): Record<string, unknown>[] => (res.data ?? []) as Record<string, unknown>[];
+      return {
+        sprint: { id: sprint.id, area: sprint.area, start_date: sprint.start_date, end_date: sprint.end_date },
+        impact: rows(impact).map((r) => ({ ...r, median_present: numeric(r.median_present), median_absent: numeric(r.median_absent) }) as unknown as ImpactRow),
+        follow: rows(follow) as unknown as FollowThroughRow[],
+        recovery: rows(recovery).map((r) => ({ ...r, median_recovered: numeric(r.median_recovered), median_not: numeric(r.median_not) }) as unknown as RecoveryRow),
+        cues: rows(cues).map((r) => ({ ...r, median_used: numeric(r.median_used), median_unused: numeric(r.median_unused) }) as unknown as CueRow),
+      };
+    }),
+  );
+
+  return {
+    history,
+    sprints: finished.length,
+    closedDays: mine.length,
+    onTarget: mine.filter((d) => Number(d.actual) >= Number(d.target)).length,
+    firstStart: finished.reduce<string | null>((first, s) => (first === null || s.start_date < first ? s.start_date : first), null),
+  };
+}
 
 /**
  * The three numbers on the postmortem rail's "Across n finished sprints" card. This is

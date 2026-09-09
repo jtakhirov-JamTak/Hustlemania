@@ -1,0 +1,354 @@
+import { cookies } from "next/headers";
+import "./mockup.css";
+import { InsightCard, type InsightRow } from "@/components/insights/InsightCard";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { THEME_COOKIE, themeFromCookie } from "@/lib/theme";
+
+/**
+ * F11 mockup — throwaway scaffolding for the feature gate. Hardcoded three-sprint
+ * history. `?view=full|thin|chip-empty|none` and `?scope=all|health|wealth|relationships`.
+ * The header's Dusk / Night toggle is the real one, and the four cards are the real
+ * shared component so Across cannot drift from how Reviews renders the same rows.
+ * Deleted once F11 is approved.
+ */
+
+type View = "full" | "thin" | "chip-empty" | "none";
+const VIEWS: View[] = ["full", "thin", "chip-empty", "none"];
+
+const SCOPES: [string, string][] = [
+  ["all", "All areas"],
+  ["health", "Health"],
+  ["wealth", "Wealth"],
+  ["relationships", "Relationships"],
+];
+
+/** The bar geometry the app uses: attainment is unbounded, so 200% of target caps the track. */
+const w = (pct: number) => Math.min(100, Math.round(pct / 2));
+
+const QUOTED = "from Wealth · Aug 12 → 25";
+
+const IMPACT: InsightRow[] = [
+  {
+    key: "i1",
+    name: "Starting late",
+    tag: "HIGHEST",
+    tail: "−31 pts",
+    tailTone: "bad",
+    sub: `Present on 5 of 6 logged days · 3 sprints · ${QUOTED}`,
+    bars: [
+      { value: "62%", label: "attainment when present", pct: w(62), tone: "bad" },
+      { value: "93%", label: "attainment when absent", pct: w(93) },
+    ],
+    note: "Felt: 2 a lot, 1 some · Hurt in 2 of 3 sprints with enough days",
+  },
+  {
+    key: "i2",
+    name: "Phone in the room",
+    tail: "−12 pts",
+    tailTone: "bad",
+    sub: `Present on 7 of 9 logged days · 2 sprints · ${QUOTED}`,
+    bars: [
+      { value: "74%", label: "attainment when present", pct: w(74), tone: "bad" },
+      { value: "86%", label: "attainment when absent", pct: w(86) },
+    ],
+    note: "Hurt in 2 of 2 sprints with enough days — recurring",
+  },
+  {
+    key: "i3",
+    name: "Client fire drill",
+    tail: "Not enough data",
+    sub: "Present on 2 of 11 logged days · 3 sprints",
+    bars: [
+      { value: "—", label: "attainment when present", pct: 0, tone: "bad" },
+      { value: "—", label: "attainment when absent", pct: 0 },
+    ],
+    note: "Needs 3 days with and 3 without · has 2 and 9 · In 3 sprints · no single sprint has enough days yet",
+    warn: true,
+  },
+];
+
+const FOLLOW: InsightRow[] = [
+  {
+    key: "f1",
+    name: "Starting late",
+    tail: "71% ran",
+    tailTone: "good",
+    sub: "THEN set a 10-minute timer and start the smallest task · 2 sprints",
+    bars: [
+      { value: "5", label: "ran the response", pct: 71, tone: "good" },
+      { value: "2", label: "didn't run it", pct: 29, tone: "bad" },
+    ],
+    note: "1 unsure day · Ran at least half the time in 2 of 2 sprints",
+  },
+  {
+    key: "f2",
+    name: "Starting late",
+    tail: "Not enough data",
+    sub: "THEN put the phone in the drawer before opening the laptop · 1 sprint",
+    bars: [
+      { value: "1", label: "ran the response", pct: 50, tone: "good" },
+      { value: "1", label: "didn't run it", pct: 50, tone: "bad" },
+    ],
+    note: "Needs 3 answered occurrences · has 2 · a rewritten response starts its own row",
+    warn: true,
+  },
+];
+
+const RECOVERY: InsightRow[] = [
+  {
+    key: "r1",
+    name: "Starting late",
+    tail: "60% recovered",
+    sub: "Recovered when the first task is done before 10am · 2 sprints",
+    bars: [
+      { value: "3 of 5", label: "recovered with the response", pct: 60, tone: "good" },
+      { value: "1 of 2", label: "recovered without it", pct: 50 },
+    ],
+    note: "Attainment 96% when recovered vs 58% when not · Recovered at least half the time in 2 of 2 sprints",
+  },
+];
+
+const CUES: InsightRow[] = [
+  {
+    key: "c1",
+    name: "First hour is outreach",
+    tag: "FOCUS",
+    tail: "+22 pts",
+    tailTone: "good",
+    sub: `Used on 8 of 11 logged days · 3 sprints · ${QUOTED}`,
+    bars: [
+      { value: "104%", label: "attainment when used", pct: w(104), tone: "good" },
+      { value: "82%", label: "attainment when not used", pct: w(82) },
+    ],
+    note: "Helped in 3 of 3 sprints with enough days — recurring",
+  },
+  {
+    key: "c2",
+    name: "Inbox closed till noon",
+    tail: "+4 pts",
+    sub: `Used on 6 of 9 logged days · 2 sprints · ${QUOTED}`,
+    bars: [
+      { value: "91%", label: "attainment when used", pct: w(91), tone: "good" },
+      { value: "87%", label: "attainment when not used", pct: w(87) },
+    ],
+    note: "Helped in 1 of 2 sprints with enough days",
+  },
+];
+
+/**
+ * The thin state: one finished sprint, no row clearing n≥3. No row quotes a sprint,
+ * because none qualifies — the `from {sprint}` attribution exists only to say where
+ * the bars came from, so it is absent exactly when there are no bars.
+ */
+const thin = (rows: InsightRow[], has: string): InsightRow[] =>
+  rows.slice(0, 2).map((r) => ({
+    ...r,
+    tail: "Not enough data",
+    tailTone: undefined,
+    sub: r.sub.replace(/ · \d+ sprints?( · from .*)?$/, " · 1 sprint").replace(/Present on \d+ of \d+/, "Present on 2 of 6").replace(/Used on \d+ of \d+/, "Used on 2 of 6"),
+    bars: r.bars.map((b) => ({ ...b, value: "—", pct: 0 })),
+    note: `${has} · In 1 sprint · no single sprint has enough days yet`,
+    warn: true,
+  }));
+
+const SUGGEST_FULL =
+  "Keep Starting late as the highest impediment; days it shows up run 31 points lower. " +
+  "The response for Starting late runs 71% of the time and recovers 60% of the time. " +
+  "Keep First hour is outreach — +22 points on the days it's used.";
+
+const SUGGEST_THIN = "Not enough logged days yet. Each comparison needs 3 days on each side.";
+const SUGGEST_NONE = "Nothing to suggest yet — close a few days first.";
+
+const HOW_TO_READ =
+  "Each card compares median daily attainment (actual ÷ target) on days with and without the item, " +
+  "using only closed days where that question was answered. Unsure days count toward coverage, not the " +
+  "comparison. A comparison needs 3 days on each side; follow-through and recovery need 3 answered " +
+  "occurrences. The bars come from the most recent sprint that clears that bar — the note says in how " +
+  "many sprints the pattern repeated. Three days is not reliability, and none of this shows a cause.";
+
+export default async function AcrossMockup({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = await searchParams;
+  const theme = themeFromCookie((await cookies()).get(THEME_COOKIE)?.value);
+  const view: View = VIEWS.includes(sp.view as View) ? (sp.view as View) : "full";
+  const scope = view === "chip-empty" ? "health" : typeof sp.scope === "string" ? sp.scope : "all";
+
+  return (
+    <div className="page" data-mock>
+      <header className="app-header">
+        <div className="brand">
+          <span className="brand-dot" />
+          <span className="heading brand-name">Hustlemania</span>
+        </div>
+        <nav className="tabs" aria-label="Sections">
+          <a className="tab" href="#">
+            Sprints
+          </a>
+          <a className="tab" href="#">
+            Vision
+          </a>
+          <a className="tab tab-on" href="#">
+            Insights
+          </a>
+        </nav>
+        <div className="header-spacer" />
+        <ThemeToggle theme={theme} />
+        <div className="header-user">
+          <span className="header-email hide-narrow">you@example.com</span>
+          <span className="link-quiet nowrap">Sign out</span>
+        </div>
+      </header>
+
+      <div className="shell" data-shell>
+        <Sidebar empty={view === "none"} />
+        <main className="main">
+          <div className="workspace">
+            <nav className="mk-views" aria-label="Mockup views">
+              {VIEWS.map((v) => (
+                <a key={v} href={`/mockup/across?view=${v}`} aria-current={v === view ? "page" : undefined}>
+                  {v}
+                </a>
+              ))}
+            </nav>
+            {view === "none" ? <Placeholder /> : <Across view={view} scope={scope} />}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function Placeholder() {
+  return (
+    <div className="card card-page">
+      <span className="tag tag-accent">Across sprints</span>
+      <h1 className="heading page-title mt-12">Patterns arrive after your first sprint</h1>
+      <p className="lede lede-narrow">
+        Each finished sprint gets a postmortem on the left. Once a few of them exist, this page compares them: which impediments line up with
+        under-target days, which cues line up with good ones.
+      </p>
+    </div>
+  );
+}
+
+function Across({ view, scope }: { view: View; scope: string }) {
+  const bare = view === "chip-empty";
+  const isThin = view === "thin";
+
+  const stats = bare ? "No finished Health sprint" : isThin ? "1 sprint · 6 closed days · 2 on target (33%)" : "3 sprints · 34 closed days · 19 on target (56%)";
+  const kicker = bare ? "Evidence · nothing yet" : isThin ? "Evidence · Sep 1 → today" : "Evidence · Jul 1 → today";
+  const coverage = bare ? "No closed days" : isThin ? "Logged 6 of 6 closed days" : "Logged 31 of 34 closed days · 3 unsure";
+  const occ = bare ? "No occurrences" : isThin ? "2 occurrences · 2 answered" : "9 occurrences · 7 answered";
+  const resp = bare ? "No responses" : isThin ? "2 responses · 1 answered" : "7 responses · 6 answered";
+
+  const emptyImp = bare ? "No finished Health sprint yet. Comparisons appear once one ends." : null;
+  const emptyFt = bare ? "No finished Health sprint yet." : null;
+
+  return (
+    <>
+      <div className="lg-head">
+        <div>
+          <div className="lg-kicker">{kicker}</div>
+          <h1 className="heading page-title mt-6">What actually works for you</h1>
+        </div>
+        <div>
+          <div className="lg-stats">{stats}</div>
+          <div className="lg-caveat">Comparisons need 3 days on each side · association, not cause</div>
+        </div>
+      </div>
+
+      <div className="lg-scopes" role="group" aria-label="Scope">
+        {SCOPES.map(([key, label]) => (
+          <a key={key} className={`chip ${scope === key ? "chip-on" : ""}`} href={`/mockup/across?view=${view}&scope=${key}`}>
+            {label}
+          </a>
+        ))}
+      </div>
+
+      <div className="pm-cards">
+        <InsightCard
+          tone="impediment"
+          title="IMPEDIMENT IMPACT"
+          coverage={coverage}
+          question="Median daily attainment on days an obstacle was present vs absent."
+          empty={emptyImp}
+          rows={bare ? [] : isThin ? thin(IMPACT, "Needs 3 days with and 3 without · has 2 and 4") : IMPACT}
+          testId="card-impact"
+        />
+        <InsightCard
+          tone="response"
+          title="RESPONSE FOLLOW-THROUGH"
+          coverage={occ}
+          question="When the highest impediment showed up, did the WHEN → THEN response run?"
+          empty={emptyFt}
+          rows={bare ? [] : isThin ? thin(FOLLOW, "Needs 3 answered occurrences · has 2") : FOLLOW}
+          testId="card-followthrough"
+        />
+        <InsightCard
+          tone="response"
+          title="RESPONSE RECOVERY"
+          coverage={resp}
+          question="After the response ran, was the recovery criterion met?"
+          empty={emptyFt}
+          rows={bare ? [] : isThin ? thin(RECOVERY, "Needs 3 answered responses · has 1") : RECOVERY}
+          testId="card-recovery"
+        />
+        <InsightCard
+          tone="cue"
+          title="CUE USEFULNESS"
+          coverage={coverage}
+          question="Median daily attainment on days a cue was used vs not used."
+          empty={emptyImp}
+          rows={bare ? [] : isThin ? thin(CUES, "Needs 3 days with and 3 without · has 2 and 4") : CUES}
+          testId="card-cues"
+        />
+      </div>
+
+      <div className="lg-foot">
+        <section className="card lg-suggest">
+          <div className="lg-title">Suggested kit for the next sprint</div>
+          <p className="lg-body">{bare ? SUGGEST_NONE : isThin ? SUGGEST_THIN : SUGGEST_FULL}</p>
+        </section>
+        <section className="card lg-read">
+          <div className="lg-title">How to read this</div>
+          <p className="lg-body">{HOW_TO_READ}</p>
+        </section>
+      </div>
+    </>
+  );
+}
+
+function Sidebar({ empty }: { empty: boolean }) {
+  const rows = [
+    { label: "Land three retainer clients", meta: "Reviewed Sep 4, 2026", accent: false, sub: "Wealth · Aug 12 → 25", result: ["Met", "met", "112% of goal · completed early"] },
+    { label: "Ship the strength base", meta: "Needs review", accent: true, sub: "Health · Jul 29 → Aug 11", result: ["Under", "under", "78% of goal · sprint ended"] },
+    { label: "Two calls a week with Dad", meta: "Reviewed Jul 16, 2026", accent: false, sub: "Relationships · Jul 1 → 14", result: ["Met", "met", "104% of goal · sprint complete"] },
+  ];
+
+  return (
+    <aside data-sidebar>
+      <div className="label-muted side-title">Reviews</div>
+      {empty ? (
+        <div className="side-sub side-empty">Postmortems open here when a sprint ends.</div>
+      ) : (
+        rows.map((r) => (
+          <a key={r.label} className="side-link" href="#">
+            <span className="side-link-head">
+              <span className="side-label">{r.label}</span>
+              <span className={`side-meta ${r.accent ? "side-meta-accent" : ""}`}>{r.meta}</span>
+            </span>
+            <span className="side-sub">{r.sub}</span>
+            <span className="side-result">
+              <strong data-state={r.result[1]}>{r.result[0]}</strong> · {r.result[2]}
+            </span>
+          </a>
+        ))
+      )}
+      <div className="label-muted side-title side-title-more">Across sprints</div>
+      <a className="side-link side-link-on" href="#">
+        <span className="side-link-head">
+          <span className="side-label">What works for you</span>
+        </span>
+      </a>
+    </aside>
+  );
+}

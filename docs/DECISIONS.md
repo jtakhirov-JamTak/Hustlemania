@@ -6,6 +6,72 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-09 — F11 Across sprints: the existing per-sprint SQL is fanned out, a row quotes one sprint, version splits the response cards only
+
+**Decision.** F11 interviewed in feature mode (`docs/SPEC.md` F11) and approved at the
+feature gate 2026-09-09; built in the same session. Eight calls settled in the interview:
+
+1. **One aggregate row per item with a recurring note** — the v8 card shape — rather than
+   C5's "each sprint's own comparison listed" under every row.
+2. **The two bars come from the most recent sprint that clears n≥3**, named in the sub.
+   With no qualifying sprint the row still renders, the tail reads `Not enough data` and
+   **the `from` attribution is absent**: it exists to say where the bars came from.
+3. **The cross-sprint numbers are F10's per-sprint functions fanned out** over each
+   finished sprint and grouped in TypeScript (`lib/across.ts`). No new SQL.
+4. **Version splits the response cards only** — item + the sprint's proof tuple. Impediment
+   impact and cue usefulness group by item: a renamed obstacle is the same obstacle.
+5. **Area is part of the key**, so a global item used in two areas is two rows on All areas.
+6. **The Suggested kit is deterministic sentences** off the ranked rows, never from a row
+   whose sample is short.
+7. **0 finished sprints keeps the placeholder, 1 gets real cards, recurring notes need 2.**
+8. **`/insights` stays a stable destination** — it never redirects to a pending postmortem.
+
+**Why the fan-out and not four cross-sprint SQL functions.** The v1 acceptance line asked
+for "a pure SQL view or function with a fixture test", which pointed at new SQL. It was
+rejected for two reasons. The calculation would then exist twice, so the Reviews card and
+the Across card could silently disagree about the same sprint — and the postmortem is the
+record, so a disagreement there is the one defect this page must not have. And four new
+SECURITY DEFINER functions are four new authorization surfaces; F10's eval already found a
+PUBLIC execute grant on ten of them. Fanning out costs N reads (single digits for years at
+14 days a sprint) and buys agreement by construction plus an evaluator trigger avoided.
+
+**Why a row quotes one sprint instead of pooling.** The artboard's own cross mode pools
+every in-scope day into one comparison. Pooling days across sprints with different goals
+and measurements produces a median that no postmortem can confirm and that rule 25 forbids
+in spirit. So the bars are one sprint's real comparison and the only figure spanning
+sprints is the recurring note, which counts sprints, never days. This is a deliberate
+departure from a REQUIREMENT-level reference and is recorded as such in the SPEC entry.
+
+**Rejected.** Pooled bars (the artboard's own behaviour). Per-sprint sub-rows under every
+item (C5 as written) — the user chose the card shape. A median of per-sprint medians. New
+cross-sprint SQL. A "start a sprint with this kit" action on the page. A link from each row
+to the sprint it quotes. `/insights` deep-linking to a pending postmortem. Threading a
+scope through `loadReviewStats`, whose other two numbers this page does not show.
+
+**Two SPEC criteria were corrected during the build**, both recorded inline in the entry
+rather than quietly diverged from: the recurring note's tri-state vote counts each card's
+own denominator (`yes|no|partially` for follow-through per 0015) instead of `yes + no`, so
+the note cannot disagree with the rate the card displays; and the header's evidence line is
+counted inside `loadAcross` rather than by giving `loadReviewStats` a scope parameter.
+
+**A mutation that survived, and what it exposed.** "The qualifying-sprint pick returns the
+oldest instead of the newest" left the test named for it green: that fixture had only one
+qualifying sprint, so `find(enough)` reaches it from either end. The mutation is caught by
+the two-qualifying-sprints test instead, and a seventh mutation — the pick ignoring
+`enough` altogether — was added for the test the first one was mis-paired with. Both tests
+are now load-bearing, and each of the seven mutations is pinned to a test it actually
+turns red.
+
+**Numbers.** No migration; DB suite unchanged at 270. Unit 84 → 110 (`across.test.ts` 26).
+Seven live mutations each turned a named test red and were restored from disk.
+
+**Deferred to BACKLOG.** Splitting a version *inside* one sprint (the SQL reports
+`max(proof_then)` per sprint, so a mid-sprint response rewrite collapses into one row with
+counts spanning both texts) · the shared card's 170px bar-label column truncating
+"recovered with the response" at a 777px workspace, which predates F11.
+
+---
+
 ## 2026-09-08 — F10 sprint completion: a passed window is finished by hand, the kit is the review rows, the postmortem lives on Insights
 
 **Decision.** F10 interviewed in feature mode (`docs/SPEC.md` F10) and approved at the
