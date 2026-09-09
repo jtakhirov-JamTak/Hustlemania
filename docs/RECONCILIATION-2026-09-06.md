@@ -4,6 +4,27 @@ Date: 2026-09-06. Purpose: decide, row by row, what the new inputs change in
 `docs/SPEC.md` before any interview or code. Nothing in this file is a decision until
 the **Your call** column is filled and the result is copied into SPEC Part 2 §5.
 
+> ## STATUS — superseded. Historical record, not a current reference.
+>
+> **Stamped 2026-09-08.** The decisions on this page were made, then **executed**: F6
+> `623656d` · F7 `c1fc3b9` · F8 `1b53b25` · F9 `5ddbd89` · F10 `d293100`. They were also
+> refined the day after this was written by `docs/audits/spec-review-2026-09-07.md`.
+>
+> **The current spec is `docs/SPEC.md` §5. Read that, not this.**
+>
+> Everything below is a snapshot frozen at 2026-09-06 and much of it is now false as a
+> statement about the codebase — `visions.area` is gone, `day_impediment_hurt` /
+> `day_cue_helped` are dropped, six of the Today components it names were deleted in the
+> F8 restyle, and "F6–F10 not built" describes a repo that no longer exists. Those are
+> not errors; they are what execution looks like. Its e2e line citations (`129`, `138`)
+> were **accurate when written** — verified against `3e50218` — and only look wrong
+> against a later HEAD.
+>
+> This header exists because the absence of one has already cost something: an agent sent
+> to verify this document on 2026-09-08 reported its component list, its schema
+> references and its e2e citations as *factual errors*, when they were simply a
+> superseded snapshot.
+
 ## Inputs
 
 | Id | File | What it is | Standing |
@@ -14,7 +35,13 @@ the **Your call** column is filled and the result is copied into SPEC Part 2 §5
 | D | `docs/drafts/Changes to Insights and Vision pages.docx` | Draft (ChatGPT-assisted) for Insights, Day Close observations, Vision, and the library editors | Claims to test. Where D and R disagree, a row below says so. |
 | PRD | `docs/references/14-Day-Goal-Sprint-Req.md` | Behavioural reference SPEC v1 defers to | Unchanged. Still wins on behaviour unless a row below records a delta. |
 
-## Part 1 of the SPEC (Problem) — unchanged
+## Part 1 of the SPEC (Problem) — unchanged *(except as corrected below)*
+
+> **Correction, 2026-09-08.** This section's claim is contradicted by a decision taken on
+> this same page. **B15** moves "personal data exportable" out of v1 to BACKLOG — that is a
+> Part 1 requirement, and `docs/SPEC.md:1667` now records it as such: *"DELTA vs PRD §12
+> and Part 1: **no data export in v1**."* So one input did touch Part 1's requirements. The
+> rest of the paragraph below still holds.
 
 No input touches outcome, users, requirements, constraints, or failure conditions.
 "Insights are rule-based statistics" still holds: every new insight is a count or a
@@ -26,7 +53,7 @@ answer to it.
 
 | Area | Evidence |
 |---|---|
-| Palette Lake (`#2b7ea8` accent, ink `#16242e`, met `#2f7d52`, under `#c0392b`), Plus Jakarta Sans, cards radius 20px, buttons radius 12px, pills, sidebar 266px, stack at ≤940px, sticky header with three tabs, kickers, hint-beside-disabled-primary, selection rows with leading square/circle, "locked" said quietly, colours never words for met/under | R visual language = old README on every one of these; the e2e pins for font, 20px radius and 266/390px sidebar stay valid |
+| ~~Palette Lake (`#2b7ea8` accent, ink `#16242e`, met `#2f7d52`, under `#c0392b`)~~ **— see the correction below this table**; Plus Jakarta Sans, cards radius 20px, buttons radius 12px, pills, sidebar 266px, stack at ≤940px, sticky header with three tabs, kickers, hint-beside-disabled-primary, selection rows with leading square/circle, "locked" said quietly, colours never words for met/under | R visual language = old README on every one of these; the e2e pins for font, 20px radius and 266/390px sidebar stay valid |
 | Every PRD §13 rule 1–29 and everything F1–F5 built on them: RLS, `start_sprint`, `close_day`, targets balance and locking, tasks, streaks, backfill, membership date ranges, archive/scope/delete rules | R "Interactions & state (unchanged rules)" restates F5; D says "preserve legacy records, eligibility, selection limits, RLS, archive/scope/delete rules, closed-day history" |
 | Day Close is two steps: Actual → what happened → result | R step 1/2; D "preserve the two-step Close flow" |
 | New Sprint dialog: 4 steps, 800px, same step contents (step 4 grows, see B5) | R |
@@ -34,6 +61,13 @@ answer to it.
 | Brand **Hustlemania** (R still says "Sprint") | SPEC §5 delta, DECISIONS 2026-09-05 |
 | Money in minor units, whole units in the UI; hours as minutes; `usage_of_funds` jsonb array already stores allocations, so R's "5,000 savings · 3,000 debt" line needs no schema change | `0001_init.sql` |
 | F8 Circles, F9 evening reminder, F10 export / PWA / deploy | No input mentions them |
+
+**Correction, 2026-09-08 — the palette row does not belong in this section.** This table is
+headed "Unchanged — SPEC holds, nothing to do", but decision **B13** on this same page
+replaced Palette Lake with **Dusk** (accent `#5b5bd6`, ink `#1c1b2a`) plus a night mode, and
+F8 (`1b53b25`) built it. The row was never amended when the decision was made, so the
+document asserted "nothing to do" about the one visual token that changed most. The
+non-palette items in that row (font, radii, sidebar widths, breakpoint behaviour) did hold.
 
 ## B. Changed — SPEC says X, an input says Y
 
@@ -46,7 +80,7 @@ Each row needs a call. **Rec** = my recommendation, stated so it can be overrule
 | B3 | **Daily Intention** per day, pre-plannable at setup (user delta vs PRD; built: `sprint_days.intention`, `p_intentions`, `IntentionCard`) | R and D: no intention field. R's Today card asks "How do I intend to produce today's target?" above the **tasks** | If dropped: card removed, column and setup pre-plan stay (history value), one e2e step changes. If kept: needs a place in R's Today card that R does not draw | Keep the data, decide the UI: either (a) the intention becomes the first line of the Today card under that prompt, or (b) drop the card. I lean (a): it was your call twice. | |
 | B4 | Close step 2: "Which impediments hurt?" + most-damaging radio; "Which cues helped?" + most-useful radio (built: `day_impediment_hurt`, `day_cue_helped`) | R + D: **observations** replace judgments: which impediments *occurred*, which cues were *used*, and for the Highest: did the response run, did you recover, how much did it cost. See C1 and D3 for the exact shape | New tables, `close_day` signature, `CloseFlow` step 2, Insights source | Take it. This is the whole point of D. Keep the old tables read-only for history (D: "preserve historical judgments"). | |
 | B5 | Highest Impediment proof point = WHEN → THEN (rule 6; `proof_when`, `proof_then`; snapshotted on the day row) | R + D: WHEN → THEN → **RECOVERED WHEN**, an observable recovery criterion, required for the Highest at setup and whenever it changes; D adds "with a time window" as guidance; D: preserve the rule version evaluated each day | Column `proof_recover`; rule 6 and the rule-22 trigger extend to it; `start_sprint` / `set_highest_impediment` validate it; day snapshot gains it; wizard step 4 and the picker modal add the input | Take it. Additive migration; extends existing tests. | |
-| B6 | Cue = name + optional explanation | R: **WHEN** (trigger) → **REMIND** (the name), trigger optional, "add the when under Edit". D: Name → WHEN to use → Reminder/question/action, **trigger and response required for new cues** | Column `trigger`; editor and card layout; Add row | Take the model; requiredness is D5. | |
+| B6 | Cue = name + optional explanation | R: **WHEN** (trigger) → **REMIND** (the name), trigger optional, "add the when under Edit". D: Name → WHEN to use → Reminder/question/action, **trigger and response required for new cues** | Column `cue_when` (**corrected 2026-09-08** — this row and C3 originally said `trigger`, which is a reserved word in Postgres; the spec review settled on `cue_when` and `0009_libraries_v2.sql:18` shipped it); editor and card layout; Add row | Take the model; requiredness is D5. | |
 | B7 | Impediment = name + explanation + WHEN/THEN | R + D: **SITUATION** (name) → **INTERFERES** (explanation) → WHEN → THEN → RECOVERED. Relabel plus B5 | Labels and card layout only beyond B5 | Take it. | |
 | B8 | Vision = one textarea per Area, Save, Replace & archive, archived list (built: `visions` with `area`, `body`, `archived_at`) | R + D: **three annual steps** — Define vision (+ evidence) → Identify main obstacle (**is** a global impediment in the library, picked or created) → WHEN → THEN guiding rule (**is** that impediment's proof point) — then a saved overview with Edit, Review vision, Replace (two-tap), three summary cards, Library card, "Sprints behind this vision". D adds required fields and dated reviews (see D6, D7) and atomic save of vision + new impediment | Columns on `visions` (evidence, obstacle impediment id, reviewed/… see D7), one DB function for the atomic save, three-step form, overview page | Take it, subject to D1 (cardinality) which decides whether this runs once or per Area. | |
 | B9 | F7 Insights: per Area and All: % of Goal per sprint, impediment/cue frequency on lowest vs highest days, most damaging/useful, task completion vs result; Sprint History table | R + D: **four cards** — Impediment impact · Response follow-through · Response recovery · Cue usefulness — in two views: **Reviews** (single-sprint postmortem) and **Across sprints** (scope chips by Area, "Suggested kit", "How to read this"). Calculations in D. History table absent from R (finished sprints appear as Reviews rows: Met/Under) | F7 rewritten; nothing built yet, so no rework | Take it. Metric choice is D4; history table is D9; task-vs-result is D10. | |
@@ -103,12 +137,12 @@ run data → close flow → screen, so the restyle is built once, with its final
 | New # | Feature | From | Evaluator |
 |---|---|---|---|
 | (pre) | Enabling pass: inline styles → classes, Tailwind kept or dropped, no visible change | session-context | none (direct build) |
-| F6 | Libraries v2: cue trigger, impediment RECOVERED WHEN, relabels, editors with guidance, rule 6/22 extension, day snapshot | B5 B6 B7 C2 C3 C11 | none (additive columns) |
-| F7 | Day observations: step-2 question set, tables, `close_day`, legacy handling, "Set up tomorrow" | B4 B12 C1 C7 D3 | yes (user-data tables) |
-| F8 | Journal restyle: timeline + rail, 64px, sidebars, 1240px, mantra/streak in rail, intention decision, e2e pins moved | B1 B2 B3 B11 B14 B18 C8 | none |
-| F9 | Vision v2: three steps per Area, evidence, obstacle link, overview, reviews, two-tap replace | B8 B16 C4 D1 D6 D7 | yes (user-data table) |
-| F10 | Sprint completion + postmortem v2: complete / end early, review gate, verdict, carry-forward, kit, pinned lesson | old F6, B10 B17 C6 | yes |
-| F11 | Insights v2: four cards, Reviews + Across sprints, calculations, coverage, history rows | old F7, B9 C5 D4 D9 | none |
+| F6 | Libraries v2: cue `cue_when`, impediment RECOVERED WHEN, relabels, editors with guidance, rule 6/22 extension | B5 B6 B7 C2 C3 C11 | none (additive columns) |
+| F7 | Day observations: step-2 question set, tables, `close_day`, legacy handling, **day snapshot of RECOVERED WHEN**, **focus cue** | B4 C1 D3 D11 | yes (user-data tables) |
+| F8 | Journal restyle: timeline + rail, 64px, **Dusk + night mode**, Sprints sidebar, 1240px, mantra/streak in rail, intention decision, e2e pins moved, **"Set up tomorrow"** | B1 B2 B3 B11 B12 B13 B14 B18 C7 C8 | none |
+| F9 | Vision v2: three annual steps (**one vision total, not per Area** — D1), evidence, obstacle link, overview, reviews, two-tap replace, Vision sidebar | B8 B16 C4 D1 D6 D7 | yes (user-data table) |
+| F10 | Sprint completion + postmortem v2: complete / end early, review gate, verdict, carry-forward, kit, pinned lesson, **single-sprint calculations** | old F6, B10 B17 C5 C6 | yes |
+| F11 | Insights v2: four cards, Across sprints, cross-sprint calculations, coverage, Insights sidebar, history rows | old F7, B9 D4 D9 | none |
 | F12 | Circles | old F8 | yes |
 | F13 | Evening reminder | old F9 | yes |
 | F14 | Pre-release | old F10 | yes |
@@ -119,6 +153,12 @@ renders the cards; F8 keeps the journal and the Sprints sidebar only (Vision tab
 sidebar → F9, Insights sidebar → F11); "Set up tomorrow" (B12 / C7) moves from F7
 to F8; the day-row snapshot of RECOVERED WHEN moves from F6 to F7; the cue column is
 `cue_when`.
+
+**Folded into the table above on 2026-09-08.** Until then this paragraph sat below an
+unedited table, so the table and its own amendment disagreed and a reader following the
+table got the pre-amendment order. Also folded in at the same time: the focus cue (D11)
+and Dusk + night mode (B13), both of which were decided on this page but assigned to no
+feature in the original table — they landed in F7 and F8 respectively.
 
 Alternative considered: restyle first (F8 before F6/F7). Rejected because the Today
 card's "reviewing" state renders the new question set; building it on the old
@@ -133,9 +173,9 @@ The **Your call** cells above are superseded by this list. Rec taken unless stat
 | D1 | **One vision total**, not one per Area. Rule 2 becomes "a sprint requires the vision"; `visions.area` goes; the Sprints sidebar sub-line reads "Vision not written yet" for every Area until it exists; the main obstacle is one global impediment. | Yes |
 | B2 + B1, B11, B14, B17, B18 | Journal layout as drawn: timeline + rail, 64px target, new sidebars, 1240px breakpoint, mantra and streak in the rail, completion in the Celebration card. | — |
 | B3 / D8 | Daily Intention stays, as the first line of the Today card under "How do I intend to produce today's target?". | — |
-| D3 | Per-item tri-state rows in the DB (yes / no / unsure / unanswered); README pills render them. | — |
+| D3 | Per-item rows in the DB, **four states**: `yes` / `no` / `unsure` / `unanswered`; README pills render them. *(Corrected 2026-09-08: this row said "tri-state" while listing four values, and C1 additionally named "not-applicable" as a distinct fifth. As shipped, `day_impediment_occurred.occurred` and `day_cue_used.used` are `not null check (… in ('yes','no','unsure','unanswered'))` — four values — and "not applicable" is expressed by the **absence of a row**, since only items Day Close actually offered get one. There is no fifth value.)* | — |
 | D3 a–c | Partially reported separately; recovery asked whenever the Highest occurred; impact kept, optional. | — |
-| D3 d | Hurt/helped questions dropped **and the two tables `day_impediment_hurt` / `day_cue_helped` dropped** (no real sprint exists before release). A table-dropping migration is destructive → evaluator on that feature. | Yes |
+| D3 d | Hurt/helped questions dropped **and the two tables `day_impediment_hurt` / `day_cue_helped` dropped** (no real sprint exists before release). A table-dropping migration is destructive → evaluator on that feature. *(2026-09-08: shipped — `0010_day_observations.sql:120-121`. This is the one call on the page that meets the "never delete data with history value" hard stop head-on. It was taken deliberately, justified, and evaluator-gated, which is the right handling — but "no real sprint exists before release" is a claim about **live data**, and there is no record on this page of it having been checked against the database rather than assumed. If that check was not run, the tables are already gone and it can no longer be run.)* | Yes |
 | D4 | Median attainment (Actual ÷ Target, positive-target days) in the README card shape. | — |
 | D9 | Finished-sprint rows in the Insights sidebar carry % of goal; no history table. | — |
 | D5 | Cue trigger (WHEN) **required on every create path**, pickers included; existing rows stay null and show the italic prompt. | Yes |
@@ -144,7 +184,8 @@ The **Your call** cells above are superseded by this list. Rec taken unless stat
 | D10 | Task completion vs result → BACKLOG. | — |
 | D11 | **Focus cue in scope**: one user-selected cue per sprint whose use is tracked daily, independent of occurrence, alongside the per-cue use observation. Needs a place in the rail and in step 2; not drawn in R. | Yes |
 | C10 | Mental rehearsal prompt → BACKLOG. | — |
-| B4, B5, B6, B7, B8, B9, B10, B12, B16 | All taken as recommended. | — |
+| B5, B6, B7, B8, B9, B10, B12, B16 | All taken as recommended. | — |
+| B4 | Taken **except its history clause**, which D3d reverses. B4's Rec reads "keep the old tables read-only for history"; D3d drops `day_impediment_hurt` and `day_cue_helped` outright, and `0010_day_observations.sql:120-121` did. *(Corrected 2026-09-08: this row previously sat in the "all taken as recommended" list above, which made the doc read as though the history had been preserved when it was destroyed.)* | Yes — see D3d |
 | B13 | **Palette Dusk** (accent `#5b5bd6`, ink `#1c1b2a`) replaces Lake, **plus a night mode** the user can switch to. No night palette exists in R or P; its tokens are a design input still owed before the restyle feature is specified. Meadow, Sand, Lake: not offered. | Yes |
 | B15 | No Load sample, no Reset, and **no data export in v1** (F10's "Export my data" and Part 1's "personal data exportable" move to BACKLOG; Data & export leaves the Vision sidebar). | Yes |
 | Order | Enabling pass as a direct build, then F6 Libraries v2 → F7 Observations → F8 Journal restyle → F9 Vision v2 → F10 Completion + postmortem → F11 Insights v2 → F12 Circles → F13 Reminder → F14 Pre-release. | — |
