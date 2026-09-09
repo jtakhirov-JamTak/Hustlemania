@@ -12,6 +12,27 @@ design.
 > `agentic-template-v4` @ `fcc7f5c` (log ends 2026-08-26, nothing landed since),
 > `~/.claude` @ `6b48dba`, this repo @ `d293100`.
 
+> ## STATUS — implemented. Historical record, not an open backlog.
+>
+> **Stamped 2026-09-08, after the fixes landed.** §1 and §3 are done:
+> `agentic-template-v4` `8c681e0` (docs split, path citations, upstream pointers) and
+> `~/.claude` `0519f0b` (Step 0 assertion, `CLAUDE.md` reworded, Hustlemania added to
+> `PROJECTS.md`). Verified end to end: the Step 0 check ran red against the remote before
+> the push (23 entry markers on `docs/FIX_LOG.md`) and green after it (0 markers).
+>
+> **§2 is only half done, and the first draft of this header wrongly said otherwise.** Its
+> sub-item — the same duplication in `~/.claude/CLAUDE.md` — is resolved. Its *primary*
+> item is not: the template's `CLAUDE.md:75` still reads "For any app with real users
+> (`pure-eq`)", so every app generated from the template still carries a production gate
+> naming a different app. `8c681e0` touched `CLAUDE.md:145` only.
+>
+> **Still open:** §2's production gate (above), the dangling canary in the "Scaffold ready"
+> block (§1, last paragraph), and §4, which was never verified.
+>
+> Citations below were correct when written; several have since moved *because these fixes
+> landed*, and each stale one is marked inline. That decay is what a `file:line` review doc
+> does the moment someone acts on it — pin a commit, or stamp the doc.
+
 ## 1. `gh repo create --template` copies the template's own project history into every new app
 
 **What happens.** `new-app.ps1` Step 1 runs `gh repo create $Name --template
@@ -74,9 +95,12 @@ scaffold (line count, or a hash of each). That fails on *any* leaked content, wh
 names. Prove it non-vacuous by mutation before trusting it — plant a line in a scaffold
 doc, confirm the check goes red, revert, confirm green.
 
-Related, same pass: `new-app.ps1:207` already prints *"That is what the canary below is
+Related, same pass: `new-app.ps1` already prints *"That is what the canary below is
 for"* and then prints **no canary** — the `.env`-read check below it is a live-session
 trust test, not a file canary. That dangling promise ships in the script's output today.
+**Still open as of 2026-09-08**, and the only item in §1 that is. The Step 0 assertion
+shipped in `0519f0b` but sits upstream of this block rather than in it. The line moved
+from `:207` to **`:242`** in that same commit — cited here as a caution, not a pin.
 
 ## 2. `CLAUDE.md` line 75 names `pure-eq` as the app with real users
 
@@ -94,14 +118,14 @@ were part of this project. Two fixes, both needed:
   users already lives in `~/.claude/PROJECTS.md` (`pure-eq` is the only shipped app),
   and the global `~/.claude/CLAUDE.md` already says "Read `~/.claude/PROJECTS.md`
   before judging risk". The project file should not duplicate a fact that changes.
-- **Added 2026-09-08 — the same defect exists one level up, in the file offered as the
-  fix.** `~/.claude/CLAUDE.md:111-112` reads *"Read `~/.claude/PROJECTS.md` before judging
-  risk in an unfamiliar repo. **`pure-eq` is the only app with real users**"* — it points at
-  the source of truth and then restates the very fact that will go stale. Fixing only the
-  template instance leaves the class (`PATTERN-REPEATS`, `REVIEWER_CONVENTIONS.md` §6).
-  Both files should defer to `PROJECTS.md` and name no app.
-- **Also stale:** `~/.claude/PROJECTS.md` does not list Hustlemania at all, though it is
-  the app that produced this document.
+- **Added 2026-09-08 — RESOLVED in `~/.claude` `0519f0b`.** The same defect existed one
+  level up, in the file offered as the fix: `~/.claude/CLAUDE.md:111-112` pointed at
+  `PROJECTS.md` as the source of truth and then restated *"`pure-eq` is the only app with
+  real users"* — the very fact that goes stale. Fixing only the template instance would
+  have left the class (`PATTERN-REPEATS`, `REVIEWER_CONVENTIONS.md` §6). Both now defer to
+  `PROJECTS.md` and name no app; the quoted text no longer exists at that line.
+- **Also stale — RESOLVED in the same commit:** `~/.claude/PROJECTS.md` did not list
+  Hustlemania at all, though it is the app that produced this document.
 - Optionally, `new-app.ps1` can stamp the app name into the gate with a `-replace` in
   the same BOM-less write path it uses for settings.json, so the sentence reads "For
   any app with real users (`hustlemania` once it launches)".
@@ -145,12 +169,15 @@ were part of this project. Two fixes, both needed:
 
   Kept from the original, because it is the right kind of evidence: the mutation proof
   `npx vitest run tests/does-not-exist` exits 0.
-- The template's FIX_LOG entries cite `scripts/hooks/test_shell_guard.py` — confirmed
-  2026-09-08 at template `docs/FIX_LOG.md:156` and `:269`. No such file exists in the
+- The template's FIX_LOG entries cited `scripts/hooks/test_shell_guard.py` — confirmed
+  2026-09-08 at what was then `docs/FIX_LOG.md:156` and `:269`. No such file existed in the
   template (`scripts/hooks/` holds the write- and evaluator-guard tests only) and none
   exists in a generated app. The real path is `~/.claude/hooks/test_shell_guard.py`.
-  Under A′ the history moves to `~/.claude`, where that path is correct as written — so
-  this is fixed by the move rather than by a separate edit.
+  **RESOLVED in `8c681e0`:** both citations were corrected in place, and the file now lives
+  at `docs/template/FIX_LOG.md` — `docs/FIX_LOG.md` is a header-only scaffold, so the line
+  numbers above no longer resolve there. A third occurrence at
+  `docs/template/DECISIONS.md:156` was deliberately left alone: it records a deletion at
+  that path and is correct as history.
 
 ## 4. Not a template defect, but worth recording where the template's docs are read
 
