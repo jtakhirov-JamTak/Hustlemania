@@ -22,9 +22,10 @@ design.
 >
 > **§2 is only half done, and the first draft of this header wrongly said otherwise.** Its
 > sub-item — the same duplication in `~/.claude/CLAUDE.md` — is resolved. Its *primary*
-> item is not: the template's `CLAUDE.md:75` still reads "For any app with real users
-> (`pure-eq`)", so every app generated from the template still carries a production gate
-> naming a different app. `8c681e0` touched `CLAUDE.md:145` only.
+> item is not: the template's `CLAUDE.md:75` still carries the parenthetical
+> "(`pure-eq`)". `8c681e0` touched `CLAUDE.md:145` only. Severity is LOW — see the
+> correction in §2: the gate itself is already self-referential and behaves correctly in a
+> generated app. What is left is a stale-fact duplication, not a mis-scoped gate.
 >
 > **Still open:** §2's production gate (above), the dangling canary in the "Scaffold ready"
 > block (§1, last paragraph), and §4, which was never verified.
@@ -113,11 +114,17 @@ This is the template's *project* CLAUDE.md, so every generated app carries a
 production gate that names a different app. In Hustlemania it reads as if `pure-eq`
 were part of this project. Two fixes, both needed:
 
-- In the template's `CLAUDE.md`, make the gate self-referential: "For any app with real
-  users — this one, once it has any — before executing…". The list of which apps have
-  users already lives in `~/.claude/PROJECTS.md` (`pure-eq` is the only shipped app),
-  and the global `~/.claude/CLAUDE.md` already says "Read `~/.claude/PROJECTS.md`
-  before judging risk". The project file should not duplicate a fact that changes.
+- ~~In the template's `CLAUDE.md`, make the gate self-referential~~ — **corrected
+  2026-09-08: the gate already is.** It reads "For any app with real users … show it and
+  wait", which keys on whether *this* app has users; in a generated app with none it
+  correctly does not fire. `(`pure-eq`)` is only a parenthetical noting which app
+  currently qualifies, so this was never a mis-scoped gate and the section heading
+  overstates it. The real defect is narrower: a fact that changes, duplicated into a file
+  that ships to every app. `~/.claude/PROJECTS.md` owns it, and the global
+  `~/.claude/CLAUDE.md` already says "Read `~/.claude/PROJECTS.md` before judging risk".
+  **The fix is deleting the parenthetical** — the sentence is complete and correct
+  without it. Severity LOW; the case for doing it is consistency with the identical
+  duplication already fixed at `~/.claude/CLAUDE.md:111-112`, not correctness.
 - **Added 2026-09-08 — RESOLVED in `~/.claude` `0519f0b`.** The same defect existed one
   level up, in the file offered as the fix: `~/.claude/CLAUDE.md:111-112` pointed at
   `PROJECTS.md` as the source of truth and then restated *"`pure-eq` is the only app with
