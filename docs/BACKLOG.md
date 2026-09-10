@@ -2,6 +2,27 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## Found during F14 (2026-09-10), not fixed there
+
+- **Evaluator shell allowlist rejects an env-prefixed command** (eval-08 P2-1):
+  `DEPLOY_URL=… npx playwright test --project=deployed` is read as a command named
+  `deploy_url=…`, and `env` is not allowed either, so the pre-release evaluator had to
+  reproduce the deployed spec with curl. Governance change — the guard lives in
+  `~/.claude`, the human's move: allow a leading `NAME=value` prefix when the command
+  after it is allowlisted, or add `env`.
+- **CI on GitHub** — every push to `main` deploys; the only gates are the wired
+  pre-commit hook (bypassable) and Vercel's build. `/ci-check` for typecheck, lint,
+  unit; the DB and e2e suites need the local stack and stay local.
+- **Friends' first sign-in until F12** — accounts are created by hand in the dashboard;
+  there is no invite email, no way for the owner to see who has signed in, and no
+  removal path but the dashboard. F12 owns all three.
+- **A `www` certificate lag** — Vercel issued the apex certificate within a minute and
+  the `www` one some minutes later; only the 308 redirect was affected. Nothing to do
+  unless it recurs on a domain change.
+- **HSTS differs between the apex and the Vercel alias** (eval-08 observation): the
+  alias carries `includeSubDomains; preload`, the apex only `max-age`. Vercel's
+  default; revisit if the domain is ever submitted to the preload list.
+
 ## F13 deferred (2026-09-10)
 
 - **Per-user reminder hour, an off switch and an unsubscribe link** — one settings row,

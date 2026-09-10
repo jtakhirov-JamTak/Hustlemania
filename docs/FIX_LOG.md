@@ -6,6 +6,60 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-10 — The first page after the owner's first production sign-in failed with `sprint_totals: JWT issued at future`
+
+**Problem.** The magic link landed, the session was minted, the callback redirected to
+`/sprints` within the same second, and PostgREST refused the brand-new token: `401 JWT
+issued at future`. Supabase Auth and the data API keep separate clocks; when the data
+API's runs a beat behind, a token issued at second T is "from the future" until T
+passes there. The Sprints layout's `loadFinishedSprints` threw, the app error boundary
+showed "This page could not load", and one click on Try again — one second later —
+loaded everything. Never seen on the local stack, where both run on one clock.
+
+**Fix.** `lib/supabase/skew.ts`: a fetch wrapper for the server client that retries a
+request exactly once, after one second, when the answer is a 401 whose body carries
+that message. Any other status or message passes through, and a second refusal is
+returned as-is, so it can never loop. Wired in `lib/supabase/server.ts` through
+`global.fetch`. Layer: Supabase's platform clock skew; the app's defence is the retry.
+
+**Regression test.** `tests/unit/skew.test.ts`: skew-then-ok → one wait of 1000 ms,
+the same request twice, 200 returned; skew twice → 401 returned after one retry; a
+`JWT expired` 401 → not retried; a 200 → passed through with its body; a returned
+refusal is still readable. Two mutations turned it red and were restored: the retry
+removed (test 1), and the retry widened to every 401 (test 3).
+
+**Found.** F14 step 6, the owner's first sign-in on `hustlemania.app`; the Vercel
+runtime log line `request.error … sprint_totals: JWT issued at future` pasted by the
+user.
+
+---
+
+## 2026-09-10 — The first production magic link failed: `auth.email.enable_signup` is the email-provider switch, not a signup switch
+
+**Problem.** F14's `[remotes.production.auth.email] enable_signup = false`, written to
+close signups on the hosted project, was pushed by `supabase config push` and every
+magic-link request then answered `422 email_provider_disabled — Email logins are
+disabled`; the login page showed "The link could not be sent". The CLI maps that key to
+GoTrue's `external_email_enabled` (the dashboard's "Enable Email provider"), which is
+why the root config keeps it `true` for the local stack while the global
+`[auth] enable_signup = false` is what actually closes signups.
+
+**Fix.** `enable_signup = true` under `[remotes.production.auth.email]` with a comment
+naming the mapping; `[remotes.production.auth] enable_signup = false` stays the
+signup lock, and the app's `shouldCreateUser: false` backs it.
+
+**Regression check.** No automated test can reach the hosted auth service. The check is
+the two-address probe run after every `config push` and recorded here: the owner's
+address → `SENT`, an uninvited address → `422 otp_disabled — Signups not allowed for
+otp`. Both were run on 2026-09-10 after the fix; the first had failed with
+`email_provider_disabled` before it.
+
+**Found.** F14 step 6, the owner's first sign-in on the deployed origin, and
+reproduced with a script calling `signInWithOtp` against the hosted project. The next
+template-derived app with a `[remotes.<name>]` block would hit it the same way.
+
+---
+
 ## 2026-09-09 — Every Across / Vision number was one PostgREST page away from being silently wrong, and the Insights page cost 5N+4 requests
 
 **Problem.** `loadAcross`, `loadReviewStats` and `loadVisionSprints` read every

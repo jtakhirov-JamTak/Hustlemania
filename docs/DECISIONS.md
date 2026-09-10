@@ -6,6 +6,69 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-10 — F14 pre-release: GitHub → Vercel, vercel.app origin, Pro backups, owner only, no Lighthouse
+
+Feature-mode `/interview` for F14. Eight calls, the user's unless noted:
+
+1. **Vercel through the GitHub integration**, not the CLI. No install, no interactive
+   login on this machine, previews for free. The cost accepted: the project import and
+   the environment variables are dashboard steps the agent cannot drive.
+2. **`*.vercel.app` origin now.** A custom domain later means rotating `site_url`, the
+   redirect allow-list, the Vault `reminders_url` and the PWA install; accepted.
+3. **Supabase managed daily backups** for the restore runbook. The user states the
+   `hustlemania` organisation is on Pro (7-day retention per
+   `supabase.com/docs/guides/platform/backups`, read 2026-09-10); not verifiable from
+   this clone — the CLI's org listing carries no plan. Free would have meant `db dump`.
+   **Revised an hour later on evidence:** the project runs Postgres 17.6, and the same
+   page says projects on 15.8.1.079 and newer use physical backups that "are not
+   available for direct download". No dashboard file exists to drill from. The user
+   chose **CLI dumps + Pro in place**: weekly `supabase db dump --linked` files
+   (`--schema auth,public --data-only`, kept outside the repo — they carry emails) are
+   the drill's source and the total-loss cover; Pro daily backups remain the
+   restore-in-place layer. Rejected: PITR (also in place, no file, paid add-on).
+4. **Owner only signs in.** SPEC F14's "first invitee" line moves to F12, which owns
+   the invite flow and is postponed past launch (2026-09-10 entry below).
+5. **Install check = automated manifest test + Chrome install**, agent's
+   recommendation. Chrome's own docs mark Lighthouse PWA testing deprecated
+   (`developer.chrome.com/docs/lighthouse/pwa`, read 2026-09-10), so "Lighthouse
+   installable passes" had become a check that cannot fail. Rejected: keeping the
+   wording (measures nothing) · a Chrome-only check (nothing guards a regression).
+6. **Reminders go live inside F14, proven by one received email.** Rejected:
+   configured-but-unproven (acceptance would stop at a 200 with zero due users) · after
+   F14 (no reminders at launch).
+7. **Hosted auth settings as code**: `[remotes.production]` in `supabase/config.toml`
+   overriding `auth.site_url`, `additional_redirect_urls` and `enable_signup`, applied
+   by `supabase config push` after link. The remotes syntax is documented
+   (`supabase.com/docs/guides/local-development/cli/config`, read 2026-09-10); that
+   `config push` honours it for auth is confirmed by the magic link itself in the F14
+   sequence, with the dashboard as fallback.
+8. **The production gate opens at the owner's account**, agent's reading of CLAUDE.md:
+   link, push and config push run against a project with zero users; from the moment
+   the owner exists every hosted write is shown and confirmed.
+
+**Deleted from F14 on the pass:** building the manifest (already there since F8);
+custom domain; invitee; CI (BACKLOG); PITR; an error sink. **Kept because the outcome
+needs it:** the restore drill (global rule for an app with real users), the reminder
+proof, the migration to hosted.
+
+**Overtaken during the build, same day.** Call 2 (vercel.app origin): the user bought
+`hustlemania.app` for the Resend sender and moved the app onto it while nothing was
+installed — the cheapest moment. Call 4 (owner only): the user announced ten friends
+signing up that day; Supabase's built-in email refuses non-team addresses
+(`supabase.com/docs/guides/auth/auth-smtp`), so auth email now goes through Resend as
+config (`[remotes.production.auth.email.smtp]`, key via `env(RESEND_API_KEY)` from
+`.env` at push time) and the accounts are seeded from the dashboard until F12. Call 7
+held, with one defect on the way (FIX_LOG 2026-09-10: `auth.email.enable_signup` is
+the provider switch). `config push` also carried three local test values into
+production on the first push (`max_frequency` 1s, `otp_length` 6, confirmations off);
+the remotes block now pins the production values, so every future push keeps them.
+
+**Re-open if** Supabase makes physical backups downloadable (then the dashboard file
+becomes the drill's source and the weekly dump can go), or `config push` does not
+apply the auth overrides (then the dashboard, and the block stays as documentation).
+
+---
+
 ## 2026-09-10 — F13 reminder: pg_cron inside the database, a fixed 20:00, Resend from the user's domain
 
 **Decision.** F13 interviewed in feature mode (`docs/SPEC.md` F13) and approved at the

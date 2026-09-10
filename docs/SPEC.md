@@ -1879,18 +1879,171 @@ user** listing each open sprint as `Area · Day N`.
   function that reads `auth.users` · scheduled network egress from the database. One run.
 - **UI.** none.
 
-### F14 — Pre-release: PWA manifest, deploy (was F10; export withdrawn 2026-09-06)
-- **Behavior.** App installable (manifest + icons; no service worker). Deployed to
-  Vercel with the Supabase production project; owner and first invitee signed in.
-  ~~"Export my data" downloads one JSON of everything the user owns.~~ Withdrawn by
-  the user 2026-09-06 (BACKLOG); the Vision sidebar has no Data & export row.
-- **Acceptance criteria.** Lighthouse "installable" passes. `npm run verify`
-  green; evaluator pre-release pass; `docs/RUNBOOK_RESTORE.md` written and one restore
-  drill run against the local stack from a production backup file.
-- **Non-goals.** Data export in any format (BACKLOG), account deletion UI (BACKLOG;
-  `archived_at` until).
-- **Risks.** none beyond the restore drill.
-- **Evaluator.** pre-release.
+### F14 — Pre-release: deploy, install check, reminders live, restore drill (was F10; export withdrawn 2026-09-06)
+Interviewed 2026-09-10 in feature mode; eight calls settled (DECISIONS 2026-09-10):
+**Vercel through the GitHub integration** (every push to `main` deploys; no CLI) · **the
+`*.vercel.app` origin**, no custom domain · **Supabase managed daily backups** (the
+organisation is on Pro, per the user; not verified from this clone) · **owner only signs
+in** — the "first invitee" line moves to F12 with the invite flow · **the install check
+is an automated manifest test plus a Chrome install**, because Chrome's docs mark
+Lighthouse PWA testing deprecated (`developer.chrome.com/docs/lighthouse/pwa`, read
+2026-09-10) · **the F13 reminder goes live inside F14, proven by one received email** ·
+**hosted auth settings as code** via a `[remotes.production]` block and `supabase config
+push`. The manifest and icons already exist (`app/manifest.ts`, F8 and the 2026-09-09
+review), so nothing is built for the PWA beyond its check.
+
+**Amended during the build, 2026-09-10 (three of the interview's calls overtaken by
+facts):** the user bought `hustlemania.app` (Cloudflare DNS) for the Resend sender and
+chose to put the **app itself on it** rather than rotate four URLs later; the user
+announced **ten friends signing up the same day**, and Supabase's built-in email
+"will refuse to deliver messages to addresses that are not part of the project's
+team" at two messages an hour (`supabase.com/docs/guides/auth/auth-smtp`, read
+2026-09-10), so **auth email goes through Resend** as `[remotes.production.auth.email.
+smtp]` in config.toml, and the friends' accounts are **seeded from the dashboard**
+(Create new user, auto-confirm; signups stay closed). The owner's account turned out
+to exist already (created 2026-09-05 from the dashboard, never signed in), so step 5
+was already done and the production gate applied from the migration push onward.
+
+- **Behavior.** The app runs at `https://hustlemania.app` (the Vercel alias
+  `hustlemania.vercel.app` keeps working) against the hosted Supabase project
+  `zcdvuhcslwalhziinfqz` with all eighteen migrations applied. Accounts exist only by
+  dashboard seed — the owner plus the friends the owner names; signups stay disabled.
+  A magic link requested on the deployed login page arrives from
+  `sprint@hustlemania.app` and lands on `/sprints`, and the app installs from Chrome
+  as a standalone window opening on `/sprints`. The owner starts the first real
+  sprint, and that evening's reminder arrives from the same domain. A restore runbook
+  exists and has been drilled once: a production dump restored into the local stack,
+  with the app booting against it.
+- **Order and gates.** Every external step is shown first and waits for the user's
+  word; nothing runs on a hunch. The production gate opens the moment the owner's
+  account exists on the hosted project — from then on every hosted write is shown and
+  confirmed, reads are free.
+  1. Repo changes, no external action: `[remotes.production]` in
+     `supabase/config.toml` (`project_id`, `auth.site_url` = the Vercel origin,
+     `additional_redirect_urls` = `<origin>/auth/callback`, `enable_signup = false`);
+     a Playwright project `deployed` in `playwright.config.ts` that runs only when
+     `DEPLOY_URL` is set and never starts a web server; `docs/RUNBOOK_RESTORE.md`.
+  2. Vercel (the user, in the dashboard): import the GitHub repo as a project; set
+     `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+     `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET` (generated here and handed over),
+     `RESEND_API_KEY`, `REMINDER_FROM` for Production. The first build refuses to run
+     without the public URL (`scripts/check-build-env.mjs`), which is the intended
+     failure if the variables are missing.
+  3. `supabase link --project-ref zcdvuhcslwalhziinfqz`, then `db push --dry-run`
+     shown, then `db push` on the user's word. The database password reaches the CLI
+     through `SUPABASE_DB_PASSWORD` from an env-file wrapper or the user's own `!`
+     line — never pasted into the conversation. If `create extension pg_cron` is
+     refused, the user enables it in Database → Extensions and the push is re-run
+     (DECISIONS 2026-09-10 F13 "re-open if"). `/db-check` against the hosted project
+     afterwards: eighteen rows in `supabase_migrations.schema_migrations`, both
+     extensions, `reminders-hourly` on `5 * * * *`, RLS enabled on every `public`
+     table, `anon` and `authenticated` holding no privilege on `reminder_log`.
+  4. `supabase config push` with its diff shown, then confirmed. Verified by the magic
+     link in step 6 landing on the Vercel origin, not localhost.
+  5. Owner account: already existed (see the amendment above). Production gate from
+     the migration push.
+  5a. Domain: the user adds `hustlemania.app` in Vercel → Settings → Domains and the
+     records Vercel shows in Cloudflare (DNS only, not proxied); the auth config's
+     `site_url` and redirect list move to that origin and are pushed again.
+  5b. Auth email through Resend: the user verifies `hustlemania.app` in Resend, creates
+     a sending key, puts it in `.env` as `RESEND_API_KEY` and in Vercel; the
+     `[remotes.production.auth.email.smtp]` block is pushed with the key read from the
+     shell. Proof: the owner's next magic link arrives from `sprint@hustlemania.app`.
+  6. The user requests a magic link on `https://hustlemania.app/login` in the browser
+     that will click it (the PKCE code is bound to that browser), clicks it, lands on
+     `/sprints`. Recorded by a Chrome screenshot of `/sprints` signed in on the origin.
+  6a. Friends: the user creates each account in Authentication → Users → Add user →
+     Create new user with auto-confirm, then sends them the login URL; each requests
+     their own link. Their sign-ins are not an F14 gate — they happen when the friends
+     click — but the count of accounts is recorded.
+  7. Reminders: env vars from step 2 plus `RESEND_API_KEY` / `REMINDER_FROM`; the two
+     Vault secrets (`reminders_url` = `https://hustlemania.app/api/cron/reminders`,
+     `reminders_secret` = `CRON_SECRET`) created by SQL shown and confirmed; redeploy.
+     The user starts the first sprint. Proof: one `reminder_log` row with `sent_at` set
+     and one email in the owner's inbox. If the :05 run has passed 20:00 in the sprint's
+     zone for the day, proof waits for the next evening; the row stays open until it
+     lands.
+  8. Install check: `DEPLOY_URL=<origin> npx playwright test --project=deployed`
+     green, and the Install control seen in Chrome on the origin (screenshot).
+  9. Restore drill per `docs/RUNBOOK_RESTORE.md` on a `supabase db dump --linked`
+     file taken after steps 3 and 7 (so it holds the schema's rows and the first
+     sprint), kept by the user outside the repo. **Amended during the build,
+     2026-09-10:** the hosted project runs Postgres 17, whose daily backups are
+     physical and "not available for direct download"
+     (`supabase.com/docs/guides/platform/backups`), so the dashboard file the
+     interview assumed does not exist; Pro daily backups remain the restore-in-place
+     layer and the runbook documents both.
+  10. Pre-release evaluator, `npm run verify` green, `~/.claude/PROJECTS.md` updated
+      to "live, owner is a real user" (a file outside the project: asked first).
+- **Acceptance criteria.**
+  - Hosted database: `/db-check` output as in step 3 (eleven assertions, all passed
+    2026-09-10 after the push; `supabase db diff --linked` clean apart from the
+    platform's own `ensure_rls` event trigger), and `select count(*) from auth.users`
+    = 1 + the number of friends seeded in step 6a.
+  - Auth config: after every `config push`, the two-address probe — the owner's
+    address → sent, an uninvited address → `otp_disabled` (FIX_LOG 2026-09-10) — and,
+    once SMTP is on, the owner's magic link arriving from `sprint@hustlemania.app`.
+  - `e2e/deployed.spec.ts` (project `deployed`, skipped when `DEPLOY_URL` is unset,
+    no DB access, no web server): `GET <origin>/manifest.webmanifest` → 200 JSON with
+    `name` "Hustlemania", `start_url` "/sprints", `display` "standalone", icons of
+    192 and 512 with a `maskable` entry, and every icon `src` → 200 `image/png`;
+    `/login` HTML carries `<link rel="manifest">`; unauthenticated `/sprints` → 3xx
+    to `/login`; response headers include `X-Frame-Options: DENY` and
+    `X-Content-Type-Options: nosniff`; `POST /api/cron/reminders` without a bearer →
+    401; `GET` → 405. Each assertion fails on a deploy that lost the manifest, the
+    proxy, the headers or the route.
+  - Sign-in: `auth.users.last_sign_in_at` not null for the owner (read query), plus
+    the screenshot from step 6.
+  - Reminder: `reminder_log` holds ≥1 row with `sent_at` set for the owner's sprint,
+    `cron.job_run_details` shows a `succeeded` run, and the user confirms the email.
+  - Install: Chrome's Install control on the origin. **Amended 2026-09-10:** the
+    browser tooling screenshots the page, not the address bar, so the evidence is the
+    user's confirmation that Chrome offered Install and opened Hustlemania in its own
+    window (given 2026-09-10), plus the manifest test above, which is what guards a
+    regression.
+  - Restore: `docs/RUNBOOK_RESTORE.md` names both layers (Pro daily backups for
+    restore-in-place, 7-day retention; weekly `supabase db dump` files outside the repo
+    for the drill and total loss — `supabase.com/docs/guides/platform/backups`, read
+    2026-09-10), the dump commands, the restore steps into the local stack, and the
+    drill record — date, dump folder, row counts of `auth.users`, `sprints`,
+    `sprint_days`, `reminder_log` matching the hosted project, and `npm run dev`
+    serving `/login` against the restored data. The dump must contain
+    `auth.users` rows (checked by grep), or it is not a backup. The drill must not
+    touch the hosted project.
+  - `docs/evals/eval-08.md`: pre-release evaluator, 0 P0 / 0 P1 before green.
+  - `npm run verify` green. Visual verification: the two Chrome screenshots above.
+- **Non-goals.** ~~A custom domain~~ (overtaken: `hustlemania.app` is the origin);
+  a service worker or offline mode; the invite *flow* (F12 — accounts are seeded by
+  hand until then); CI on GitHub (the
+  pre-commit hook and Vercel's own build are the signal — BACKLOG); data export and
+  account deletion (BACKLOG; `archived_at` until); point-in-time recovery; an error
+  sink beyond Vercel runtime logs and `lib/observe.ts` events.
+- **Risks.** (1) `db push` stops midway on the hosted project — most likely at 0018's
+  `create extension pg_cron`: migrations are applied one file at a time and recorded
+  individually, so the fix is to enable the extension in the dashboard and re-run the
+  push, which resumes at the failed file; the dry-run is shown first. (2) The magic
+  link points at localhost because the auth config did not apply: step 4's config push
+  is verified by step 6 itself, and the dashboard is the fallback. (3) The dump silently
+  omits the `auth` schema (managed schemas are excluded by default), so a restore has
+  sprints with no owners: the runbook's grep for `COPY "auth"."users"` is part of
+  taking a dump, and the drill compares `auth.users` counts. (4) The reminder never fires because
+  20:00 in the sprint's zone has passed for the day: acceptance waits for the next
+  evening rather than faking due-ness on production data.
+- **Evidence, 2026-09-10 (UTC).** Step 3: push 03:5x, eleven assertions pass, diff
+  clean but for the platform's `ensure_rls`. Step 4: three config pushes (origin,
+  test-value pin, email-provider fix — FIX_LOG). Step 5a: `hustlemania.app` valid on
+  Vercel, apex 200, `www` 308 → apex. Step 5b: the owner's magic link arrived from
+  `sprint@hustlemania.app`. Step 6: signed in, `/sprints` screenshot on the origin;
+  the first render failed on platform clock skew, fixed with a one-second retry
+  (FIX_LOG). Step 7: Vault secrets present (64-char bearer after two placeholder
+  pastes), the 06:05 run POSTed and got `200 {"due":1,"users":1,"sent":1,"failed":0}`,
+  `reminder_log` 1 row sent; the owner's inbox: "Relationships · Day 1 is still
+  open" from `Hustlemania <sprint@hustlemania.app>` at 23:05 Pacific. Step 8: deployed project 4/4 on the origin; Install
+  confirmed by the user. Step 9: dump 06:07, restored into a blank local stack, all
+  eight counts identical, `/login` 200, local stack reset afterwards
+  (`docs/RUNBOOK_RESTORE.md` drill record).
+- **Evaluator.** pre-release. One run, after step 9.
+- **UI.** none — no screen added or changed.
 
 ## 4. Explicit v1 non-goals
 AI-written insights or reviews · push notifications · native apps · offline mode ·

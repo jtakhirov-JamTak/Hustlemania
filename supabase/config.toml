@@ -411,3 +411,47 @@ enabled = true
 # declarative_schema_path = "./schemas"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# F14: the hosted project's auth settings as code, applied with `supabase config push`
+# once this clone is linked to that project (docs/DECISIONS.md 2026-09-10). Everything
+# not overridden here is pushed from the root config above. The origin is the Vercel
+# domain; a custom domain later means changing these two URLs, the Vault
+# `reminders_url` and every PWA install (SPEC F14).
+[remotes.production]
+project_id = "zcdvuhcslwalhziinfqz"
+
+[remotes.production.auth]
+# The app's origin is the user's own domain (bought 2026-09-10, DNS at Cloudflare); the
+# Vercel alias stays in the allow-list so a link requested there still lands.
+site_url = "https://hustlemania.app"
+additional_redirect_urls = ["https://hustlemania.app/auth/callback", "https://hustlemania.vercel.app/auth/callback"]
+# Signups stay closed on the hosted project: users exist only by dashboard seed (owner)
+# or admin invite (F12). The root config opens email signup for the local stack only.
+enable_signup = false
+
+[remotes.production.auth.email]
+# Despite its name this key is the "Enable Email provider" switch (the CLI maps it to
+# GoTrue's external_email_enabled): false answered every magic-link request with
+# `email_provider_disabled` on 2026-09-10 (docs/FIX_LOG.md). Signups are closed by
+# `[remotes.production.auth] enable_signup = false` above, not here.
+enable_signup = true
+# The root values below are test conveniences for the local stack (a magic link every
+# second in the e2e). Production keeps the platform defaults: the first push on
+# 2026-09-10 carried the local ones across, and this block put them back.
+max_frequency = "1m0s"
+otp_length = 8
+enable_confirmations = true
+
+# Auth emails (magic links) leave through Resend on the user's domain. Without this,
+# Supabase's built-in sender refuses any address outside the project's team and allows
+# two messages an hour (supabase.com/docs/guides/auth/auth-smtp, read 2026-09-10) — so
+# nobody but the owner could ever sign in. The key is read from the shell at push time:
+# `set -a; . ./.env; set +a; npx supabase config push` with RESEND_API_KEY in `.env`.
+[remotes.production.auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+pass = "env(RESEND_API_KEY)"
+admin_email = "sprint@hustlemania.app"
+sender_name = "Hustlemania"

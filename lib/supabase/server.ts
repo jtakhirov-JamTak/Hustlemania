@@ -4,6 +4,7 @@ import { cache } from "react";
 import type { Database } from "@/lib/database.types";
 import { publicSupabaseEnv } from "@/lib/env";
 import { isAuthUnavailable, report } from "@/lib/observe";
+import { withSkewRetry } from "@/lib/supabase/skew";
 
 /**
  * Per-request Supabase client for Server Components, Server Actions and Route Handlers.
@@ -16,6 +17,7 @@ export const createClient = cache(async function createClient() {
   const cookieStore = await cookies();
   const { url, anonKey } = publicSupabaseEnv();
   return createServerClient<Database>(url, anonKey, {
+    global: { fetch: withSkewRetry() },
     cookies: {
       getAll() {
         return cookieStore.getAll();
