@@ -49,6 +49,14 @@ export function report(kind: string, error: unknown, ctx: Ctx = {}): void {
   console.error(JSON.stringify(event));
 }
 
+/**
+ * A structured event that is not a failure — a run summary an operator can find by
+ * kind (F13 `reminder.run`). Same sink and the same context filter as `report`.
+ */
+export function emit(kind: string, ctx: Ctx = {}): void {
+  console.error(JSON.stringify({ event: kind, at: new Date().toISOString(), ...safeContext(ctx) }));
+}
+
 const lastCapture = new Map<string, number>();
 const CAPTURE_COOLDOWN_MS = 5 * 60_000;
 

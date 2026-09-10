@@ -8,3 +8,16 @@
 export function zoneOffUtcDate(now = new Date()): string {
   return now.getUTCHours() >= 10 ? "Pacific/Kiritimati" : "Pacific/Pago_Pago";
 }
+
+/**
+ * A fixed-offset IANA zone whose local clock reads `hour`:mm right now (F13: the
+ * reminder is due from 20:00 local). Etc/GMT names carry the inverted POSIX sign —
+ * `Etc/GMT-14` is UTC+14 — and observe no DST, so the whole-hour offset is exact.
+ */
+export function zoneAtLocalHour(hour: number, now = new Date()): string {
+  let off = hour - now.getUTCHours();
+  if (off > 14) off -= 24;
+  if (off < -12) off += 24;
+  if (off === 0) return "Etc/GMT";
+  return off > 0 ? `Etc/GMT-${off}` : `Etc/GMT+${-off}`;
+}

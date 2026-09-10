@@ -191,6 +191,25 @@ describe("public schema access model", () => {
     expect(row).toEqual({ start: false, close: false });
   });
 
+  it("F13: reminder_log and the reminders_* functions are service-role only", async () => {
+    const [table] = await sql<{ anon: boolean; authed: boolean; service: boolean }[]>`
+      select has_table_privilege('anon', 'public.reminder_log', 'select') as anon,
+             has_table_privilege('authenticated', 'public.reminder_log', 'select') as authed,
+             has_table_privilege('service_role', 'public.reminder_log', 'select, insert, update') as service`;
+    expect(table).toEqual({ anon: false, authed: false, service: true });
+    const fns = await sql<{ proname: string; anon: boolean; authed: boolean; service: boolean }[]>`
+      select p.proname,
+             has_function_privilege('anon', p.oid, 'execute') as anon,
+             has_function_privilege('authenticated', p.oid, 'execute') as authed,
+             has_function_privilege('service_role', p.oid, 'execute') as service
+      from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'reminders\\_%' order by 1`;
+    expect(fns).toEqual([
+      { proname: "reminders_claim", anon: false, authed: false, service: true },
+      { proname: "reminders_due", anon: false, authed: false, service: true },
+      { proname: "reminders_mark", anon: false, authed: false, service: true },
+    ]);
+  });
+
   it("the plan validator, the lock trigger functions and the fixed-clock streak are not callable by the API roles", async () => {
     const [row] = await sql<{ validate: boolean; lock: boolean; tasks: boolean; streak_at: boolean }[]>`
       select has_function_privilege('authenticated', 'public.validate_targets(text,bigint,bigint[])', 'execute') as validate,

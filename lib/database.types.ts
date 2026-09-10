@@ -231,6 +231,54 @@ export type Database = {
         }
         Relationships: []
       }
+      reminder_log: {
+        Row: {
+          attempts: number
+          created_at: string
+          error: string | null
+          id: string
+          sent_at: string | null
+          sprint_day_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          error?: string | null
+          id?: string
+          sent_at?: string | null
+          sprint_day_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          error?: string | null
+          id?: string
+          sent_at?: string | null
+          sprint_day_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reminder_log_sprint_day_id_fkey"
+            columns: ["sprint_day_id"]
+            isOneToOne: true
+            referencedRelation: "sprint_days"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reminder_log_sprint_day_id_fkey"
+            columns: ["sprint_day_id"]
+            isOneToOne: true
+            referencedRelation: "sprint_days_effective"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       review_decisions: {
         Row: {
           created_at: string
@@ -1014,6 +1062,26 @@ export type Database = {
       measurement_step: { Args: { p_measurement: string }; Returns: number }
       move_item: {
         Args: { p_direction: string; p_item_id: string; p_kind: string }
+        Returns: undefined
+      }
+      reminders_claim: {
+        Args: { p_sprint_day_ids: string[] }
+        Returns: string[]
+      }
+      reminders_due: {
+        Args: { p_now: string }
+        Returns: {
+          area: string
+          day_index: number
+          email: string
+          sprint_day_id: string
+          sprint_id: string
+          tz: string
+          user_id: string
+        }[]
+      }
+      reminders_mark: {
+        Args: { p_error: string; p_sprint_day_ids: string[] }
         Returns: undefined
       }
       remove_sprint_item: {

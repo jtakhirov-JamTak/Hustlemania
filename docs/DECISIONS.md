@@ -6,6 +6,75 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-10 — F13 reminder: pg_cron inside the database, a fixed 20:00, Resend from the user's domain
+
+**Decision.** F13 interviewed in feature mode (`docs/SPEC.md` F13) and approved at the
+feature gate 2026-09-10; built in the same session. Four calls settled in the interview:
+
+1. **The scheduler is pg_cron + pg_net in the database, hourly at :05.** The v1 SPEC
+   assumed "Vercel Cron hourly"; Vercel's docs (`/docs/cron-jobs/usage-and-pricing`, read
+   2026-09-10) limit Hobby to **once per day with ±59 min drift**, and a per-hour
+   expression fails deployment. Rejected: GitHub Actions schedules (free and hourly, but
+   documented to delay and sometimes skip runs under load — a skipped hour is a missed
+   evening) and a daily Vercel cron at a fixed UTC time (20:00 Pacific would land anywhere
+   in 19:00–21:59 across DST and the drift; no per-user hour possible). pg_cron runs to the
+   minute, costs nothing, and adds no vendor; the price is two extensions on the hosted
+   project and two Vault secrets the operator creates once (`docs/RUNBOOK_REMINDERS.md`).
+   The job reads the URL and bearer from Vault and selects zero rows until both exist,
+   so 0018 holds no secret and the local stack runs the job harmlessly.
+2. **20:00 in the sprint's zone, no chooser, no off switch.** There is no settings screen
+   to hang it on; both go to BACKLOG together with an unsubscribe link.
+3. **Resend from the user's own verified domain.** Resend delivers nothing without one;
+   the domain records are the user's step, outside the app.
+4. **One email per user, `Area · Day N` per open sprint.** Area is a fixed label
+   (Health / Wealth / Relationships), so the SPEC's "nothing beyond the day number" is
+   widened by exactly that word.
+
+**Shape.** Three `service_role`-only definer functions — `reminders_due(p_now)` (read-only;
+the clock is a parameter, as with `sprint_streak_at`), `reminders_claim(ids)` and
+`reminders_mark(ids, error)` — and the app's first non-auth route handler,
+`POST /api/cron/reminders`, gated by a constant-time bearer compare. Claim before send,
+so a second pass in the same window sends nothing; a failed send keeps the row unsent
+with the provider's error and is retried the next hour, three attempts at most, the
+in-flight window being ten minutes on `updated_at`. Outside production an unset
+`RESEND_API_KEY` means the log transport (nothing leaves the machine); in production it
+is a 503 that claims nothing — the route never quietly logs instead of mailing. The
+service-role client lives in `lib/supabase/admin.ts` behind `server-only`.
+
+**Falsifiability.** Six TypeScript mutations (any bearer accepted · unset secret treated
+as open · production falling back to the log transport · the outcome leaking into the
+email · the claim result ignored · a failed send marked sent), seven live DB mutations
+(`reminders_due` granted to `authenticated` · `reminder_log` SELECT granted · RLS off ·
+due from 19:00 · a sent reminder ignored · claim retrying inside the window · the job
+unscheduled) and the route's 401 branch removed under the e2e each turned a named test
+red and were restored (files byte-identical; privileges, function bodies and the job
+re-probed). A side effect worth knowing: with pg_cron now installed, the rule-12 /
+rule-16 `cron.job` guards in `targets.test.ts` and `tasks.test.ts` run for real instead
+of early-returning.
+
+**Re-open if** a user asks for a different hour or to switch reminders off (the chooser),
+or the hosted `postgres` role turns out unable to `create extension pg_cron` — then the
+extension is enabled from the dashboard and 0018's remaining statements run as-is.
+
+---
+
+## 2026-09-10 — F12 Circles postponed past launch; F13 and F14 proceed
+
+At the F12 feature interview the user asked how many sessions remained (4–6 with
+Circles, 3–5 without) and what deferring it would cost once real users exist. **Chosen:
+skip F12, build F13 and F14, release, then Circles.** Deferral is cheap because F12 is
+additive: three new tables, one default-false `shared` column on `sprint_impediments`,
+reads through a new definer function, existing policies untouched, sharing opt-in so
+nothing is exposed retroactively. What it costs later: the migration and a `profiles`
+backfill each stop at the production gate, an RLS hole would leak real rows rather than
+seed rows, and onboarding is manual dashboard invites in the meantime (<10 users).
+Estimated extra cost of adding it later: about half a session. The one part that gets
+harder to reverse after launch is the navigation placement (a fourth top tab changes the
+header every user has learned); left open. **Re-open if** manual invites become a chore
+or a user asks for the group view.
+
+---
+
 ## 2026-09-09 — Full review of F6–F11: the verdict follows the current highest, recovery votes at the card's bar, and a membership window stays a row
 
 **Context.** `/review-changes` on `9cd1325` (F11) found two HIGH and two MEDIUM; the user

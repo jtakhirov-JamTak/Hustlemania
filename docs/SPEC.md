@@ -1749,6 +1749,14 @@ areas is two rows · **the Suggested kit is deterministic sentences** off the ra
   `docs/mockups/f11-across/`.
 
 ### F12 — Circles: invites and accountability view (was F8)
+**Postponed 2026-09-10 (user, at the F12 feature interview) to release sooner.** Build
+order is now F13 → F14 → F12 after launch. Until then every user is created by hand in
+the Supabase dashboard (F14's "first invitee" arrives that way). Nothing below changes;
+adding it after launch is additive — new tables, one default-false column on
+`sprint_impediments`, a `profiles` backfill for existing users under the production gate
+(DECISIONS 2026-09-10). The three calls settled before postponing: invite as a server
+action, not an API route; invited → active automatically on the invitee's first visit;
+display name defaults to the email's local part and is edited on the Circles page.
 - **Behavior.** A member creates a circle and invites emails; the invite creates the
   Supabase user (admin invite) so the invite is the app invite. Members see, per
   fellow member's active sprint: Area, current streak, whether today is closed, and %
@@ -1774,16 +1782,102 @@ areas is two rows · **the Suggested kit is deterministic sentences** off the ra
 - **Evaluator.** auth/RLS · migrations creating user-data tables.
 
 ### F13 — Evening email reminder (was F9)
-- **Behavior.** If a user has an active sprint whose today is not closed, one email
-  arrives at their chosen local hour (default 20:00 in the sprint tz).
-- **Acceptance criteria.** Vercel Cron hits `/api/cron/reminders` hourly with a
-  bearer secret (401 otherwise); it selects users whose local hour matches and today
-  unclosed; sends via Resend; writes `reminder_log(sprint_day_id)` with a unique index
-  so a rerun sends nothing (idempotency test). No reminder for closed days or ended
-  sprints. Email body contains no personal sprint data beyond the day number.
-- **Non-goals.** Push notifications, digest emails.
-- **Risks.** Free-tier cron granularity (hourly is within Vercel Hobby limits).
-- **Evaluator.** migration creating a user-data table.
+Interviewed 2026-09-10 in feature mode; four calls settled (DECISIONS 2026-09-10):
+**the scheduler is Supabase pg_cron + pg_net, hourly** — Vercel Hobby cron runs at most
+once per day with ±59 min drift (`vercel.com/docs/cron-jobs/usage-and-pricing`, read
+2026-09-10), so the v1 "hourly Vercel Cron" line was unbuildable · **the hour is fixed
+at 20:00 in the sprint's zone**, no chooser and no off switch (BACKLOG) · **Resend from
+the user's own verified domain** (Resend delivers nothing without one) · **one email per
+user** listing each open sprint as `Area · Day N`.
+- **Behavior.** When it is 20:00 or later, before midnight, in an active sprint's zone
+  and that sprint's current day is still open, the owner receives one email that
+  evening: "Health · Day 6 is still open" (two open sprints: both lines, one email) with
+  a link to the app. A closed day, an ended or completed sprint, a date outside the
+  sprint, or a day already reminded sends nothing. Nothing on screen. The email carries
+  the Area name and the day number only — never outcome, amount, targets, actuals,
+  mantra, intention or notes.
+- **Acceptance criteria.**
+  - Migration `0018`: `pg_cron` and `pg_net` enabled; table `reminder_log(id, user_id →
+    auth.users cascade, sprint_day_id → sprint_days cascade UNIQUE, created_at,
+    updated_at (trigger), sent_at null, attempts smallint default 1, error text)` with RLS on and **no** grant to
+    `anon` or `authenticated` (`grants.test.ts` pins both, and that `service_role` is the
+    only API role with EXECUTE on the new function); definer function
+    `reminders_due(p_now timestamptz)` returning `(user_id, email, sprint_id,
+    sprint_day_id, area, day_index, tz)` — the only reader of `auth.users.email` in
+    `public`, `search_path ''`, EXECUTE revoked from PUBLIC/anon/authenticated
+    (`has_function_privilege` false for both; calling it as a test user is a permission
+    error); one `cron.job` named `reminders-hourly`, schedule `5 * * * *`, whose command
+    reads the URL and bearer from `vault.decrypted_secrets` (`reminders_url`,
+    `reminders_secret`) and is a no-op when either is absent — so the local stack and a
+    fresh hosted project run it harmlessly. The command names `net.http_post` and
+    neither `sprint_days` nor `tasks`: the two existing `cron.job` guards in
+    `targets.test.ts` / `tasks.test.ts` stop early-returning and actually run from 0018 on.
+  - `reminders_due` (DB test `reminders.test.ts`, `p_now` passed explicitly so every case
+    is deterministic): a user whose sprint zone is at 20:00 local with today open → one
+    row with that email, area and day_index; 19:59 local → 0 rows; today closed → 0;
+    sprint `completed` / `ended_early` → 0; `p_now` before `start_date` or after
+    `end_date` in the zone → 0; a `reminder_log` row with `sent_at` set → 0; a row with
+    `sent_at` null touched (`updated_at`) under 10 minutes ago (in flight) → 0; the same
+    row older than 10 minutes with `attempts < 3` → returned again (retry); `attempts =
+    3` → 0. Two
+    active sprints in two areas → two rows, same user. A DST zone
+    (`America/Los_Angeles`) on both sides of a transition date resolves 20:00 local
+    correctly. The function is read-only (DB test scans its body for
+    INSERT/UPDATE/DELETE: none), so the 29 hard rules are untouched.
+  - Route handler `POST /api/cron/reminders` (the app's first non-auth route; order per
+    conventions): `Authorization: Bearer <CRON_SECRET>` compared constant-time → 401 with
+    an empty body otherwise; GET → 405; `CRON_SECRET` unset → 503 and nothing claimed
+    (fail closed). The comparison lives in `lib/reminders/authorize.ts` with unit tests
+    (missing header, wrong secret, right secret, unset secret). The handler uses a
+    service-role client from a new `lib/supabase/admin.ts` that imports `server-only`,
+    so any client import fails the build; the key is read from `SUPABASE_SERVICE_ROLE_KEY`
+    and never from a `NEXT_PUBLIC_` name.
+  - Claim-then-send, both sides in SQL and `service_role` only: `reminders_claim(ids)`
+    inserts the row (or bumps `attempts` on a failed row older than ten minutes with
+    attempts left) and returns what it claimed, before any send; `reminders_mark(ids,
+    error)` sets `sent_at` on success or stores `error` (retried by the next hour up to
+    3 attempts, then left with its error). DB tests walk the lifecycle: claim → in
+    flight → failed → retry after ten minutes → cap at three → sent never reclaimed. Response
+    JSON `{ due, users, sent, failed }` counts only; one structured event
+    `reminder.run` per run and `reminder.send_failed` per failure (ids only).
+  - Transport `lib/reminders/transport.ts`: Resend's HTTP API via `fetch`
+    (`RESEND_API_KEY`, `REMINDER_FROM`; the link's origin is the request's own, so no
+    `APP_URL`); unit test with a stubbed fetch pins
+    the request (URL, bearer, from, to, subject) and that a non-2xx is a failure. With
+    `RESEND_API_KEY` unset outside production the transport is `log` (structured event,
+    success) so the local stack sends nothing; in production an unset key is 503 at the
+    route, nothing claimed.
+  - Body `lib/reminders/message.ts`: pure; unit test on a fixture whose sprint carries an
+    outcome, a mantra, an amount and a target asserts the subject and body contain
+    `Health · Day 6`, the `/sprints` link, and none of those strings; the two-sprint
+    fixture yields both lines and one subject.
+  - e2e (`e2e/reminders.spec.ts`, desktop project): seed a user with an active
+    sprint in a fixed-offset zone where local time is 20:xx–23:xx now (helper beside
+    `zoneOffUtcDate`); `POST` with the bearer → 200, `sent ≥ 1`, and `reminder_log` holds
+    exactly one row for that sprint day with `sent_at` set; a second `POST` → the row is
+    unchanged (`attempts` 1, same `sent_at`); a wrong bearer → 401 and no row; the same
+    user with the day closed first → no row.
+  - `env.example` gains `CRON_SECRET`, `RESEND_API_KEY`, `REMINDER_FROM` (empty);
+    `scripts/local-env.mjs` derives a local `CRON_SECRET` from the stack's own key so
+    the e2e and `npm run dev` share one without a literal in source.
+    `docs/RUNBOOK_REMINDERS.md`: enable the two extensions on the hosted project,
+    create the two Vault secrets, verify the Resend domain, set the three env vars on
+    Vercel, and the two queries that prove a run happened (`cron.job_run_details`,
+    `reminder_log`). Free-tier fit: Resend 100/day, 3,000/month (pricing page, read
+    2026-09-10) against <10 users × 1/day.
+  - `npm run verify` green; visual verification n/a (no screen).
+- **Non-goals.** Per-user hour, off switch, unsubscribe link (BACKLOG, together);
+  push notifications; digests; a reminder for a missed *earlier* day (only today's
+  open day qualifies); an in-app copy of the email.
+- **Risks.** (1) The hosted job silently no-ops — extensions off or Vault secrets
+  missing: mitigation, the runbook's proof queries plus the per-run `reminder.run` event
+  with counts. (2) The Resend domain is not verified at launch, every send 4xx: rows stay
+  retryable up to 3 attempts with the error stored, and `reminder.send_failed` fires. (3)
+  A zone or DST slip mails at the wrong hour: due-ness is computed once, in SQL, as
+  `p_now at time zone s.tz`, with explicit 19:59 / 20:00 and DST-transition tests.
+- **Evaluator.** migration creating a user-data table (`reminder_log`) · a definer
+  function that reads `auth.users` · scheduled network egress from the database. One run.
+- **UI.** none.
 
 ### F14 — Pre-release: PWA manifest, deploy (was F10; export withdrawn 2026-09-06)
 - **Behavior.** App installable (manifest + icons; no service worker). Deployed to

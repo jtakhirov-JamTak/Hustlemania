@@ -2,6 +2,20 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## F13 deferred (2026-09-10)
+
+- **Per-user reminder hour, an off switch and an unsubscribe link** — one settings row,
+  designed together; today the hour is fixed at 20:00 in the sprint's zone and the only
+  way to stop the email is to close the day (DECISIONS 2026-09-10).
+- **A reminder for an earlier missed day** — only today's open day is due; a day missed
+  yesterday is backfill territory and gets no email.
+
+## Postponed features
+
+- **F12 Circles** — postponed past launch 2026-09-10 (DECISIONS 2026-09-10; SPEC F12
+  carries the three settled calls). Until built, users are created in the Supabase
+  dashboard. Open when built: navigation placement (fourth tab recommended).
+
 ## Full review 2026-09-09 (`docs/audits/full-review-2026-09-09.md`)
 
 - **A promoted-away highest impediment's answers are not shown on that sprint's cards.**
