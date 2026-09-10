@@ -17,6 +17,7 @@ import {
   loadSprintObservations,
   loadStreaks,
   loadTasks,
+  needsReview,
   streakOf,
 } from "@/lib/data";
 import type { Measured } from "@/lib/format";
@@ -33,15 +34,25 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
   if (!isAreaKey(area)) notFound();
 
   const supabase = await createClient();
-  const active = await loadActiveSprint(supabase, area);
+  // Everything that does not depend on the active sprint starts with it (#26): the
+  // library, the streaks and the kit used to wait a round trip for a read they never
+  // needed; the overview and the finished list are cached and the layout reads them too.
+  const [active, fullLibrary, streaks, kit, { vision }, finished] = await allOrThrow([
+    loadActiveSprint(supabase, area),
+    loadActiveLibrary(supabase),
+    loadStreaks(supabase),
+    loadAreaKit(supabase, area),
+    loadOverview(supabase),
+    loadFinishedSprints(supabase),
+  ]);
   const name = areaName(area);
 
   if (!active) {
     // F10: a finished sprint whose postmortem is unwritten blocks the next one here
-    // (rule 26), so the gate replaces the empty card until the review is finished.
-    const [{ vision }, finished] = await allOrThrow([loadOverview(supabase), loadFinishedSprints(supabase)]);
+    // (rule 26), so the gate replaces the empty card until the review is finished. A
+    // sprint that never closed a day is not such a block (0017).
     const inArea = finished.filter((s) => s.area === area);
-    const unreviewed = inArea.find((s) => s.reviewedAt === null);
+    const unreviewed = inArea.find(needsReview);
     if (unreviewed) {
       const sprint = await supabase.from("sprints").select("measurement, currency, unit").eq("id", unreviewed.id).single();
       if (sprint.error) throw new Error(`sprint: ${sprint.error.message}`);
@@ -95,14 +106,11 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
 
   // allSettled: when one read fails the others still finish, so the failure reported
   // is the real one and no sibling rejection goes unhandled (BACKLOG, F4).
-  const [items, fullLibrary, offered, tasks, streaks, observations, kit] = await allOrThrow([
+  const [items, offered, tasks, observations] = await allOrThrow([
     loadSprintItems(supabase, active.sprint.id),
-    loadActiveLibrary(supabase),
     loadDayOfferedItems(supabase, focusDay.id),
     loadTasks(supabase, focusDay.id),
-    loadStreaks(supabase),
     loadSprintObservations(supabase, closedIds),
-    loadAreaKit(supabase, area),
   ]);
   const library = { cues: fullLibrary.cues.filter(eligibleFor(area)), impediments: fullLibrary.impediments.filter(eligibleFor(area)) };
 

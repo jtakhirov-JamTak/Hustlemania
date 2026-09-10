@@ -68,7 +68,10 @@ export async function createItem(kind: ItemKind, input: ItemInput): Promise<Resu
 export async function updateItem(kind: ItemKind, id: string, input: Omit<ItemInput, "scope">): Promise<Result> {
   const name = input.name.trim();
   if (!name) return { error: friendlyError(`${table(kind)}_name_check`) };
-  const supabase = await createClient();
+  // Direct-table writes: an expired session updates zero rows under RLS rather than
+  // erroring, which would read as "try again" forever, so the session is checked first.
+  const { supabase, user } = await requireUser();
+  if (!user) return { error: friendlyError("not_authenticated") };
   const res =
     kind === "cue"
       ? await supabase.from("cues").update({ name, explanation: blank(input.explanation), cue_when: blank(input.cueWhen) }).eq("id", id).select("id")
@@ -127,7 +130,8 @@ export async function restoreItem(kind: ItemKind, id: string): Promise<Result> {
 
 /** Permanent delete; RLS allows it only for an item with no sprint history (rule 19). */
 export async function deleteItem(kind: ItemKind, id: string): Promise<Result> {
-  const supabase = await createClient();
+  const { supabase, user } = await requireUser();
+  if (!user) return { error: friendlyError("not_authenticated") };
   const res = await supabase.from(table(kind)).delete().eq("id", id).select("id");
   if (res.error) return failed("deleteItem", res.error, { kind, itemId: id });
   if (res.data.length === 0) return { error: friendlyError("violates foreign key") };
@@ -192,7 +196,8 @@ export async function setHighestImpediment(sprintId: string, impedimentId: strin
 
 /** Edits a Proof Point in place (rule 22 is enforced by the DB trigger). */
 export async function saveProofPoint(impedimentId: string, proof: ProofInput): Promise<Result> {
-  const supabase = await createClient();
+  const { supabase, user } = await requireUser();
+  if (!user) return { error: friendlyError("not_authenticated") };
   const res = await supabase
     .from("impediments")
     .update({ proof_when: blank(proof.when), proof_then: blank(proof.then), proof_recover: blank(proof.recover) })

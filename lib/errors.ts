@@ -51,6 +51,7 @@ const MESSAGES: Record<string, string> = {
   response_required: "Say whether the response ran — Unsure is a truthful answer.",
   recovered_required: "Say whether you recovered — Unsure is a truthful answer.",
   response_not_applicable: "The response questions only apply when the highest impediment showed up.",
+  highest_changed: "The highest impediment changed since this page loaded. Reload, then close the day.",
   no_focus_cue: "A sprint needs one focus cue among its execution cues.",
   already_in_sprint: "That item is already in this sprint.",
   not_in_sprint: "That item is not in this sprint.",

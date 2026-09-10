@@ -1354,10 +1354,33 @@ missed · **End sprint early works before day 1** and cancels all 14.*
     - own sprint, `status <> 'active'` (`sprint_running`), no existing review
       (`review_exists`); `p_lesson` non-blank after trim (`lesson_required`); `p_moved`
       not null (`vision_answer_required`).
-    - `p_verdict` is required exactly when the sprint's highest impediment has at least one
-      `day_impediment_observations` row with `was_highest and occurred = 'yes'` on a
-      non-cancelled closed day — otherwise it must be null. Errors `verdict_required` and
-      `verdict_not_applicable`; an unknown value raises `invalid_verdict`.
+    - `p_verdict` is required exactly when the sprint's **current** highest impediment
+      (`sprint_impediments.is_highest`) has at least one `day_impediment_observations` row
+      with `was_highest and occurred = 'yes'` on an effective day whose snapshot
+      `highest_impediment_id` is that item — the predicate
+      `insight_response_followthrough` reads, so the DB and the postmortem's verdict chips
+      can never disagree — otherwise it must be null. Errors `verdict_required` and
+      `verdict_not_applicable`; an unknown value raises `invalid_verdict`. (Corrected by
+      0016, 2026-09-09: 0012 tested any `was_highest` observation, which after a mid-sprint
+      promotion demanded a verdict the UI never offered — FIX_LOG.) Test: A occurs, B is
+      promoted, the sprint ends → the follow-through row is `[B, 0]`, a verdict is refused
+      and a review without one succeeds.
+    - The decision fill and the four insight calculations read **one row per item**: a
+      member removed and added back is two membership rows (the history the postmortem
+      lists) and one item. (0016, 2026-09-09; 0012 wrote one decision per membership row
+      and hit the unique key — FIX_LOG.) Test: remove and re-add a cue that was used on a
+      closed day → `used_days` 1, one decision row, the review succeeds.
+    - A member the user removed mid-sprint and never added back **defaults to `drop`**
+      in the fill (and in the postmortem's carry-forward rows, which say "removed
+      mid-sprint"); a current member defaults to `keep`. (0017, 2026-09-09: the next
+      kit had resurrected what the user pruned — FIX_LOG.) Test: removed-and-re-added
+      → `keep`, removed only → `drop`.
+  - **Rule 26 exempts a sprint that never closed a day** (0017, 2026-09-09): `start_sprint`
+    blocks on an unreviewed finished sprint only if it has a closed day; `needsReview()`
+    carries the rule to the Sprints sidebar, the review gate and the Insights rows, which
+    read "Never ran" for such a sprint. Its postmortem stays open to write. Test: a sprint
+    ended before day 1 does not block the Area; one that closed a day still raises
+    `review_required`.
     - `p_decisions` is an array of `{kind, item_id, decision}`. Every `item_id` must be a
       membership row of this sprint (`item_not_in_sprint`); at most one impediment may be
       `'highest'` (`one_highest_only`); items not named default to `'keep'`, so the stored
@@ -1595,11 +1618,16 @@ areas is two rows · **the Suggested kit is deterministic sentences** off the ra
     - When no sprint reaches 2 on each side: `In {n} sprints · no single sprint has enough
       days yet`.
     - Tri-state cards: `{Ran|Recovered} at least half the time in {k} of {n} sprints`,
-      counting a sprint when its own `answered ≥ 2` and its yes-share is `≥ 0.5`.
-      `answered` is each card's own denominator — `yes|no|partially` for follow-through
-      (0015) and `yes|no` for recovery — so the note can never disagree with the rate the
-      card displays. (Corrected 2026-09-09 during the build: the first draft of this line
-      said `yes + no ≥ 2`, which would have used a different denominator from the rate.)
+      each sprint voting from the card's own numerator and denominator so the note can
+      never disagree with the rate the card displays. Follow-through votes at
+      `answered ≥ 2` from `ran / answered` (`answered` is `yes|no|partially`, 0015).
+      **Recovery votes from the SQL's own `rate`**, so only where the card shows one
+      (`answered ≥ 3`): the rate's numerator is every `recovered = 'yes'`, response answer
+      included, and the row carries no such count below the bar. (Corrected 2026-09-09
+      after the F11 review: the first build voted from `with_recovered + without_recovered`
+      at 2, which drops unsure-response days and printed "67% recovered" beside "0 of 1
+      sprint" — FIX_LOG.) Test: three occurrences (unsure/yes ×2, yes/no) read `67%
+      recovered` and `1 of 1 sprint`; two answered with no rate do not vote.
     - The sub gains ` · {n} sprints`. Tests: the recurring suffix appears at 2 of 2 and is
       absent at 2 of 3 and at 1 of 1; the k/n counts are asserted on a fixture.
   - **Suggested kit** — deterministic sentences, at most three, in this order, from the
@@ -1607,7 +1635,10 @@ areas is two rows · **the Suggested kit is deterministic sentences** off the ra
     "Keep {name} as the highest impediment; days it shows up run {|delta|} points lower.";
     the first `enough` follow-through row → below 50%, "The response for {name} ran on only
     {rate}% of occurrences — make the THEN smaller.", otherwise "The response for {name}
-    runs {rate}% of the time[ and recovers {rate}% of the time]."; the best cue (`enough`,
+    runs {rate}% of the time[ and recovers {rate}% of the time]." — the recovery clause
+    comes from the `enough` recovery group of the **same item and Area**, or is omitted
+    (corrected 2026-09-09 after the F11 review: the first build took the scope's first
+    qualifying recovery group, another impediment's — FIX_LOG); the best cue (`enough`,
     `delta_pts ≥ +10`) → "Keep {name} — +{delta} points on the days it's used." With no
     closed day: "Nothing to suggest yet — close a few days first." With closed days but no
     qualifying row: "Not enough logged days yet. Each comparison needs 3 days on each
@@ -1621,7 +1652,9 @@ areas is two rows · **the Suggested kit is deterministic sentences** off the ra
   - **Header evidence line** — `{n} sprints · {c} closed days · {h} on target ({p}%)` and
     the kicker `Evidence · {first start} → today`, scoped by the chip, counted over
     `sprint_days_effective` (so a zero-target closed day is out, as it is everywhere else
-    on this page). `loadReviewStats` is **not** touched: the rail's card needs goals-met
+    on this page — and, since 2026-09-09, on the postmortem's two coverage lines too, via
+    `effectiveClosedDays`; the result card's "n days closed" keeps the summary's count.
+    FIX_LOG). `loadReviewStats` is **not** touched: the rail's card needs goals-met
     and lessons-kept, which this line does not show, and the two numbers it shares are
     cheaper to count in `loadAcross` than to thread a scope through a function whose other
     outputs would be discarded. (Corrected 2026-09-09 during the build; the first draft of
@@ -1659,8 +1692,18 @@ areas is two rows · **the Suggested kit is deterministic sentences** off the ra
   - Visual match against the v8 artboard's Across page in Chrome at desktop width in Dusk
     and Night; phone via the Playwright phone project. `npm run verify` green.
 
+- **Correction (2026-09-09, full review #5 / #6, migration 0017).** The fan-out's "N is
+  single digits for years" was wrong by 10× for three-area use (~78 finished sprints a
+  year), and `loadAcross` read every effective day of every sprint into TypeScript, which
+  PostgREST truncates at 1,000 rows (~72 sprints) with no error. The page now reads five
+  requests for any N: four `insight_*_many(uuid[])` wrappers — plain `security invoker` SQL
+  that `lateral`-calls the existing definer function per id, so the ownership check still
+  runs per sprint and no authorization logic is added — plus the `sprint_totals` view
+  (one row per sprint: effective and on-target days, the summary's total) filtered by id.
+  The Insights sidebar reads `sprint_review_summary_many` the same way. "No new SQL" below
+  is therefore historical: the numbers are still F10's functions, called once.
 - **Non-goals.** New SQL for the cross-sprint numbers (the per-sprint functions are fanned
-  out instead) · C5's per-sprint listing under each row, and any pooling of days across
+  out instead — amended above) · C5's per-sprint listing under each row, and any pooling of days across
   sprints into one comparison · splitting a version **inside** one sprint (see Risks) ·
   any action on this page: no "start a sprint with this kit", no link from a row to the
   sprint it quotes · a history table (D9 is satisfied by the sidebar rows) · task

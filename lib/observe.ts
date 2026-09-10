@@ -14,9 +14,23 @@ type ErrorLike = { code?: unknown; message?: unknown; name?: unknown; status?: u
 
 const MESSAGE_MAX = 200;
 
-function redact(message: unknown): string | null {
+/**
+ * The longest context value that can be an id or an enum. "Callers pass ids, never
+ * text" was a comment; this is the line that enforces it — a journal entry or a lesson
+ * passed by mistake is dropped, not logged.
+ */
+const CTX_VALUE_MAX = 64;
+
+export function redact(message: unknown): string | null {
   if (typeof message !== "string") return null;
-  return message.replace(/\(([^)]*)\)=\(([^)]*)\)/g, "(…)=(…)").slice(0, MESSAGE_MAX);
+  return message
+    .replace(/\(([^)]*)\)=\(([^)]*)\)/g, "(…)=(…)")
+    .replace(/Failing row contains \([^)]*\)/g, "Failing row contains (…)")
+    .slice(0, MESSAGE_MAX);
+}
+
+export function safeContext(ctx: Ctx): Ctx {
+  return Object.fromEntries(Object.entries(ctx).filter(([, v]) => typeof v !== "string" || v.length <= CTX_VALUE_MAX));
 }
 
 /** A structured event for a failure that an operator should be able to find later. */
@@ -30,7 +44,7 @@ export function report(kind: string, error: unknown, ctx: Ctx = {}): void {
     status: typeof e.status === "number" ? e.status : null,
     digest: typeof e.digest === "string" ? e.digest : null,
     message: redact(e.message),
-    ...ctx,
+    ...safeContext(ctx),
   };
   console.error(JSON.stringify(event));
 }

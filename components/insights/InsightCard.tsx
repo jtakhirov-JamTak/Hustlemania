@@ -42,9 +42,9 @@ export function InsightCard({
   return (
     <section className="card ic" data-testid={testId}>
       <div className="ic-head">
-        <span className="ic-kicker" data-tone={tone}>
+        <h2 className="ic-kicker" data-tone={tone}>
           {title}
-        </span>
+        </h2>
         <span className="ic-coverage">{coverage}</span>
       </div>
       <div className="ic-question">{question}</div>

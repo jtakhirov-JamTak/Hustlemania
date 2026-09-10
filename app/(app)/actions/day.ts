@@ -5,10 +5,13 @@ import { failed, type Result } from "@/lib/actionResult";
 import { loadDayOfferedItems, loadDays, type OfferedItems, type SprintDay } from "@/lib/data";
 import { friendlyError, GENERIC_SAVE_ERROR } from "@/lib/errors";
 import { report } from "@/lib/observe";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, requireUser } from "@/lib/supabase/server";
 
 export async function saveIntention(dayId: string, text: string): Promise<Result> {
-  const supabase = await createClient();
+  // Under RLS an expired session updates zero rows rather than erroring, which would read
+  // as "try again" forever; the session is checked first so the copy says sign in.
+  const { supabase, user } = await requireUser();
+  if (!user) return { error: friendlyError("not_authenticated") };
   const res = await supabase
     .from("sprint_days")
     .update({ intention: text.trim() || null })
@@ -65,7 +68,19 @@ export async function closeDayAction(dayId: string, sprintId: string, input: Clo
     p_recovered: occurred ? (input.recovered ?? undefined) : undefined,
     p_impact: occurred ? (input.impact ?? undefined) : undefined,
   });
-  if (res.error) return failed("closeDay", res.error, { dayId, sprintId });
+  if (res.error) {
+    // The form validated against the highest it rendered; if another tab changed it
+    // since, the DB's "not applicable" / "required" is about a different item, and the
+    // copy has to say reload rather than contradict what is on screen.
+    if (/response_not_applicable|response_required|recovered_required/.test(res.error.message)) {
+      const current = await supabase.from("sprint_impediments").select("impediment_id").eq("sprint_id", sprintId).eq("is_highest", true).maybeSingle();
+      if (!current.error && (current.data?.impediment_id ?? null) !== input.highestId) {
+        report("action.closeDay.highest_changed", res.error, { dayId, sprintId });
+        return { error: friendlyError("highest_changed") };
+      }
+    }
+    return failed("closeDay", res.error, { dayId, sprintId });
+  }
   revalidatePath("/sprints", "layout");
   try {
     return { days: await loadDays(supabase, sprintId), streak: res.data };

@@ -7,7 +7,7 @@ import { Modal } from "@/components/Modal";
 import { answersHint, closeInput, DayQuestions, EMPTY_ANSWERS, highestOf, type DayAnswers } from "@/components/today/DayQuestions";
 import { callAction } from "@/lib/callAction";
 import type { OfferedItems, SprintDay } from "@/lib/data";
-import { formatAmount, formatNumber, toBaseUnits, unitLabel, type Measured } from "@/lib/format";
+import { attainmentPct, formatAmount, formatNumber, toBaseUnits, unitLabel, type Measured } from "@/lib/format";
 
 export type CloseOutcome = { days: SprintDay[]; streak: number };
 
@@ -293,7 +293,7 @@ function ResultScreen({
         <div className="result-row">
           <span className="result-key">Cumulative</span>
           <strong className="result-val">
-            {formatAmount(measured, cumulative)} · {Math.round((cumulative / goal) * 100)}% of goal
+            {formatAmount(measured, cumulative)} · {attainmentPct(cumulative, goal)}% of goal
           </strong>
         </div>
         {next ? (

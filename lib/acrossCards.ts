@@ -103,7 +103,10 @@ export function suggestedKit({ impact, follow, recovery, cues, closedDays }: Kit
 
   const worst = [...impact].sort(bySeverity).find((g) => g.row.enough && g.row.delta_pts !== null && g.row.delta_pts <= HURT);
   const ft = follow.find((g) => g.row.enough && g.row.rate !== null);
-  const rc = recovery.find((g) => g.row.enough && g.row.rate !== null);
+  // The recovery figure belongs to the SAME response the follow-through sentence names:
+  // same item, same Area. The first qualifying recovery group in the scope may be a
+  // different impediment's (FIX_LOG 2026-09-09).
+  const rc = ft ? recovery.find((g) => g.row.enough && g.row.rate !== null && g.row.item_id === ft.row.item_id && g.area === ft.area) : undefined;
   const best = [...cues].sort(byHelp).find((g) => g.row.enough && g.row.delta_pts !== null && g.row.delta_pts >= HELPED);
 
   if (!worst && !ft && !best) return "Not enough logged days yet. Each comparison needs 3 days on each side.";

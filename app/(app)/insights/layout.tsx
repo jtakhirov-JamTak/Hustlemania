@@ -1,6 +1,6 @@
 import { SideNav, SideNavList, type SideItem } from "@/components/SideNav";
 import { areaName } from "@/lib/areas";
-import { COMPLETION_LABEL, loadMeasuredSprints } from "@/lib/data";
+import { COMPLETION_LABEL, loadMeasuredSprints, needsReview } from "@/lib/data";
 import { formatIsoDate, stampDate } from "@/lib/dates";
 import { createClient } from "@/lib/supabase/server";
 
@@ -21,8 +21,10 @@ export default async function InsightsLayout({ children }: { children: React.Rea
   const reviews: SideItem[] = finished.map((s) => ({
     href: `/insights/reviews/${s.id}`,
     label: s.outcome,
-    meta: s.reviewedAt ? `Reviewed ${stampDate(s.reviewedAt)}` : "Needs review",
-    metaAccent: s.reviewedAt === null,
+    // A sprint that never closed a day does not block its Area (0017); its postmortem
+    // stays open to write, but the row must not say the Area is waiting on it.
+    meta: s.reviewedAt ? `Reviewed ${stampDate(s.reviewedAt)}` : needsReview(s) ? "Needs review" : "Never ran",
+    metaAccent: needsReview(s),
     sub: `${areaName(s.area)} · ${short(s.start_date)} → ${short(s.end_date)}`,
     result: {
       lead: s.met ? "Met" : "Under",

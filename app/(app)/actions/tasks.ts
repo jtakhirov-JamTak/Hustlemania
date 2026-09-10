@@ -3,10 +3,12 @@
 import { failed, type Result } from "@/lib/actionResult";
 import type { Task } from "@/lib/data";
 import { friendlyError, GENERIC_SAVE_ERROR } from "@/lib/errors";
-import { createClient, requireUser } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 
 // Tasks (F4) — direct table writes under RLS; the DB trigger locks a closed day
 // (rule 17) and pins a task to its day (rule 16). Nothing here touches totals (rule 15).
+// Every action checks the session first: under RLS an expired session updates zero rows
+// instead of erroring, which would read as "try again" forever.
 
 export async function createTask(dayId: string, text: string): Promise<Result<{ task: Task }>> {
   const body = text.trim();
@@ -27,7 +29,8 @@ export async function updateTask(id: string, patch: { text?: string; done?: bool
   }
   if (patch.done !== undefined) values.done = patch.done;
   if (Object.keys(values).length === 0) return { error: GENERIC_SAVE_ERROR };
-  const supabase = await createClient();
+  const { supabase, user } = await requireUser();
+  if (!user) return { error: friendlyError("not_authenticated") };
   const res = await supabase.from("tasks").update(values).eq("id", id).select("*");
   if (res.error) return failed("updateTask", res.error, { taskId: id });
   if (res.data.length === 0) return { error: GENERIC_SAVE_ERROR };
@@ -36,7 +39,8 @@ export async function updateTask(id: string, patch: { text?: string; done?: bool
 
 /** Remove = archive; the row stays for History and Insights (PRD §11). */
 export async function removeTask(id: string): Promise<Result> {
-  const supabase = await createClient();
+  const { supabase, user } = await requireUser();
+  if (!user) return { error: friendlyError("not_authenticated") };
   const res = await supabase.from("tasks").update({ archived_at: new Date().toISOString() }).eq("id", id).select("id");
   if (res.error) return failed("removeTask", res.error, { taskId: id });
   if (res.data.length === 0) return { error: GENERIC_SAVE_ERROR };

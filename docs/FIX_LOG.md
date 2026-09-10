@@ -6,6 +6,209 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-09 — Every Across / Vision number was one PostgREST page away from being silently wrong, and the Insights page cost 5N+4 requests
+
+**Problem.** `loadAcross`, `loadReviewStats` and `loadVisionSprints` read every
+`sprint_days_effective` / `sprint_days` row of every sprint and summed in TypeScript.
+PostgREST returns at most 1,000 rows (`max_rows`), so at ~72 finished sprints — inside a
+year of three-area use — the evidence line, every coverage denominator, goals-met and the
+Vision tab's Met/Under would have gone quietly wrong, with no error. Separately the
+Insights layout issued one `sprint_review_summary` per finished sprint and the page four
+insight RPCs per sprint: 5N+4 requests per render against a 20-connection pool, and the
+SPEC's "N < 10 for years" was off by 10× for the product's own intended use.
+
+**Fix.** `0017`: a `security_invoker` view `sprint_totals` (one row per sprint: closed,
+effective and on-target day counts and the summary's own total) read with `.in(...)`, and
+five `*_many(uuid[])` SQL wrappers that `lateral`-call the existing definer functions, so
+the ownership check still runs per sprint and no authorization logic is added. Insights is
+now five requests whatever N is. `full()` in `lib/data.ts` names the cap instead of
+rendering a partial number. Goals-met and the Vision verdict use the summary's total, so
+they can no longer disagree with the result card (#15).
+
+**Regression test.** `tests/db/insights.test.ts`: `sprint_totals` on the hand-computed
+fixture (11 closed, 10 effective, 5 on target, total 1060; readable under RLS); each `_many`
+wrapper returns the per-sprint rows tagged with the sprint and refuses a foreign id with
+`sprint_not_found`; `grants.test.ts` pins the five wrappers in the authenticated set.
+Mutations: the view without its `target > 0` filter turned the totals test red; revoking
+one wrapper turned the grants pin red.
+
+**Where found.** `/full-review` 2026-09-09, performance pass (#5, #6, #15).
+
+## 2026-09-09 — Ending a sprint before it ran locked the Area behind a fabricated lesson, and a pruned item came back in the next kit
+
+**Problem.** Rule 26 blocked the next sprint in an Area until the finished one was reviewed,
+including a sprint ended early before day 1 with zero closed days — the only way through was
+a "key lesson" for a sprint that never happened. And `finish_review` defaulted every member
+to `keep`, removed ones included, so the next sprint's kit pre-checked what the user had
+removed with "Set up tomorrow → Remove".
+
+**Fix.** `0017`: `start_sprint`'s rule-26 clause also requires a closed day; a removed
+member defaults to `drop` in the decision fill. `needsReview()` in `lib/data.ts` carries the
+same rule to the Sprints sidebar, the review gate and the Insights rows ("Never ran"), and
+`loadSprintMembers` exposes `removed` so the postmortem's carry-forward rows default the
+same way and say "removed mid-sprint".
+
+**Regression test.** `tests/db/completion.test.ts`: a sprint ended before day 1 does not
+block a new one, and one that closed a day still raises `review_required`; a cue removed
+and never re-added is stored as `drop`, one removed and re-added as `keep`. The existing
+rule-26 fixture gained one closed day, since it had relied on the old behaviour. Unit:
+`needsReview`. Mutations: 0012's `start_sprint` turned the exemption test red; 0016's
+`finish_review` turned the default-drop test red.
+
+**Where found.** `/full-review` 2026-09-09, adversarial pass (#22, #25).
+
+## 2026-09-09 — Second-pass fixes from the full review, one line each
+
+- **Theme return path** (`lib/redirect.ts`, #14): `/\evil.com` and control characters passed
+  the `startsWith("/")` guard; REDIRECT-VALIDATE regex, unit-tested, mutation red.
+- **Client "today" during render** (`components/useDeviceToday.ts`, #16): the wizard, the
+  Vision overview and setup computed the device date while rendering — a hydration mismatch
+  for hours a day — and the wizard memoised it at mount, submitting yesterday after
+  midnight. The hook reads after mount and on `visibilitychange`; the wizard reads the date
+  at submit.
+- **Host-zone formatting outside `stampDate`** (`monthYear`, #17): routed through one helper.
+- **"% of goal" four ways** (`attainmentPct`, `goalMet` in `lib/format.ts`, #18): one
+  arithmetic, matching the SQL's `round`; mutation to `floor` red.
+- **Ended-early sprint shown as running on the Vision tab** (#19): `loadVisionSprints` reads
+  `status` first.
+- **Closure copy** (`closureWarning`, #20): End early and Complete name today's open entry
+  and the count of earlier days that can no longer be added.
+- **Wizard Area chip re-click wiped step 4** (#21): prefill only on a change of Area.
+- **Direct-table actions under an expired session** (#23): `saveIntention`, `updateItem`,
+  `saveProofPoint`, `saveMantra`, `updateTask`, `removeTask`, `deleteItem` check the session
+  first and say "sign in again" instead of "try again" forever.
+- **Close from a stale tab after a highest change** (#24): `closeDayAction` re-reads the
+  current highest on `response_*` errors and returns `highest_changed` ("Reload, then close
+  the day") instead of copy that contradicts the form.
+- **Serial round trips** (#26): `loadAreaKit` is one embedded read; the Area page starts
+  every independent read with the active sprint; `loadPostmortem` batches its sprint row.
+- **Assistive tech** (#7, #8, #27): the closed-day result and the review gate, the reviewed
+  postmortem and a replaced vision take focus when they replace the pressed control
+  (`AnnounceHeading`, `announce`); a backfilled row, the task draft, the "Also watching"
+  list, the library title and the wizard's add-usage button take focus after a removal;
+  `role="radio"` chips handle arrow keys (`radioKeys.ts`); the sidebar is a labelled `nav`
+  whose hidden sub line stays in the accessibility tree; the theme toggle's name leads with
+  its visible word; `aria-label`s no longer override visible labels; `TwoTap` announces its
+  armed copy through a live region instead of `aria-pressed`; card kickers are `h2`s; the
+  wizard shows "Step n of 4" as text.
+- **Touch and contrast** (#9, #10, #28): 44px on the vision-alignment row, the two TwoTaps,
+  the theme toggle, text-only links, mini actions, plan and task inputs, the ghost ×;
+  the backfill modal no longer auto-focuses its number input, so the keypad does not
+  cover Continue; Dusk on-accent text at .92, selected-row sub in ink, placeholders in
+  `--muted`, control border at .5; `overflow-wrap: anywhere` on user text; the manifest
+  follows the theme cookie.
+- **Operator log** (`lib/observe.ts`, #29): a context value longer than an id is dropped,
+  and `Failing row contains (…)` is redacted; unit-tested, mutation red.
+
+## 2026-09-09 — A member removed and added back could never be reviewed, and counted twice
+
+**Problem.** `remove_sprint_item` keeps the membership row as history and `add_sprint_item`
+inserts a new one, so an item removed on day 3 and added back on day 6 is two
+`sprint_cues` / `sprint_impediments` rows. Three readers took one row per membership row
+instead of one per item. `finish_review` inserted one `review_decisions` row per membership
+row, hit `review_decisions_review_id_kind_item_id_key`, rolled back, and the client read the
+generic "That did not save — try again" on every attempt; rule 26 then refused every new
+sprint in that Area. `insight_impediment_impact` and `insight_cue_usefulness` joined each
+observation once per membership row, so present/absent/logged counts doubled ("Logged 4 of 2
+closed days") and a row cleared n≥3 on two real days. `loadSprintMembers` rendered two
+decision rows for one item. Reproduced live before the fix: two membership rows, `used_days
+2` from one closed day, `finish_review → duplicate key value violates unique constraint`.
+
+**Fix.** `0016_membership_history_and_verdict_predicate.sql`: the decision fill is `select
+distinct kind, item_id`; the two functions' `members` CTE is one row per item with
+`bool_or(is_highest | is_focus)`. `onePerItem` in `lib/data.ts` collapses the loader's rows
+the same way. The history rows are untouched — one row per window is the record.
+
+**Regression test.** `tests/db/completion.test.ts` "after a member is removed and added
+back": closes a day with the cue used, removes and re-adds it, asserts two membership rows,
+`used_days`/`logged_days` of 1, and one decision row after a successful `finish_review`.
+`tests/unit/across.test.ts` "one row per item" for the loader. Mutations: the fill without
+`distinct` turned the review test red; re-applying 0014's `members` turned the count test
+red; `onePerItem` as a pass-through turned the unit test red. Each restored and green.
+
+**Where found.** `/full-review` 2026-09-09, adversarial pass (grill C1 / H1); confirmed by a
+live probe before any code changed.
+
+## 2026-09-09 — Changing the highest impediment mid-sprint made the postmortem impossible to finish
+
+**Problem.** `finish_review` demanded a verdict when ANY observation was `was_highest and
+occurred = 'yes'`, while the postmortem decides whether to show the verdict chips from
+`insight_response_followthrough`, which reads only the CURRENT highest
+(`sprint_impediments.is_highest`) and joins on the day's snapshot `highest_impediment_id`.
+Promote B after A occurred on day 2 and B never occurs: the card says "never showed up", the
+UI sends `verdict: null`, the DB raises `verdict_required`, and nothing on screen can change
+that. Rule 26 locks the Area. Reproduced live: follow-through `occurrences 0` for B,
+`finish_review(null) → verdict_required`, `finish_review('worked') → OK` — a verdict the UI
+never offers was the only way through.
+
+**Fix.** 0016 keys `v_occurred` to the current highest with the follow-through function's
+own predicate (effective day, `highest_impediment_id = current highest`, `was_highest and
+occurred = 'yes'`). The SPEC (F10, `finish_review`) already said "the sprint's highest
+impediment", singular. The earlier highest's answers stay on the day rows and are not shown
+on that sprint's cards (BACKLOG).
+
+**Regression test.** `tests/db/completion.test.ts` "verdict after the highest impediment
+changed mid-sprint": A occurs on day 1, B is promoted, the sprint ends; asserts the
+follow-through row is `[B, 0]`, a verdict is refused (`verdict_not_applicable`) and a
+review without one succeeds. Mutation: dropping the `highest_impediment_id = v_highest`
+clause turned it red; restored, green.
+
+**Where found.** `/full-review` 2026-09-09 (correctness, architecture and grill passes all
+named it; the correctness reviewer first); confirmed by a live probe before the fix.
+
+## 2026-09-09 — The Across page's recovery note could contradict the rate beside it
+
+**Problem.** `groupRecovery` voted a sprint into "Recovered at least half the time in k of
+n" from `with_recovered + without_recovered`, but the SQL's displayed rate counts every
+`recovered = 'yes'`, including days whose response answer was `unsure` — which the close-day
+form allows. Three occurrences (unsure/yes, unsure/yes, yes/no) rendered the tail `67%
+recovered` beside `Recovered at least half the time in 0 of 1 sprint`. Executed against
+the real functions during the F11 review.
+
+**Fix.** `lib/across.ts` votes from the row's own `rate` (null → no vote). Recovery therefore
+votes only where the card shows a rate (3 answered), one step above the 2-day bar the other
+tri-state note keeps; the row carries no yes-count below that bar, and adding one would have
+meant new SQL. The SPEC's F11 recurring-note rule is amended to say so.
+
+**Regression test.** `tests/unit/across.test.ts` "votes with the rate the tail shows" on the
+exact three-occurrence input, and "does not vote below the bar". Mutation: restoring the
+bucket arithmetic turned the first red; restored, green.
+
+**Where found.** `/review-changes` on `9cd1325`, 2026-09-09.
+
+## 2026-09-09 — The Suggested kit quoted another impediment's recovery rate
+
+**Problem.** `suggestedKit` took the first `enough` recovery group in the scope and appended
+its rate to the follow-through sentence, which names a different item's response whenever
+the newest sprint's highest has a thin recovery and an older sprint's highest has a full one.
+Executed: "The response for Starting late runs 75% of the time and recovers 60% of the
+time", where 60% belonged to Doomscrolling.
+
+**Fix.** `lib/acrossCards.ts` pairs the recovery group by `item_id` and Area with the
+follow-through group it names; no match, no clause.
+
+**Regression test.** `tests/unit/across.test.ts` "quotes a recovery rate only for the
+response it just named" (the executed input) and "on All areas the same item in another
+Area is a different response". Mutation: the unpaired `find` turned the first red.
+
+**Where found.** `/review-changes` on `9cd1325`, 2026-09-09.
+
+## 2026-09-09 — The postmortem's coverage line counted a day that could never be logged
+
+**Problem.** The postmortem's "Logged n of m closed days" used `sprint_review_summary.
+closed_days`, which includes a zero-target closed day, while observations only exist on
+`sprint_days_effective` days (target > 0) and the Across page counts those. The same sprint
+read "of 13" on one screen and "of 12" on the other.
+
+**Fix.** `effectiveClosedDays(days)` in `lib/insightCards.ts` — closed, not cancelled,
+positive target — feeds both coverage lines in `Postmortem.tsx`. The result card's "n days
+closed" keeps the summary's count: a zero-target day was closed, it just could not speak.
+
+**Regression test.** `tests/unit/insightCards.test.ts` "excludes a zero-target closed day".
+Mutation: dropping the target clause turned it red.
+
+**Where found.** `/review-changes` on `9cd1325`, 2026-09-09.
+
 ## 2026-09-08 — Ten new F10 functions were executable by `anon`
 
 **Problem.** Postgres grants EXECUTE to PUBLIC on every newly created function, and PUBLIC

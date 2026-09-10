@@ -207,6 +207,37 @@ describe("F10 single-sprint insight calculations", () => {
     expect([by[ids.D].felt_a_lot, by[ids.D].felt_some, by[ids.D].felt_nothing]).toEqual([0, 0, 0]);
   });
 
+  it("sprint_totals: one row per sprint with the summary's own total and the effective-day counts (0017)", async () => {
+    const [row] = await sql<{ closed_days: number; effective_days: number; on_target_days: number; total: string }[]>`
+      select closed_days, effective_days, on_target_days, total from public.sprint_totals where sprint_id = ${sprintId}`;
+    // 11 closed days (day 11 has a zero target, so 10 effective); actual ≥ target on days
+    // 5, 6, 7, 8 and 10; the total is every closed non-cancelled actual, day 11's 0 included.
+    expect([row.closed_days, row.effective_days, row.on_target_days, Number(row.total)]).toEqual([11, 10, 5, 1060]);
+    const viaRls = await u.client.from("sprint_totals").select("sprint_id, total").eq("sprint_id", sprintId);
+    expect(viaRls.error).toBeNull();
+    expect(Number(viaRls.data?.[0]?.total)).toBe(1060);
+  });
+
+  it("the *_many wrappers return the per-sprint rows tagged with the sprint, and refuse a foreign id (0017)", async () => {
+    const single = await rpc<ImpactRow[]>(u, "insight_impediment_impact", { p_sprint_id: sprintId });
+    const many = await rpc<(ImpactRow & { sprint_id: string })[]>(u, "insight_impediment_impact_many", { p_sprint_ids: [sprintId, sprintId] });
+    expect(many.map((r) => r.sprint_id)).toEqual(single.map(() => sprintId));
+    expect(many.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== "sprint_id")))).toEqual(single);
+
+    const summary = await rpc<{ sprint_id: string; total: number; closed_days: number }[]>(u, "sprint_review_summary_many", { p_sprint_ids: [sprintId] });
+    expect(summary).toHaveLength(1);
+    expect([summary[0].sprint_id, Number(summary[0].total), summary[0].closed_days]).toEqual([sprintId, 1060, 11]);
+
+    const b = await createTestUser("f10-insights-b");
+    try {
+      for (const fn of ["insight_impediment_impact_many", "insight_response_followthrough_many", "insight_response_recovery_many", "insight_cue_usefulness_many", "sprint_review_summary_many"]) {
+        await expectRpcError(b, fn, { p_sprint_ids: [sprintId] }, "sprint_not_found");
+      }
+    } finally {
+      await deleteTestUser(b);
+    }
+  });
+
   it("impediment impact: the highest sorts first, then the most damaging", async () => {
     const rows = await rpc<ImpactRow[]>(u, "insight_impediment_impact", { p_sprint_id: sprintId });
     expect(rows.map((r) => r.item_id)).toEqual([ids.H, ids.B, ids.D]);

@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { formatAmount, formatNumber, toBaseUnits, unitLabel } from "@/lib/format";
+import { attainmentPct, formatAmount, formatNumber, goalMet, toBaseUnits, unitLabel } from "@/lib/format";
 import { measurementStep, sameDailyTargets } from "@/lib/targets";
 
 const usd = { measurement: "money" as const, currency: "USD", unit: null };
 const hours = { measurement: "hours" as const, currency: null, unit: null };
 const reps = { measurement: "quantity" as const, currency: null, unit: "reps" };
+
+describe("attainment", () => {
+  it("rounds the share as the SQL summary does, and a zero goal reads 0", () => {
+    expect(attainmentPct(50, 800)).toBe(6);
+    expect(attainmentPct(799, 800)).toBe(100);
+    expect(attainmentPct(1, 0)).toBe(0);
+  });
+
+  it("met is at or above the goal, per sprint", () => {
+    expect(goalMet(800, 800)).toBe(true);
+    expect(goalMet(799, 800)).toBe(false);
+  });
+});
 
 describe("base units", () => {
   it("money is minor units, hours are minutes, quantity is whole", () => {

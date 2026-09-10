@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { finishReview } from "@/app/(app)/actions/review";
 import { ErrorBar } from "@/components/ErrorBar";
 import { InsightCard } from "@/components/insights/InsightCard";
@@ -8,7 +8,7 @@ import { areaName, type AreaKey } from "@/lib/areas";
 import { callAction } from "@/lib/callAction";
 import { COMPLETION_LABEL, type Postmortem as PostmortemData, type ReviewDecision, type ReviewStats } from "@/lib/data";
 import { formatIsoDate, stampDate } from "@/lib/dates";
-import { coverageLine, cueRows, followThroughRows, impactRows, recoveryRows } from "@/lib/insightCards";
+import { coverageLine, cueRows, effectiveClosedDays, followThroughRows, impactRows, recoveryRows } from "@/lib/insightCards";
 import { kitFrom } from "@/lib/kit";
 import { formatAmount, formatNumber, type Measured } from "@/lib/format";
 
@@ -52,8 +52,18 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  const decisionOf = (id: string) => decisions[id] ?? "keep";
+  // A member the user removed mid-sprint (and never added back) defaults to Drop, the
+  // same default finish_review applies, so the next kit does not resurrect it (#22).
+  const removedOf = (id: string) => [...items.impediments, ...items.cues].find((i) => i.id === id)?.removed === true;
+  const decisionOf = (id: string) => decisions[id] ?? (removedOf(id) ? "drop" : "keep");
   const kit = useMemo(() => kitFrom(decisions, items), [decisions, items]);
+
+  // Finishing swaps this card for its read-only copy in place; the pressed button is
+  // gone, so the reviewed line takes focus and is announced (#8, SC 4.1.3).
+  const reviewed = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!editable && document.activeElement === document.body) reviewed.current?.focus();
+  }, [editable]);
 
   const blocked = !lesson.trim() || moved === null || (verdictApplies && !verdict);
   const hint = blocked
@@ -97,6 +107,8 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
   const highest = data.followThrough[0] ?? null;
   const highestItem = items.impediments.find((i) => i.is_highest) ?? null;
   const closed = summary?.closed_days ?? 0;
+  // The coverage lines count only the days that could be logged, as the Across page does.
+  const loggable = effectiveClosedDays(data.days);
   const impact = data.impact;
   const impactLogged = Math.max(0, ...impact.map((r) => r.logged_days));
   const impactUnsure = Math.max(0, ...impact.map((r) => r.unsure_days));
@@ -144,7 +156,7 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
             testId="card-impact"
             tone="impediment"
             title="Impediment impact"
-            coverage={coverageLine(impactLogged, closed, impactUnsure)}
+            coverage={coverageLine(impactLogged, loggable, impactUnsure)}
             question="Median daily attainment on days an obstacle was present vs absent."
             empty={impact.length === 0 ? "No impediments were logged on a closed day." : null}
             rows={impactRows(impact)}
@@ -171,7 +183,7 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
             testId="card-cues"
             tone="cue"
             title="Cue usefulness"
-            coverage={coverageLine(cueLogged, closed, cueUnsure)}
+            coverage={coverageLine(cueLogged, loggable, cueUnsure)}
             question="Median daily attainment on days a cue was used vs not used."
             empty={data.cues.length === 0 ? "No cues were logged on a closed day." : null}
             rows={cueRows(data.cues)}
@@ -180,7 +192,7 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
 
         <section className="card pm-card" data-testid="proof-card">
           <div className="pm-proof-head">
-            <span className="t-kicker">Proof point on the highest impediment</span>
+            <h2 className="t-kicker">Proof point on the highest impediment</h2>
             <span className="pm-proof-name">{highestItem?.name ?? "not set"}</span>
           </div>
           <div className="pm-rule">
@@ -215,7 +227,7 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
         </section>
 
         <section className="card pm-card" data-testid="lesson-card">
-          <span className="t-kicker">One key lesson</span>
+          <h2 className="t-kicker">One key lesson</h2>
           {editable ? (
             <textarea
               className="input pm-lesson"
@@ -249,7 +261,7 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
         </section>
 
         <section className="card pm-card" data-testid="carry-card">
-          <span className="t-kicker">{editable ? `Carry forward · decide for the next ${areaName(area)} sprint` : "Carried forward"}</span>
+          <h2 className="t-kicker">{editable ? `Carry forward · decide for the next ${areaName(area)} sprint` : "Carried forward"}</h2>
           <div className="mt-6">
             {items.impediments.map((i) => {
               const row = impact.find((r) => r.item_id === i.id);
@@ -257,7 +269,7 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
                 <DecisionRow
                   key={i.id}
                   name={i.name}
-                  sub={`impediment · ${row && row.present_days ? `present ${row.present_days} day${row.present_days === 1 ? "" : "s"}` : "never showed up"}`}
+                  sub={`impediment · ${i.removed ? "removed mid-sprint · " : ""}${row && row.present_days ? `present ${row.present_days} day${row.present_days === 1 ? "" : "s"}` : "never showed up"}`}
                   options={IMP_DECISIONS}
                   value={decisionOf(i.id)}
                   editable={editable}
@@ -271,7 +283,7 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
                 <DecisionRow
                   key={c.id}
                   name={c.name}
-                  sub={`cue · ${row && row.used_days ? `used ${row.used_days} day${row.used_days === 1 ? "" : "s"}` : "never used"}`}
+                  sub={`cue · ${c.removed ? "removed mid-sprint · " : ""}${row && row.used_days ? `used ${row.used_days} day${row.used_days === 1 ? "" : "s"}` : "never used"}`}
                   options={CUE_DECISIONS}
                   value={decisionOf(c.id)}
                   editable={editable}
@@ -295,7 +307,7 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
               </span>
             </div>
           ) : (
-            <div className="pm-reviewed" data-testid="reviewed-line">
+            <div className="pm-reviewed focus-quiet" data-testid="reviewed-line" ref={reviewed} tabIndex={-1}>
               {/* `completed_at` is a UTC timestamp, so it converts at the edge like every
                   other stamp (stampDate). Slicing the ISO string would print the UTC
                   calendar date, which is a day off for most of the evening. */}
@@ -342,7 +354,7 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
         </details>
       </div>
 
-      <aside className="pm-rail" data-testid="kit-card">
+      <aside className="pm-rail" data-testid="kit-card" aria-label="Next sprint kit">
         <div className="kit">
           <div className="kit-kicker">Next {areaName(area)} sprint starts with</div>
           <div className="kit-label">Highest impediment</div>
@@ -357,9 +369,9 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
           </div>
         </div>
         <div className="r-card" data-testid="across-card">
-          <span className="t-kicker">
+          <h2 className="t-kicker">
             Across {stats.sprints} finished sprint{stats.sprints === 1 ? "" : "s"}
-          </span>
+          </h2>
           <div className="across">
             <div>
               <div className="heading across-n">{stats.daysOnTargetPct === null ? "—" : `${stats.daysOnTargetPct}%`}</div>

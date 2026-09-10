@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AnnounceHeading } from "@/components/AnnounceHeading";
 import { areaName, type AreaKey } from "@/lib/areas";
 import { COMPLETION_LABEL, type ReviewSummary } from "@/lib/data";
 import { formatAmount, formatNumber, type Measured } from "@/lib/format";
@@ -29,7 +30,7 @@ export function ReviewGate({
       <span className="t-kicker">
         {name} · {COMPLETION_LABEL[status] ?? "sprint ended"}
       </span>
-      <h1 className="heading g-title">{outcome}</h1>
+      <AnnounceHeading className="heading g-title">{outcome}</AnnounceHeading>
       <p className="g-copy">
         This sprint has ended. The next {name} sprint stays locked until its postmortem is finished — what hurt, what helped, one lesson, and what
         to carry forward.

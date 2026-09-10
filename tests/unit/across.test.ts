@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { groupCues, groupFollow, groupImpact, groupRecovery, RECUR_MIN, type SprintInsights, type SprintRef } from "@/lib/across";
-import { acrossCueRows, acrossFollowRows, acrossImpactRows, coverageAcross, evidenceLine, HOW_TO_READ, suggestedKit } from "@/lib/acrossCards";
+import { acrossCueRows, acrossFollowRows, acrossImpactRows, acrossRecoveryRows, coverageAcross, evidenceLine, HOW_TO_READ, suggestedKit } from "@/lib/acrossCards";
 import type { CueRow, FinishedSprint, FollowThroughRow, ImpactRow, RecoveryRow, ReviewSummary } from "@/lib/data";
-import { loadReviewStats, mergeMeasures } from "@/lib/data";
+import { loadReviewStats, mergeMeasures, needsReview, onePerItem } from "@/lib/data";
 
 /**
  * Across sprints (F11). Every fixture here is a hand-built set of per-sprint rows — the
@@ -239,6 +239,21 @@ describe("across: the recurring note", () => {
     expect(rows[0].recurring).toBe("Recovered at least half the time in 1 of 1 sprint");
   });
 
+  it("the recovery note votes with the rate the tail shows, unsure-response days included", () => {
+    // Three occurrences: response unsure / recovered yes, twice; response yes / recovered no.
+    // The SQL's rate is 2 of 3 = 67%; neither `yes` sits under a with/without bucket.
+    const row = recovery({ answered: 3, rate: 67, enough: true, with_response: 1, with_recovered: 0, without_response: 0, without_recovered: 0 });
+    const [built] = acrossRecoveryRows(groupRecovery([sprintOf(AUG, { recovery: [row] })], "wealth"), "wealth");
+    expect(built.tail).toBe("67% recovered");
+    expect(built.note).toContain("Recovered at least half the time in 1 of 1 sprint");
+  });
+
+  it("recovery does not vote below the bar the card shows a rate at", () => {
+    const thin = recovery({ answered: 2, rate: null, enough: false, with_response: 2, with_recovered: 2 });
+    const rows = groupRecovery([sprintOf(AUG, { recovery: [thin] })], "wealth");
+    expect(rows[0].recurring).toBeNull();
+  });
+
   it("the recurring line is appended to the row's note, not replacing it", () => {
     const [row] = acrossFollowRows(groupFollow([sprintOf(AUG, { follow: [follow()] })], "wealth"), "wealth");
     expect(row.note).toBe("1 unsure · Ran at least half the time in 1 of 1 sprint");
@@ -273,6 +288,25 @@ describe("across: the suggested kit", () => {
     );
   });
 
+  it("quotes a recovery rate only for the response it just named", () => {
+    // Newest sprint: highest A, follow-through enough, recovery thin. Older sprint: highest
+    // B with a qualifying 60% recovery. B's figure must not be attached to A's sentence.
+    const newest = sprintOf(AUG, { follow: [follow()], recovery: [recovery({ answered: 2, rate: null, enough: false })] });
+    const older = sprintOf(JUL, {
+      follow: [follow({ item_id: "i2", name: "Doomscrolling", rate: 50 })],
+      recovery: [recovery({ item_id: "i2", name: "Doomscrolling", rate: 60 })],
+    });
+    const sentence = kit({ ...empty, follow: groupFollow([older, newest], "wealth"), recovery: groupRecovery([older, newest], "wealth"), closedDays: 20 });
+    expect(sentence).toBe("The response for Starting late runs 75% of the time.");
+  });
+
+  it("on All areas the same item in another Area is a different response", () => {
+    const wealth = sprintOf(AUG, { follow: [follow()] });
+    const health = sprintOf(JUN, { recovery: [recovery({ rate: 60 })] });
+    const sentence = kit({ ...empty, follow: groupFollow([wealth, health], "all"), recovery: groupRecovery([wealth, health], "all"), closedDays: 20 });
+    expect(sentence).toBe("The response for Starting late runs 75% of the time.");
+  });
+
   it("tells a low follow-through rate to make the THEN smaller", () => {
     const sentence = kit({ ...empty, follow: groupFollow([sprintOf(AUG, { follow: [follow({ rate: 33 })] })], "wealth"), closedDays: 12 });
     expect(sentence).toBe("The response for Starting late ran on only 33% of occurrences — make the THEN smaller.");
@@ -296,6 +330,8 @@ describe("the Insights rows carry the measurement", () => {
     area: "wealth",
     outcome: `outcome ${id}`,
     status: "completed",
+    amount: 800_000,
+    closedDays: 14,
     start_date: "2026-08-12",
     end_date: "2026-08-25",
     reviewedAt: null,
@@ -368,5 +404,40 @@ describe("across: the header and the explanation", () => {
 
   it("leaves the postmortem rail's stats read alone — no scope was threaded through it", () => {
     expect(loadReviewStats.length).toBe(1);
+  });
+});
+
+describe("which finished sprint blocks its Area (rule 26 since 0017)", () => {
+  const sprint = (over: Partial<FinishedSprint>): FinishedSprint => ({
+    id: "s",
+    area: "wealth",
+    outcome: "o",
+    status: "ended_early",
+    start_date: "2026-08-01",
+    end_date: "2026-08-14",
+    amount: 1,
+    closedDays: 3,
+    reviewedAt: null,
+    ...over,
+  });
+
+  it("an unreviewed sprint blocks only if it closed a day", () => {
+    expect(needsReview(sprint({}))).toBe(true);
+    expect(needsReview(sprint({ closedDays: 0 }))).toBe(false);
+    expect(needsReview(sprint({ reviewedAt: "2026-08-15T00:00:00Z" }))).toBe(false);
+  });
+});
+
+describe("the postmortem's members are one row per item", () => {
+  const item = (id: string, over: Partial<{ is_highest: boolean; is_focus: boolean }> = {}) => ({ id, name: id, ...over });
+
+  it("collapses a member removed and added back into one row, keeping any flag either row carried", () => {
+    const rows = onePerItem([item("a", { is_highest: false }), item("b"), item("a", { is_highest: true })]);
+    expect(rows.map((r) => r.id)).toEqual(["a", "b"]);
+    expect(rows[0].is_highest).toBe(true);
+  });
+
+  it("leaves distinct items alone", () => {
+    expect(onePerItem([item("a"), item("b")]).length).toBe(2);
   });
 });

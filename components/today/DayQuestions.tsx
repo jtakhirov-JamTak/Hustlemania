@@ -1,6 +1,7 @@
 "use client";
 
 import type { Answer, CloseDayInput, ImpactAnswer, ResponseAnswer } from "@/app/(app)/actions/day";
+import { onRadioArrowKeys } from "@/components/radioKeys";
 import type { OfferedItems } from "@/lib/data";
 
 /**
@@ -257,7 +258,7 @@ function AnswerGroup<T extends string>({
       <GroupHead kicker={kicker} question={question} sub={sub} id={labelId} />
       <div className="pill-row" role="radiogroup" aria-labelledby={labelId}>
         {options.map(([key, label]) => (
-          <button key={key} type="button" role="radio" className={`chip ${value === key ? "chip-on" : ""}`} aria-checked={value === key} onClick={() => onChange(key)}>
+          <button key={key} type="button" role="radio" className={`chip ${value === key ? "chip-on" : ""}`} aria-checked={value === key} onClick={() => onChange(key)} onKeyDown={onRadioArrowKeys}>
             {label}
           </button>
         ))}

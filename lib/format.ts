@@ -50,6 +50,20 @@ export function unitLabel(m: Measured): string {
   }
 }
 
+/**
+ * "% of goal" as the result card, the Journal, the close result and the Vision tab all
+ * print it — one arithmetic, so no two screens can round differently. Matches
+ * `sprint_review_summary.pct` (`round(total * 100.0 / goal)`); a zero goal reads 0.
+ */
+export function attainmentPct(total: number, goal: number): number {
+  return goal > 0 ? Math.round((total / goal) * 100) : 0;
+}
+
+/** Met is `total >= goal`, compared per sprint (rule 25), never summed across measurements. */
+export function goalMet(total: number, goal: number): boolean {
+  return total >= goal;
+}
+
 /** Number plus unit: "8,000 USD", "2h 30m", "12 reps". */
 export function formatAmount(m: Measured, base: number): string {
   const n = formatNumber(m, base);

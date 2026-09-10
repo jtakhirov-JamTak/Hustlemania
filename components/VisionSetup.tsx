@@ -7,6 +7,7 @@ import { saveVision, setVisionObstacle, setVisionRule } from "@/app/(app)/action
 import { ErrorBar } from "@/components/ErrorBar";
 import { OptionRow } from "@/components/OptionRow";
 import { ProofInputs } from "@/components/ProofInputs";
+import { useDeviceToday } from "@/components/useDeviceToday";
 import { callAction } from "@/lib/callAction";
 import type { ActiveVision, LibraryItem } from "@/lib/data";
 import { addDays, localDateIn } from "@/lib/sprintDay";
@@ -28,19 +29,23 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
   const heading = useRef<HTMLHeadingElement>(null);
   const mounted = useRef(false);
   useEffect(() => {
-    if (mounted.current) heading.current?.focus();
+    // A step change is a new screen. So is arriving here after "Replace" swapped the
+    // overview out from under the pressed button: focus is then on <body>, and the
+    // heading takes it so the change is announced (full review 2026-09-09, #8).
+    if (mounted.current || document.activeElement === document.body) heading.current?.focus();
     mounted.current = true;
   }, [step]);
 
-  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
   // save_vision compares with the database's date (UTC): offer nothing earlier than the
   // later of local tomorrow and UTC tomorrow, so the first date shown is never refused.
+  // The device date is read after mount (#16); until then the field has no floor.
+  const device = useDeviceToday();
   const minDeadline = useMemo(() => {
-    const now = new Date();
-    const local = addDays(localDateIn(tz, now), 1);
-    const utc = addDays(localDateIn("UTC", now), 1);
+    if (!device) return undefined;
+    const utc = addDays(localDateIn("UTC", new Date()), 1);
+    const local = addDays(device.today, 1);
     return local > utc ? local : utc;
-  }, [tz]);
+  }, [device]);
 
   // Step 1
   const v = active?.vision ?? null;
@@ -49,7 +54,7 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
   const [proof, setProof] = useState(v?.proof ?? "");
   const [meaning, setMeaning] = useState(v?.meaning ?? "");
   const [baseline, setBaseline] = useState(v?.baseline ?? "");
-  const deadlineOk = /^\d{4}-\d{2}-\d{2}$/.test(deadline) && deadline >= minDeadline;
+  const deadlineOk = /^\d{4}-\d{2}-\d{2}$/.test(deadline) && (minDeadline === undefined || deadline >= minDeadline);
 
   // Step 2
   const obstacle = active?.obstacle ?? null;
@@ -144,7 +149,6 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
               min={minDeadline}
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
-              aria-label="Deadline"
               aria-invalid={deadline && !deadlineOk ? "true" : undefined}
             />
             <label className="v-field-label" htmlFor="vision-proof">
@@ -156,7 +160,6 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
               value={proof}
               onChange={(e) => setProof(e.target.value)}
               placeholder="Something you could point to: a number, a habit held for a quarter, a signed contract"
-              aria-label="Proof"
             />
             <label className="v-field-label v-field-label-opt" htmlFor="vision-meaning">
               What it means to you <em>· optional</em>

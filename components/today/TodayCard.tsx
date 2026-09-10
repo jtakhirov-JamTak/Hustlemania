@@ -134,6 +134,7 @@ export function TodayCard({
           items={items}
           library={library}
           setupTomorrow={justClosed && nextTarget !== null}
+          announce={justClosed}
           onDone={() => setJustClosed(false)}
         />
       ) : null}
@@ -337,6 +338,7 @@ function Closed({
   items,
   library,
   setupTomorrow,
+  announce,
   onDone,
 }: {
   sprintId: string;
@@ -348,6 +350,8 @@ function Closed({
   items: SprintItems;
   library: { cues: LibraryItem[]; impediments: LibraryItem[] };
   setupTomorrow: boolean;
+  /** The close just happened here: the result takes focus so it is announced (SC 4.1.3). */
+  announce: boolean;
   onDone: () => void;
 }) {
   const [adding, setAdding] = useState<ItemKind | null>(null);
@@ -356,6 +360,10 @@ function Closed({
   const actual = Number(day.actual ?? 0);
   const target = Number(day.target);
   const atOrAbove = actual >= target;
+  const result = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (announce) result.current?.focus();
+  }, [announce]);
   const summary = daySummaryLine(day, observations);
   const quiet = quietItems(observations);
   // Only items still in the sprint can be pruned; a removed one drops out on refresh.
@@ -376,11 +384,15 @@ function Closed({
         <span className="t-kicker">Today&apos;s entry · closed</span>
         <span className="t-closes">closed</span>
       </div>
-      <div className="heading t-big" data-testid="closed-actual" data-state={atOrAbove ? "at-or-above" : "under"}>
-        {formatNumber(measured, actual)}
-      </div>
-      <div className="t-unit">
-        {unitLabel(measured)} against {formatNumber(measured, target)}
+      {/* Focus lands on the whole result so the actual and its verdict are read together. */}
+      <div ref={result} tabIndex={-1} className="focus-quiet">
+        <div className="heading t-big" data-testid="closed-actual" data-state={atOrAbove ? "at-or-above" : "under"}>
+          {formatNumber(measured, actual)}
+        </div>
+        <div className="t-unit">
+          {unitLabel(measured)} against {formatNumber(measured, target)}
+          {atOrAbove ? "" : " · under target"}
+        </div>
       </div>
       {summary ? (
         <div className="t-summary" data-testid="day-summary">

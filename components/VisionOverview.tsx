@@ -2,19 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { replaceVision, reviewVision, type Verdict } from "@/app/(app)/actions/vision";
 import { ErrorBar } from "@/components/ErrorBar";
 import { TwoTap } from "@/components/TwoTap";
+import { useDeviceToday } from "@/components/useDeviceToday";
 import { callAction } from "@/lib/callAction";
 import { areaName } from "@/lib/areas";
-import { formatIsoDate, stampDate } from "@/lib/dates";
+import { formatIsoDate, monthYear, stampDate } from "@/lib/dates";
 import { visionSteps, type ActiveVision, type PreviousVision, type VisionSprintRow } from "@/lib/data";
 import { formatNumber } from "@/lib/format";
-import { daysBetween, localDateIn } from "@/lib/sprintDay";
+import { daysBetween } from "@/lib/sprintDay";
 
 const DATE: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
-const MONTH: Intl.DateTimeFormatOptions = { month: "short", year: "numeric" };
 
 /**
  * F9: the saved vision — headline, meta, Edit · Review vision · Replace, `n of 3 steps`,
@@ -40,8 +40,9 @@ export function VisionOverview({
   const [pending, start] = useTransition();
   const { vision, obstacle, latestReview } = active;
   const steps = visionSteps(active);
-  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
-  const daysLeft = daysBetween(localDateIn(tz, new Date()), vision.deadline);
+  // Device date after mount only (#16): the server would render its own zone's day count.
+  const device = useDeviceToday();
+  const daysLeft = device ? daysBetween(device.today, vision.deadline) : null;
   const deadlineText = formatIsoDate(vision.deadline, DATE);
   const ruleComplete = Boolean(obstacle && obstacle.proof_when && obstacle.proof_then && obstacle.proof_recover);
 
@@ -80,7 +81,7 @@ export function VisionOverview({
       <div className="v-head">
         <div className="label-accent">One to two years from now</div>
         <span className="v-head-meta" data-testid="vision-meta">
-          Saved {stampDate(vision.updated_at)} · {daysLeft < 0 ? <span className="v-under">Deadline passed {deadlineText}</span> : `By ${deadlineText}`} ·{" "}
+          Saved {stampDate(vision.updated_at)} · {daysLeft !== null && daysLeft < 0 ? <span className="v-under">Deadline passed {deadlineText}</span> : `By ${deadlineText}`} ·{" "}
           {latestReview ? `Reviewed ${stampDate(latestReview.created_at)}` : "Not reviewed yet"}
         </span>
       </div>
@@ -110,12 +111,12 @@ export function VisionOverview({
           <div className="v-review-note">
             {vision.proof ? `Proof you named: ${vision.proof}. ` : ""}
             {active.sprintCount} {active.sprintCount === 1 ? "sprint has" : "sprints have"} run behind it.{" "}
-            {daysLeft < 0 ? `The deadline passed ${-daysLeft} ${-daysLeft === 1 ? "day" : "days"} ago.` : `${daysLeft} ${daysLeft === 1 ? "day" : "days"} to the deadline.`}
+            {daysLeft === null ? "" : daysLeft < 0 ? `The deadline passed ${-daysLeft} ${-daysLeft === 1 ? "day" : "days"} ago.` : `${daysLeft} ${daysLeft === 1 ? "day" : "days"} to the deadline.`}
           </div>
           <label className="v-field-label v-field-label-opt" htmlFor="review-note">
             What shows it? <em>· optional</em>
           </label>
-          <textarea id="review-note" className="input v-textarea" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Evidence you can point to today" aria-label="Review note" />
+          <textarea id="review-note" className="input v-textarea" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Evidence you can point to today" />
           {error ? (
             <ErrorBar className="mt-14" action={{ label: "Dismiss", onClick: () => setError(null) }}>
               {error}
@@ -227,7 +228,7 @@ export function VisionOverview({
                 <div key={p.id} className="v-prev" data-testid="previous-vision">
                   {p.body}
                   <span className="v-prev-meta">
-                    {new Date(p.created_at).toLocaleDateString("en-US", MONTH)} – {new Date(p.archived_at).toLocaleDateString("en-US", MONTH)} · replaced {stampDate(p.archived_at)} · {p.sprintCount}{" "}
+                    {monthYear(p.created_at)} – {monthYear(p.archived_at)} · replaced {stampDate(p.archived_at)} · {p.sprintCount}{" "}
                     {p.sprintCount === 1 ? "sprint" : "sprints"} ran behind it
                   </span>
                 </div>

@@ -150,9 +150,14 @@ export function groupCues(history: SprintInsights[], scope: Scope): Grouped<CueR
 }
 
 /**
- * Tri-state note: a sprint votes at `answered >= RECUR_MIN` using the card's own
- * denominator, so the note and the displayed rate never disagree. `answered` counts
- * `partially` for follow-through (0015) and `yes|no` for recovery.
+ * Tri-state note: a sprint votes using the card's own numerator and denominator, so the
+ * note and the displayed rate never disagree. Follow-through votes at
+ * `answered >= RECUR_MIN` from `ran / answered` (`answered` counts `partially`, 0015).
+ * Recovery votes from the SQL's own `rate`: its numerator is every `recovered = 'yes'`
+ * regardless of the response answer, and the row carries no such count below the n≥3
+ * bar, so recovery votes only where the card shows a rate. Recomputing it from
+ * `with_recovered + without_recovered` dropped the days whose response was `unsure`
+ * and made the note contradict the tail (FIX_LOG 2026-09-09).
  */
 function triNote(votes: (boolean | null)[], word: "Ran" | "Recovered"): string | null {
   const voted = votes.filter((v): v is boolean => v !== null);
@@ -161,6 +166,7 @@ function triNote(votes: (boolean | null)[], word: "Ran" | "Recovered"): string |
 }
 
 const triVote = (answered: number, yes: number): boolean | null => (answered >= RECUR_MIN ? yes / answered >= 0.5 : null);
+const rateVote = (rate: number | null): boolean | null => (rate === null ? null : rate >= 50);
 
 /**
  * The response cards group by item **and version** — the sprint's proof text. A rewritten
@@ -205,7 +211,7 @@ export function groupRecovery(history: SprintInsights[], scope: Scope): Grouped<
       area: entries[0].sprint.area,
       sprints: new Set(entries.map((e) => e.sprint.id)).size,
       recurring: triNote(
-        entries.map((e) => triVote(e.row.answered, e.row.with_recovered + e.row.without_recovered)),
+        entries.map((e) => rateVote(e.row.rate)),
         "Recovered",
       ),
     };

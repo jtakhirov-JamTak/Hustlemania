@@ -8,7 +8,7 @@ import { loadDays, type SprintDay } from "@/lib/data";
 import { friendlyError, GENERIC_SAVE_ERROR } from "@/lib/errors";
 import type { Measurement } from "@/lib/format";
 import { report } from "@/lib/observe";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, requireUser } from "@/lib/supabase/server";
 
 export type StartSprintInput = {
   area: AreaKey;
@@ -111,7 +111,8 @@ export async function saveTargetsAction(sprintId: string, targets: number[]): Pr
 export async function saveMantra(sprintId: string, text: string): Promise<Result> {
   const mantra = text.trim();
   if (!mantra) return { error: friendlyError("sprints_mantra_check") };
-  const supabase = await createClient();
+  const { supabase, user } = await requireUser();
+  if (!user) return { error: friendlyError("not_authenticated") };
   const res = await supabase.from("sprints").update({ mantra }).eq("id", sprintId).select("id");
   if (res.error) return failed("saveMantra", res.error, { sprintId });
   if (res.data.length === 0) return { error: GENERIC_SAVE_ERROR };

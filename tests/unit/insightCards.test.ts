@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attainment, coverageLine, cueRows, followThroughRows, impactRows, recoveryRows } from "@/lib/insightCards";
+import { attainment, coverageLine, cueRows, effectiveClosedDays, followThroughRows, impactRows, recoveryRows } from "@/lib/insightCards";
 import { kitFrom, prefillFromKit } from "@/lib/kit";
 import type { AreaKit, CueRow, FollowThroughRow, ImpactRow, RecoveryRow } from "@/lib/data";
 
@@ -134,6 +134,16 @@ describe("insight card copy", () => {
   it("coverage names the logged days and the unsure ones", () => {
     expect(coverageLine(12, 13, 1)).toBe("Logged 12 of 13 closed days · 1 unsure");
     expect(coverageLine(1, 1, 0)).toBe("Logged 1 of 1 closed day");
+  });
+
+  it("the coverage denominator excludes a zero-target closed day, as the effective view does", () => {
+    const days = [
+      { closed: true, cancelled: false, target: 100 },
+      { closed: true, cancelled: false, target: 0 },
+      { closed: true, cancelled: true, target: 100 },
+      { closed: false, cancelled: false, target: 100 },
+    ];
+    expect(effectiveClosedDays(days)).toBe(1);
   });
 });
 

@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { isSameOriginPath } from "@/lib/redirect";
 import { isTheme, THEME_COOKIE } from "@/lib/theme";
 
 /**
@@ -15,5 +16,5 @@ export async function setThemeAction(formData: FormData): Promise<void> {
     const store = await cookies();
     store.set(THEME_COOKIE, theme, { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365 });
   }
-  redirect(next.startsWith("/") && !next.startsWith("//") ? next : "/sprints");
+  redirect(isSameOriginPath(next) ? next : "/sprints");
 }

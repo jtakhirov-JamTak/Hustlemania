@@ -5,6 +5,8 @@ import {
   dbTodayIn,
   deleteTestUser,
   expectRpcError,
+  insertCue,
+  insertImpediment,
   insertSprintRows,
   insertVision,
   moneySprintArgs,
@@ -297,6 +299,9 @@ describe("rule 26: the next sprint waits for the review", () => {
     items = await seedItems(u);
     today = await dbTodayIn(TZ);
     finished = await startSprint(u, moneySprintArgs({ ...items, p_tz: TZ, p_start_date: today }));
+    // One closed day: since 0017 a sprint that never ran does not block (its own test below).
+    const [day1] = await sql<{ id: string }[]>`select id from public.sprint_days where sprint_id = ${finished} and day_index = 1`;
+    await rpc(u, "close_day", { p_sprint_day_id: day1.id, p_actual: 1000 });
     await rpc(u, "end_sprint_early", { p_sprint_id: finished });
   });
   afterAll(async () => {
@@ -582,5 +587,143 @@ describe("sprint_streak_at after closure, and sprint_best_streak", () => {
     } finally {
       await deleteTestUser(b);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 0016 — a member removed and added back is two membership rows and ONE item. Before
+// the fix the review's decision fill hit the (review, kind, item) unique key and the
+// Area could never start another sprint (FIX_LOG 2026-09-09).
+// ---------------------------------------------------------------------------
+describe("finish_review and the insight cards after a member is removed and added back", () => {
+  let u: TestUser;
+  let sprintId: string;
+  let cueB: string;
+  let cueC: string;
+
+  beforeAll(async () => {
+    u = await createTestUser("f10-readd");
+    await insertVision(u);
+    const items = await seedItems(u);
+    cueB = await insertCue(u, "Second cue");
+    cueC = await insertCue(u, "Third cue");
+    const today = await dbTodayIn(TZ);
+    sprintId = await startSprint(u, moneySprintArgs({ ...items, p_cue_ids: [...items.p_cue_ids, cueB, cueC], p_tz: TZ, p_start_date: today }));
+    const [day1] = await sql<{ id: string }[]>`
+      select id from public.sprint_days where sprint_id = ${sprintId} and day_index = 1`;
+    await rpc(u, "close_day", { p_sprint_day_id: day1.id, p_actual: 1000, p_impediments: [], p_cues: [{ item_id: cueB, answer: "yes" }] });
+    await rpc(u, "remove_sprint_item", { p_sprint_id: sprintId, p_kind: "cue", p_item_id: cueB });
+    await rpc(u, "add_sprint_item", { p_sprint_id: sprintId, p_kind: "cue", p_item_id: cueB });
+    // C is removed and never added back: the review must default it to `drop` (0017).
+    await rpc(u, "remove_sprint_item", { p_sprint_id: sprintId, p_kind: "cue", p_item_id: cueC });
+  });
+  afterAll(async () => {
+    await deleteTestUser(u);
+  });
+
+  it("the history keeps both membership rows", async () => {
+    const [row] = await sql<{ n: number }[]>`
+      select count(*)::int as n from public.sprint_cues where sprint_id = ${sprintId} and cue_id = ${cueB}`;
+    expect(row.n).toBe(2);
+  });
+
+  it("cue usefulness counts the one logged day once, not once per membership row", async () => {
+    const rows = await rpc<{ item_id: string; used_days: number; logged_days: number }[]>(u, "insight_cue_usefulness", { p_sprint_id: sprintId });
+    const b = rows.find((r) => r.item_id === cueB)!;
+    expect([b.used_days, b.logged_days]).toEqual([1, 1]);
+    expect(rows.filter((r) => r.item_id === cueB)).toHaveLength(1);
+  });
+
+  it("finish_review writes one decision per item and succeeds; a removed member defaults to drop", async () => {
+    await rpc(u, "end_sprint_early", { p_sprint_id: sprintId });
+    const id = await rpc<string>(u, "finish_review", { p_sprint_id: sprintId, p_lesson: "L", p_moved: false });
+    const rows = await sql<{ item_id: string; decision: string }[]>`
+      select item_id, decision from public.review_decisions where review_id = ${id} and kind = 'cue'`;
+    expect(rows.filter((r) => r.item_id === cueB)).toEqual([{ item_id: cueB, decision: "keep" }]);
+    expect(rows.filter((r) => r.item_id === cueC)).toEqual([{ item_id: cueC, decision: "drop" }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 0017 — rule 26 exempts a finished sprint that never closed a day: there is nothing to
+// review, so the Area is not locked behind a "key lesson" for a sprint that never ran.
+// ---------------------------------------------------------------------------
+describe("start_sprint after a sprint ended before day 1", () => {
+  let u: TestUser;
+  let items: Awaited<ReturnType<typeof seedItems>>;
+
+  beforeAll(async () => {
+    u = await createTestUser("f10-never-ran");
+    await insertVision(u);
+    items = await seedItems(u);
+  });
+  afterAll(async () => {
+    await deleteTestUser(u);
+  });
+
+  it("does not demand a review of a sprint with zero closed days, and still does of one that ran", async () => {
+    const today = await dbTodayIn(TZ);
+    const [{ d: tomorrow }] = await sql<{ d: string }[]>`select to_char(${today}::date + 1, 'YYYY-MM-DD') as d`;
+    const neverRan = await startSprint(u, moneySprintArgs({ ...items, p_area: "health", p_tz: TZ, p_start_date: tomorrow }));
+    await rpc(u, "end_sprint_early", { p_sprint_id: neverRan });
+    const [row] = await sql<{ closed: number }[]>`select closed_days as closed from public.sprint_totals where sprint_id = ${neverRan}`;
+    expect(row.closed).toBe(0);
+
+    // The Area restarts without a review of the sprint that never ran.
+    const next = await startSprint(u, moneySprintArgs({ ...items, p_area: "health", p_tz: TZ, p_start_date: today }));
+    expect(next).toBeTruthy();
+
+    // A sprint that closed a day still blocks until reviewed.
+    const [day1] = await sql<{ id: string }[]>`select id from public.sprint_days where sprint_id = ${next} and day_index = 1`;
+    await rpc(u, "close_day", { p_sprint_day_id: day1.id, p_actual: 1000 });
+    await rpc(u, "end_sprint_early", { p_sprint_id: next });
+    await expectRpcError(u, "start_sprint", moneySprintArgs({ ...items, p_area: "health", p_tz: TZ, p_start_date: today }) as unknown as Record<string, unknown>, "review_required");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 0016 — the verdict is asked about the CURRENT highest, the same item the follow-through
+// card reads. Promoting another impediment after the first one occurred used to leave the
+// DB demanding a verdict the UI never offered (FIX_LOG 2026-09-09).
+// ---------------------------------------------------------------------------
+describe("finish_review verdict after the highest impediment changed mid-sprint", () => {
+  let u: TestUser;
+  let sprintId: string;
+  let a: string;
+  let b: string;
+
+  beforeAll(async () => {
+    u = await createTestUser("f10-promote");
+    await insertVision(u);
+    const items = await seedItems(u);
+    a = items.p_impediment_ids[0];
+    const today = await dbTodayIn(TZ);
+    sprintId = await startSprint(u, moneySprintArgs({ ...items, p_tz: TZ, p_start_date: today }));
+    b = await insertImpediment(u, "Doomscrolling", { proofWhen: "w", proofThen: "t", proofRecover: "r" });
+    await rpc(u, "add_sprint_item", { p_sprint_id: sprintId, p_kind: "impediment", p_item_id: b });
+    const [day1] = await sql<{ id: string }[]>`
+      select id from public.sprint_days where sprint_id = ${sprintId} and day_index = 1`;
+    await rpc(u, "close_day", {
+      p_sprint_day_id: day1.id,
+      p_actual: 1000,
+      p_impediments: [{ item_id: a, answer: "yes" }, { item_id: b, answer: "no" }],
+      p_cues: [],
+      p_response: "yes",
+      p_recovered: "yes",
+      p_impact: "some",
+    });
+    await rpc(u, "set_highest_impediment", { p_sprint_id: sprintId, p_impediment_id: b });
+    await rpc(u, "end_sprint_early", { p_sprint_id: sprintId });
+  });
+  afterAll(async () => {
+    await deleteTestUser(u);
+  });
+
+  it("the follow-through card and finish_review agree: no occurrence of the current highest, no verdict", async () => {
+    const rows = await rpc<{ item_id: string; occurrences: number }[]>(u, "insight_response_followthrough", { p_sprint_id: sprintId });
+    expect(rows.map((r) => [r.item_id, r.occurrences])).toEqual([[b, 0]]);
+    await expectRpcError(u, "finish_review", { p_sprint_id: sprintId, p_lesson: "L", p_moved: false, p_verdict: "worked" }, "verdict_not_applicable");
+    const id = await rpc<string>(u, "finish_review", { p_sprint_id: sprintId, p_lesson: "L", p_moved: false });
+    expect(id).toBeTruthy();
   });
 });

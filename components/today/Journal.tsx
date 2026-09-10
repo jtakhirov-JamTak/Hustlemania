@@ -8,7 +8,7 @@ import { areaName, type AreaKey } from "@/lib/areas";
 import type { LibraryItem, OfferedItems, Sprint, SprintDay, SprintItems, Task } from "@/lib/data";
 import type { DayObservations } from "@/lib/daySummary";
 import { formatIsoDate } from "@/lib/dates";
-import { formatAmount, formatNumber, type Measured } from "@/lib/format";
+import { attainmentPct, formatAmount, formatNumber, goalMet, type Measured } from "@/lib/format";
 import { localDateIn, streakLabel, type SprintDayPosition } from "@/lib/sprintDay";
 import { measurementStep, remainingPlan } from "@/lib/targets";
 
@@ -54,7 +54,11 @@ export function Journal({
   const highestId = items.impediments.find((i) => i.is_highest)?.id ?? null;
   const closedCount = days.filter((d) => d.closed_at !== null).length;
   const streakText = position.kind === "before" ? "Streak starts with day 1" : streakLabel(streak);
-  const pct = Math.round((cumulative / goal) * 100);
+  const pct = attainmentPct(cumulative, goal);
+  // End early / Complete cancel every open day from today on and lock the sprint, so a
+  // still-open today and any earlier day not yet backfilled are lost; the buttons say so.
+  const todayOpen = position.kind === "during" && day.closed_at === null;
+  const earlierOpen = days.filter((d) => d.closed_at === null && !d.cancelled && d.date < todayInSprintTz).length;
   const pace = remaining === 0 ? " · goal reached" : sprintOver ? " · sprint over" : daysLeft > 1 ? ` · ${formatNumber(measured, perDay)} a day finishes it` : " · final day";
 
   return (
@@ -136,9 +140,10 @@ export function Journal({
         celebration={sprint.celebration}
         measured={measured}
         usage={usage}
-        goalReached={cumulative >= goal}
+        goalReached={goalMet(cumulative, goal)}
         cumulative={cumulative}
         goal={goal}
+        openDays={{ today: todayOpen, earlier: earlierOpen }}
         lastLesson={focusIndex === 1 ? lastLesson : null}
         areaLabel={areaName(sprint.area as AreaKey)}
       />

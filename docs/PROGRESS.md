@@ -81,6 +81,25 @@ and the metric cannot be read.
 
 (Newest first. One line per shipped milestone, dated.)
 
+- 2026-09-09 — **Full review of F6–F11 and the F11 fixes** (`docs/audits/full-review-2026-09-09.md`;
+  DECISIONS 2026-09-09). `/review-changes` on `9cd1325` found 2 HIGH / 2 MEDIUM in F11; the
+  nine-reviewer `/full-review` over `db40dee..HEAD` found 2 CRITICAL (a member removed and
+  re-added could never be reviewed; a mid-sprint highest change demanded a verdict the UI
+  never offered — both reproduced live, both Area-locking) plus 9 HIGH and 16 MEDIUM
+  groups left open for triage. Fixed: both CRITICALs (migration `0016`, `onePerItem`), the
+  four F11 findings (recovery vote from the SQL rate, kit pairs recovery by item + Area,
+  postmortem coverage over effective days, touch targets on any coarse pointer). Unit
+  114 → 121, DB 270 → 274; seven live mutations each turned a named test red. **Second
+  pass, same day, on the user's call: every open HIGH and MEDIUM (#5–#29) fixed** —
+  migration `0017` (`sprint_totals` view, five `*_many` wrappers, rule-26 exemption for a
+  sprint that never ran, removed members default to drop), the 1000-row cap named in
+  code, the Insights page at five requests for any N, focus and announcement after every
+  in-place replacement, 44px on every primary control, the Dusk contrast misses, the
+  device date read after mount, the theme redirect guard, session checks on direct-table
+  actions, the operator-log context filter. Unit 121 → 130, DB 274 → 277, e2e 10; seven
+  more mutations red; Chrome desktop check of the wizard, Across, a postmortem, the
+  Journal rail and the Vision overview. Two design calls deferred to BACKLOG; LOWs open.
+
 - 2026-09-05 — **F5 streaks green** (no evaluator trigger; nine DB mutations each turned
   their tests red, six more after the review rewrite; visual check in Chrome;
   `/full-review` 0 CRITICAL / 0 HIGH / 8 MEDIUM all fixed; `npm run verify` green:

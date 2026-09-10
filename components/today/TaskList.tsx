@@ -98,6 +98,9 @@ export function TaskList({ dayId, initial, locked, lockedReason }: { dayId: stri
     const row = rows.find((r) => r.id === id);
     if (!row) return;
     setRows((r) => r.filter((x) => x.id !== id));
+    // The × that was pressed is gone with its row; focus moves to the draft input so a
+    // keyboard or screen-reader user is not dropped on <body> (SC 2.4.3).
+    draftRef.current?.focus();
     void run(
       async () => {
         const res = await callAction(() => removeTask(id));

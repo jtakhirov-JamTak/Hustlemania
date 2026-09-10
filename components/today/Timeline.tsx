@@ -2,7 +2,7 @@
 
 import { ErrorBar } from "@/components/ErrorBar";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { dayOfferedItemsAction } from "@/app/(app)/actions/day";
 import { saveTargetsAction } from "@/app/(app)/actions/sprint";
 import { CloseFlow } from "@/components/today/CloseFlow";
@@ -50,6 +50,7 @@ export function Timeline({
   today: React.ReactNode;
 }) {
   const router = useRouter();
+  const root = useRef<HTMLDivElement>(null);
   const [days, setDays] = useState(initialDays);
   // Fresh rows from the server (after a refresh) replace the local copy a save or a backfill left.
   const [seen, setSeen] = useState(initialDays);
@@ -218,7 +219,7 @@ export function Timeline({
 
   return (
     <>
-      <div className="timeline" data-testid="timeline">
+      <div className="timeline" data-testid="timeline" ref={root}>
         {pastFold ? (
           <FoldRow label={pastFold.to === 1 ? "Day 1" : `Days 1–${pastFold.to}`} sub={range(pastFold.from, pastFold.to)} text="Earlier in the sprint" open={pastOpen} onToggle={() => toggle("past")} />
         ) : null}
@@ -339,9 +340,13 @@ export function Timeline({
           highestId={highestId}
           onCancel={() => setBackfill(null)}
           onDone={(outcome) => {
+            const index = backfill.day.day_index;
             setDays(outcome.days);
             setBackfill(null);
             router.refresh();
+            // The modal would return focus to the "add" button, which is disabled while it
+            // is open and gone once the row re-renders as closed; the closed row takes it.
+            requestAnimationFrame(() => root.current?.querySelector<HTMLElement>(`[data-kind="closed"][data-day="${index}"]`)?.focus());
           }}
         />
       ) : null}
@@ -369,7 +374,7 @@ function DayRow({ d, kind, tone, children }: { d: SprintDay; kind: "closed" | "m
         Day {d.day_index}
         <DateSub date={d.date} />
       </div>
-      <div className="j-row" data-kind={kind} data-day={d.day_index} data-testid="day-row">
+      <div className="j-row" data-kind={kind} data-day={d.day_index} data-testid="day-row" tabIndex={-1}>
         <span className="j-dot" data-tone={tone} />
         {children}
       </div>

@@ -3,11 +3,12 @@
 import { ProofInputs } from "@/components/ProofInputs";
 import { ErrorBar } from "@/components/ErrorBar";
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { createItem } from "@/app/(app)/actions/library";
 import { startSprintAction, type StartSprintInput } from "@/app/(app)/actions/sprint";
 import { OptionRow } from "@/components/OptionRow";
 import { effectivePlan, PlanGrid, type PlanCell } from "@/components/PlanGrid";
+import { useDeviceToday } from "@/components/useDeviceToday";
 import { areaName, type AreaKey } from "@/lib/areas";
 import { callAction } from "@/lib/callAction";
 import { cueSummary, eligibleFor, proofComplete, proofSummary, type AreaKit, type LibraryItem } from "@/lib/data";
@@ -116,15 +117,19 @@ export function NewSprintWizard({
   // F7: the focus cue is one of the picked cues; it defaults to the first pick and moves when that pick goes.
   const setCues = (next: string[]) => setD((p) => ({ ...p, cueIds: next, focusId: p.focusId && next.includes(p.focusId) ? p.focusId : (next[0] ?? null) }));
   const heading = useRef<HTMLHeadingElement>(null);
+  const addUsage = useRef<HTMLButtonElement>(null);
   const mounted = useRef(false);
   useEffect(() => {
     if (mounted.current) heading.current?.focus();
     mounted.current = true;
   }, [step]);
 
-  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
-  const today = useMemo(() => localDateIn(tz, new Date()), [tz]);
-  const startDate = d.startsTomorrow ? addDays(today, 1) : today;
+  // Read after mount and again when the tab returns, never during render: the server's
+  // zone differs, and a date fixed at mount is yesterday's after midnight (#16).
+  const device = useDeviceToday();
+  const tz = device?.tz ?? "UTC";
+  const today = device?.today ?? null;
+  const startDate = today ? (d.startsTomorrow ? addDays(today, 1) : today) : null;
 
   const measured: Measured = { measurement: d.measurement, currency: d.currency.toUpperCase() || null, unit: d.unit || null };
   const amount =
@@ -140,9 +145,11 @@ export function NewSprintWizard({
   const [showIntentions, setShowIntentions] = useState(false);
 
   // F3: before the sprint starts every day is editable, today included (it locks at start).
+  // Step 4 is never the first render, so the cells always have the device date by the
+  // time they are shown; the epoch placeholder only keeps the type honest before mount.
   const planCells: PlanCell[] = (sameTargets ?? Array<number>(14).fill(0)).map((t, i) => ({
     dayIndex: i + 1,
-    date: addDays(startDate, i),
+    date: addDays(startDate ?? "1970-01-01", i),
     locked: false,
     target: t,
     actual: null,
@@ -211,7 +218,12 @@ export function NewSprintWizard({
   const canNext = stepHint[step] === null;
 
   function submit() {
-    if (!canNext || pending || !d.area || !amountValid || amount === null || !targets) return;
+    if (!canNext || pending || !d.area || !amountValid || amount === null || !targets || !device) return;
+    // The date is read at the moment of submitting, so a wizard left open across
+    // midnight starts today, not yesterday (#16).
+    const now = localDateIn(device.tz, new Date());
+    const startDate = d.startsTomorrow ? addDays(now, 1) : now;
+    const tz = device.tz;
     const input: StartSprintInput = {
       area: d.area,
       outcome: d.outcome,
@@ -292,11 +304,11 @@ export function NewSprintWizard({
 
   return (
     <div>
-      <span className="tag tag-accent">New sprint</span>
+      <span className="tag tag-accent">New sprint · Step {step + 1} of 4</span>
       <h1 ref={heading} tabIndex={-1} className="heading page-title page-title-lg mt-12 wz-title">
         {STEPS[step]}
       </h1>
-      <div className="wz-progress" aria-label={`Step ${step + 1} of 4`}>
+      <div className="wz-progress" aria-hidden="true">
         {STEPS.map((s, i) => (
           <span key={s} className={`v-seg ${i <= step ? "v-seg-on" : ""}`} />
         ))}
@@ -332,7 +344,9 @@ export function NewSprintWizard({
                     className={`chip ${d.area === a.key ? "chip-on" : ""}`}
                     aria-pressed={d.area === a.key}
                     disabled={disabled}
-                    onClick={() => setD((p) => ({ ...p, area: a.key, ...prefillFor(a.key) }))}
+                    // Only a CHANGE of Area re-seeds step 4; re-clicking the selected chip
+                    // would wipe the user's picks (full review 2026-09-09, #21).
+                    onClick={() => setD((p) => (p.area === a.key ? p : { ...p, area: a.key, ...prefillFor(a.key) }))}
                     title={a.hasSprint ? "A sprint is already active here" : undefined}
                   >
                     {a.name}
@@ -407,12 +421,20 @@ export function NewSprintWizard({
                   <div key={i} className="wz-row mt-8">
                     <input className="input wz-two" placeholder="Rent" aria-label={`Usage ${i + 1} label`} value={u.label} onChange={(e) => set("usage", d.usage.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
                     <input className="input grow" type="number" min={1} step={1} inputMode="numeric" placeholder="2800" aria-label={`Usage ${i + 1} amount`} value={u.amount} onChange={(e) => set("usage", d.usage.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))} />
-                    <button type="button" className="btn btn-ghost" aria-label={`Remove usage ${i + 1}`} onClick={() => set("usage", d.usage.filter((_, j) => j !== i))}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      aria-label={`Remove usage ${i + 1}`}
+                      onClick={() => {
+                        set("usage", d.usage.filter((_, j) => j !== i));
+                        addUsage.current?.focus();
+                      }}
+                    >
                       ×
                     </button>
                   </div>
                 ))}
-                <button type="button" className="btn btn-ghost mt-8" onClick={() => set("usage", [...d.usage, { label: "", amount: "" }])}>
+                <button ref={addUsage} type="button" className="btn btn-ghost mt-8" onClick={() => set("usage", [...d.usage, { label: "", amount: "" }])}>
                   Add a use
                 </button>
               </div>
@@ -424,10 +446,10 @@ export function NewSprintWizard({
               </div>
               <div className="pill-row" role="group" aria-labelledby="start-label">
                 <button type="button" className={`chip ${!d.startsTomorrow ? "chip-on" : ""}`} aria-pressed={!d.startsTomorrow} onClick={() => set("startsTomorrow", false)}>
-                  Today · {formatIsoDate(today, { weekday: "short", month: "short", day: "numeric" })}
+                  Today{today ? ` · ${formatIsoDate(today, { weekday: "short", month: "short", day: "numeric" })}` : ""}
                 </button>
                 <button type="button" className={`chip ${d.startsTomorrow ? "chip-on" : ""}`} aria-pressed={d.startsTomorrow} onClick={() => set("startsTomorrow", true)}>
-                  Tomorrow · {formatIsoDate(addDays(today, 1), { weekday: "short", month: "short", day: "numeric" })}
+                  Tomorrow{today ? ` · ${formatIsoDate(addDays(today, 1), { weekday: "short", month: "short", day: "numeric" })}` : ""}
                 </button>
               </div>
               <div className="wz-note mt-8">Days turn at midnight in {tz.replace("_", " ")}; the zone locks with the sprint.</div>

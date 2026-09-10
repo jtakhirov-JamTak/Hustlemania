@@ -38,6 +38,7 @@ export function Rail({
   goal,
   lastLesson,
   areaLabel,
+  openDays,
 }: {
   sprintId: string;
   mantra: string;
@@ -56,29 +57,44 @@ export function Rail({
   /** F10: this Area's last postmortem lesson, shown on Day 1 only. */
   lastLesson: string | null;
   areaLabel: string;
+  /** What a closure cancels: today's entry if still open, and earlier days never backfilled. */
+  openDays: { today: boolean; earlier: number };
 }) {
   return (
     <aside className="rail" data-testid="rail" aria-label="Sprint">
       <MantraCard sprintId={sprintId} initial={mantra} streakText={streakText} />
       {lastLesson ? (
         <section className="r-card" data-testid="last-lesson">
-          <span className="t-kicker">Lesson from the last {areaLabel} sprint</span>
+          <h2 className="t-kicker">Lesson from the last {areaLabel} sprint</h2>
           <div className="r-lesson">“{lastLesson}”</div>
         </section>
       ) : null}
       <HighestCard sprintId={sprintId} impediments={items.impediments} library={library} locked={locked} />
       <CuesCard sprintId={sprintId} cues={items.cues} library={library} locked={locked} />
-      {goalReached && !locked ? <CompleteCard sprintId={sprintId} measured={measured} cumulative={cumulative} goal={goal} /> : null}
+      {goalReached && !locked ? <CompleteCard sprintId={sprintId} measured={measured} cumulative={cumulative} goal={goal} openDays={openDays} /> : null}
       <Celebration text={celebration} cumulative={cumulative} goal={goal} />
       {measured.measurement === "money" && usage.length > 0 ? (
         <div className="r-card" data-testid="usage-card">
-          <span className="t-kicker">Usage of funds</span>
+          <h2 className="t-kicker">Usage of funds</h2>
           <div className="r-text">{usage.map((u) => `${formatAmount(measured, u.amount).replace(` ${measured.currency ?? ""}`, "")} ${u.label}`).join(" · ")}</div>
         </div>
       ) : null}
-      {!locked ? <EndEarly sprintId={sprintId} /> : null}
+      {!locked ? <EndEarly sprintId={sprintId} openDays={openDays} /> : null}
     </aside>
   );
+}
+
+/**
+ * What ending the sprint now gives up (full review 2026-09-09, #20): `close_sprint_rows`
+ * cancels every open day from today on, and `close_day` then refuses the sprint, so an
+ * unclosed today and every earlier day not yet backfilled are lost for good.
+ */
+export function closureWarning(openDays: { today: boolean; earlier: number }): string {
+  const parts = [
+    openDays.today ? "today's entry is still open and will be cancelled" : "",
+    openDays.earlier > 0 ? `${openDays.earlier} earlier day${openDays.earlier === 1 ? "" : "s"} can no longer be added` : "",
+  ].filter(Boolean);
+  return parts.length ? ` — ${parts.join("; ")}` : "";
 }
 
 /**
@@ -91,7 +107,7 @@ function Celebration({ text, cumulative, goal }: { text: string; cumulative: num
   const state = celebrationState(cumulative, goal);
   return (
     <div className="r-card" data-testid="celebration-card">
-      <span className="t-kicker">Celebration</span>
+      <h2 className="t-kicker">Celebration</h2>
       <div className={state === "met" ? "r-celebration-met" : state === "near" ? "r-celebration-near" : "r-text"} data-state={state} data-testid="celebration-text">
         {state === "met" ? "Goal reached · " : state === "near" ? `${Math.round(share * 100)}% there · ` : ""}
         {text}
@@ -104,13 +120,26 @@ function Celebration({ text, cumulative, goal }: { text: string; cumulative: num
  * Reaching the goal unlocks Complete sprint; it never fires on its own (PRD §10). The
  * remaining days are cancelled, not missed, and the copy says so before the press.
  */
-function CompleteCard({ sprintId, measured, cumulative, goal }: { sprintId: string; measured: Measured; cumulative: number; goal: number }) {
+function CompleteCard({
+  sprintId,
+  measured,
+  cumulative,
+  goal,
+  openDays,
+}: {
+  sprintId: string;
+  measured: Measured;
+  cumulative: number;
+  goal: number;
+  openDays: { today: boolean; earlier: number };
+}) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   return (
     <section className="r-goal" data-testid="complete-sprint">
       <div className="r-goal-line">
-        Goal reached · {formatAmount(measured, cumulative)} of {formatAmount(measured, goal)}. Remaining days are cancelled, not missed.
+        Goal reached · {formatAmount(measured, cumulative)} of {formatAmount(measured, goal)}. Remaining days are cancelled, not missed
+        {closureWarning(openDays)}.
       </div>
       {error ? <ErrorBar className="mt-10">{error}</ErrorBar> : null}
       <button
@@ -133,7 +162,7 @@ function CompleteCard({ sprintId, measured, cumulative, goal }: { sprintId: stri
 }
 
 /** End sprint early: destructive, so it is the two-tap (reconciliation B16). */
-function EndEarly({ sprintId }: { sprintId: string }) {
+function EndEarly({ sprintId, openDays }: { sprintId: string; openDays: { today: boolean; earlier: number } }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   return (
@@ -143,7 +172,7 @@ function EndEarly({ sprintId }: { sprintId: string }) {
         className="r-foot-link"
         testId="end-sprint-early"
         label="End sprint early"
-        armedLabel="Tap again to end this sprint now"
+        armedLabel={`Tap again to end this sprint now${closureWarning(openDays)}`}
         disabled={pending}
         onFire={() => {
           setError(null);
@@ -309,6 +338,8 @@ function HighestCard({
 
   function remove(id: string) {
     setListError(null);
+    // The pressed Remove unmounts with its row; the list's heading takes focus (SC 2.4.3).
+    document.getElementById("also-watching")?.focus();
     start(async () => {
       const res = await callAction(() => removeSprintItem(sprintId, "impediment", id));
       if (res.error) setListError(res.error);
@@ -318,7 +349,7 @@ function HighestCard({
   return (
     <section className="r-card" data-testid="highest-impediment">
       <div className="r-head">
-        <span className="t-kicker">Highest impediment</span>
+        <h2 className="t-kicker">Highest impediment</h2>
         {highest && !locked ? (
           <button type="button" className="j-link" onClick={openChange}>
             Change
@@ -380,7 +411,7 @@ function HighestCard({
         <div className="r-text">No highest impediment is set for this sprint.</div>
       )}
 
-      <div className="r-rule" data-testid="also-watching">
+      <div className="r-rule focus-quiet" data-testid="also-watching" id="also-watching" tabIndex={-1}>
         <div className="r-head">
           <span className="t-prompt">Also watching</span>
           <span className="r-count">{impediments.length} of 5</span>
@@ -458,7 +489,7 @@ function CuesCard({
   return (
     <section className="r-card" data-testid="sprint-items">
       <div className="r-head">
-        <span className="t-kicker">Execution cues</span>
+        <h2 className="t-kicker">Execution cues</h2>
         <span className="r-count">{cues.length} of 3</span>
       </div>
       {error ? (

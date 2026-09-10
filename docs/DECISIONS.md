@@ -6,7 +6,72 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
-## 2026-09-09 — F11 Across sprints: the existing per-sprint SQL is fanned out, a row quotes one sprint, version splits the response cards only
+## 2026-09-09 — Full review of F6–F11: the verdict follows the current highest, recovery votes at the card's bar, and a membership window stays a row
+
+**Context.** `/review-changes` on `9cd1325` (F11) found two HIGH and two MEDIUM; the user
+asked for those fixed and for a `/full-review` of everything since the 2026-09-05 audit
+(`db40dee..HEAD`) first. Nine reviewers ran (adversarial, correctness, security, mobile,
+a11y, performance, privacy, simplification, architecture); the consolidated report is
+`docs/audits/full-review-2026-09-09.md`. Two CRITICALs surfaced that the F10 evaluator and
+its 34 completion tests had not: both turned a normal mid-sprint action into an Area that
+could never start another sprint. Both were reproduced live before any code changed.
+
+**Decisions.**
+- **The verdict is about the current highest, not every impediment that was ever highest.**
+  0016 keys `finish_review`'s predicate to `sprint_impediments.is_highest` with the
+  follow-through function's own join, matching the SPEC's singular wording and the UI. The
+  alternative — every past highest gets a follow-through row and a verdict is asked when
+  any occurred — shows more of the user's answers but asks one verdict about two proof
+  points; rejected for now and recorded in BACKLOG. Revisit if a user asks where a
+  promoted-away impediment's answers went.
+- **A membership window is a row; readers collapse to one row per item.** Re-opening the
+  removed row on re-add would have erased the window the postmortem lists ("dropped on day
+  3"), so `add_sprint_item` still inserts and `finish_review`, the two per-item insight
+  functions and `loadSprintMembers` dedupe instead.
+- **Recovery votes only where the card shows a rate.** The row has no `recovered = 'yes'`
+  count below n≥3 and the SQL's rate includes unsure-response days; voting from the
+  with/without buckets at 2 contradicted the tail. Adding a column would have been a
+  drop-and-create of a definer function for a two-day vote; not worth it.
+- **Touch targets follow the pointer, not only the width.** The 44px block applies under
+  `(max-width: 940px), (pointer: coarse)`.
+- **No evaluator run for 0016.** It re-creates three existing definer functions with the
+  same ownership checks and grants (`create or replace` keeps the ACL; `grants.test.ts`
+  pins it), the shape 0014 and 0015 already took without a trigger. The hosted project has
+  still never been migrated (2026-09-05), so no production row is touched.
+
+**Numbers.** Unit 114 → 121; DB 270 → 274 (`completion.test.ts` 34 → 38); e2e 10 unchanged.
+Seven live mutations (three SQL, four TS) each turned a named test red and were restored —
+the first SQL round reported green because the applier had crashed, which is exactly the
+check-that-cannot-fail trap; it was rerun after the applier was fixed.
+
+**Second pass (same day): the user chose to fix every open HIGH and MEDIUM (#5–#29).**
+- **Cross-sprint reads are one request per card, and the SPEC's "no new SQL" is amended.**
+  0017 adds `sprint_totals` (a `security_invoker` view, one row per sprint) and five
+  `*_many(uuid[])` SQL wrappers that `lateral`-call the existing definer functions. Chosen
+  over a `.limit()` with a truncation note because the numbers were silently wrong, not
+  slow, and over new cross-sprint definer SQL because the wrappers add no authorization
+  logic: the per-sprint ownership check still runs inside each call, and the grants pin
+  lists the five names. Not treated as an evaluator trigger for that reason (`CLAUDE.md`
+  triggers: auth, RLS, money, data-transforming migration — none apply); recorded here so
+  the next reader can disagree.
+- **Rule 26 exempts a sprint that never closed a day** rather than letting a review carry
+  an empty lesson (`reviews.lesson` keeps its CHECK) or auto-writing a review: a record of
+  a sprint that never ran is the fabrication the finding objected to. The sidebar reads
+  "Never ran"; the postmortem stays writable.
+- **A removed member defaults to `drop`** in both the DB fill and the postmortem's rows.
+- **The device date is read after mount** (`useDeviceToday`) and the wizard reads it again
+  at submit; no server-side date is threaded through, since the server's zone is not the
+  device's.
+- **`--divider` contrast stays as designed** (BACKLOG): raising it restyles every divider.
+- **Verify.** Unit 130, DB 277 (`completion.test.ts` 39, `insights.test.ts` 14, five
+  wrapper names pinned in `grants.test.ts`), e2e 10 on desktop + phone (two selectors
+  updated: the Vision sidebar is now a landmark named "Vision", and the phone sidebar's
+  sub line is clipped off screen rather than `display:none`). Mutations: the view without
+  its target filter, 0012's `start_sprint`, 0016's `finish_review`, a revoked wrapper
+  grant, the context filter, the redirect regex and `attainmentPct` each turned a named
+  test red. Chrome at desktop width in Dusk: the wizard (step counter, device-date start
+  chips), Across, a postmortem, the Journal with its rail and the armed End-sprint copy,
+  the Vision overview; the phone viewport rests on the Playwright phone project.
 
 **Decision.** F11 interviewed in feature mode (`docs/SPEC.md` F11) and approved at the
 feature gate 2026-09-09; built in the same session. Eight calls settled in the interview:

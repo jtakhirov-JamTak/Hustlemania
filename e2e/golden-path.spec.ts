@@ -60,23 +60,26 @@ test.describe("golden path", () => {
     const visionSetup = page.getByTestId("vision-setup");
     await expect(visionSetup).toHaveAttribute("data-step", "1");
     await expect(page.locator("[data-sidebar]").getByText("0 of 3")).toBeVisible();
-    // The sub line is in the DOM on both viewports; the phone chip row hides it (F8).
-    const sideSub = (text: string) => (isPhone ? expect(page.locator("[data-sidebar]").getByText(text)).toBeHidden() : expect(page.locator("[data-sidebar]").getByText(text)).toBeVisible());
+    // The sub line is in the DOM on both viewports; the phone chip row moves it off screen
+    // (clip, not display:none) so it stays in the accessibility tree (full review 2026-09-09).
+    const sideSub = (text: string) =>
+      isPhone ? expect(page.locator("[data-sidebar]").getByText(text)).toHaveCSS("clip", "rect(0px, 0px, 0px, 0px)") : expect(page.locator("[data-sidebar]").getByText(text)).toBeVisible();
     await sideSub("Not written yet");
     await noOverflow();
     const saveVision = page.getByRole("button", { name: "Save & continue" });
     await expect(page.getByText("The vision unlocks every sprint.")).toBeVisible();
-    await page.getByLabel("Vision", { exact: true }).fill("In a year I run three times a week and sleep seven hours.");
-    await page.getByLabel("Deadline").fill("2020-01-01");
+    // By role: the sidebar is now a landmark also named "Vision" (nav aria-label).
+    await page.getByRole("textbox", { name: "Vision", exact: true }).fill("In a year I run three times a week and sleep seven hours.");
+    await page.getByLabel("By when?").fill("2020-01-01");
     await expect(page.getByText("The deadline must be in the future.")).toBeVisible();
     await expect(saveVision).toHaveAttribute("aria-disabled", "true");
     // Submitting the form (Enter in a field) is a no-op while the hint stands.
-    await page.getByLabel("Proof").press("Enter");
+    await page.getByLabel("What would prove it happened?").press("Enter");
     await expect(visionSetup).toHaveAttribute("data-step", "1");
     const nextYear = addDays(localDateIn("UTC", new Date()), 365);
-    await page.getByLabel("Deadline").fill(nextYear);
+    await page.getByLabel("By when?").fill(nextYear);
     await expect(page.getByText("Name what would prove it happened.")).toBeVisible();
-    await page.getByLabel("Proof").fill("Three runs a week held for a quarter");
+    await page.getByLabel("What would prove it happened?").fill("Three runs a week held for a quarter");
     await expect(saveVision).toHaveAttribute("aria-disabled", "false");
     await saveVision.click();
 
@@ -440,9 +443,9 @@ test.describe("golden path", () => {
 
     // Sidebar reflects the sprint: label · meta · outcome, no streak line, no New Sprint button.
     await expect(page.locator("[data-sidebar]").getByText("Day 1/14")).toBeVisible();
-    // The outcome line is in the DOM on both viewports; the phone's chip row hides it.
+    // The outcome line is in the DOM on both viewports; the phone's chip row clips it off screen.
     const sideOutcome = page.locator("[data-sidebar]").getByText("Save $8,000 toward the emergency fund");
-    if (isPhone) await expect(sideOutcome).toBeHidden();
+    if (isPhone) await expect(sideOutcome).toHaveCSS("clip", "rect(0px, 0px, 0px, 0px)");
     else await expect(sideOutcome).toBeVisible();
     await expect(page.locator("[data-sidebar]").getByRole("link", { name: "New Sprint" })).toHaveCount(0);
 
@@ -468,7 +471,7 @@ test.describe("golden path", () => {
     await page.getByRole("button", { name: "Review vision" }).click();
     const reviewCard = page.getByTestId("vision-review");
     await expect(reviewCard).toContainText("Proof you named: Three runs a week held for a quarter. 1 sprint has run behind it.");
-    await reviewCard.getByLabel("Review note").fill("Ran Monday and Wednesday.");
+    await reviewCard.getByLabel(/What shows it/).fill("Ran Monday and Wednesday.");
     await reviewCard.getByRole("button", { name: "Still true · mark reviewed" }).click();
     const reviewedStamp = `Reviewed ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
     await expect(page.getByTestId("vision-meta")).toContainText(reviewedStamp);

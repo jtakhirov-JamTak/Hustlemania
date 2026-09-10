@@ -128,6 +128,17 @@ export function recoveryRows(rows: RecoveryRow[]): InsightRow[] {
     });
 }
 
+/**
+ * The coverage line's denominator: the closed days that can be logged at all — closed,
+ * not cancelled, positive target — which is `sprint_days_effective`'s definition. A
+ * zero-target closed day is a real day (the result card counts it) but never a logged
+ * one, so counting it here read "Logged 12 of 13" against a 13th that could not speak,
+ * and disagreed with the Across page's "of 12" for the same sprint.
+ */
+export function effectiveClosedDays(days: { closed: boolean; cancelled: boolean; target: number }[]): number {
+  return days.filter((d) => d.closed && !d.cancelled && d.target > 0).length;
+}
+
 /** "Logged 12 of 13 closed days · 1 unsure" — coverage over the days that could speak. */
 export function coverageLine(logged: number, closed: number, unsure: number): string {
   const tail = unsure ? ` · ${unsure} unsure` : "";

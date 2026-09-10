@@ -4,7 +4,7 @@ import type { Scope, SprintInsights } from "@/lib/across";
 import { AREAS, type AreaKey } from "@/lib/areas";
 import type { Database, Tables } from "@/lib/database.types";
 import { NO_OBSERVATIONS, type DayObservations } from "@/lib/daySummary";
-import type { Measurement } from "@/lib/format";
+import { goalMet, type Measurement } from "@/lib/format";
 import { report } from "@/lib/observe";
 import { sprintDayFor } from "@/lib/sprintDay";
 
@@ -140,19 +140,24 @@ export type VisionSprintRow = {
   verdict: { met: boolean; actual: number; goal: number; measured: { measurement: Measurement; currency: string | null; unit: string | null } } | null;
 };
 
-/** Sprints started behind the active vision, active first, then newest first. */
+/**
+ * Sprints started behind the active vision, active first, then newest first. A finished
+ * sprint is finished whatever its dates say (ended early on day 5 is not "Day 6 of 14");
+ * its total comes from `sprint_totals`, the summary's own sum, so Met/Under here is the
+ * result card's (full review 2026-09-09, #5, #19).
+ */
 export async function loadVisionSprints(supabase: Client, visionId: string, now = new Date()): Promise<VisionSprintRow[]> {
   const sprints = await supabase.from("sprints").select("*").eq("vision_id", visionId).order("start_date", { ascending: false }).order("id");
   if (sprints.error) throw new Error(`sprints: ${sprints.error.message}`);
-  const ids = sprints.data.map((s) => s.id);
-  const days = ids.length ? await supabase.from("sprint_days").select("sprint_id, actual").in("sprint_id", ids).not("closed_at", "is", null) : { data: [], error: null };
-  if (days.error) throw new Error(`sprint_days: ${days.error.message}`);
-  const actuals = new Map<string, number>();
-  for (const d of days.data) actuals.set(d.sprint_id, (actuals.get(d.sprint_id) ?? 0) + Number(d.actual ?? 0));
+  const ids = full("sprints", sprints.data).map((s) => s.id);
+  const totals = ids.length ? await supabase.from("sprint_totals").select("sprint_id, total").in("sprint_id", ids) : { data: [], error: null };
+  if (totals.error) throw new Error(`sprint_totals: ${totals.error.message}`);
+  const actuals = new Map(totals.data.map((t) => [t.sprint_id, Number(t.total ?? 0)]));
 
   const rows = sprints.data.map((s): VisionSprintRow => {
     const pos = sprintDayFor(s, now);
-    const label = pos.kind === "during" ? `Day ${pos.dayIndex} of 14` : pos.kind === "before" ? "Starts tomorrow" : "Ended";
+    const finished = s.status !== "active";
+    const label = finished ? (COMPLETION_LABEL[s.status] ?? "Ended") : pos.kind === "during" ? `Day ${pos.dayIndex} of 14` : pos.kind === "before" ? "Starts tomorrow" : "Ended";
     const actual = actuals.get(s.id) ?? 0;
     const goal = Number(s.amount);
     return {
@@ -160,10 +165,12 @@ export async function loadVisionSprints(supabase: Client, visionId: string, now 
       area: s.area as AreaKey,
       outcome: s.outcome,
       label,
-      verdict: pos.kind === "after" ? { met: actual >= goal, actual, goal, measured: { measurement: s.measurement as Measurement, currency: s.currency, unit: s.unit } } : null,
+      verdict:
+        finished || pos.kind === "after"
+          ? { met: goalMet(actual, goal), actual, goal, measured: { measurement: s.measurement as Measurement, currency: s.currency, unit: s.unit } }
+          : null,
     };
   });
-  // Running sprints first (no verdict yet), then the finished ones, each group newest first.
   return rows.sort((a, b) => Number(a.verdict !== null) - Number(b.verdict !== null));
 }
 
@@ -235,6 +242,20 @@ export function proofSummary(i: ProofParts): string | null {
 /** "WHEN …" for a cue that has its trigger; null for a pre-F6 cue. */
 export function cueSummary(c: Pick<LibraryItem, "cue_when">): string | null {
   return c.cue_when ? `WHEN ${c.cue_when}` : null;
+}
+
+/**
+ * PostgREST returns at most this many rows per request (`max_rows`, supabase/config.toml);
+ * a list read that reaches it is truncated, not complete. Every read that could grow
+ * past it is bounded by construction (per-sprint views, `.in(...)` filters); `full`
+ * is the guard that says so out loud instead of rendering a plausible partial number
+ * (full review 2026-09-09, #5).
+ */
+export const PAGE_CAP = 1000;
+
+export function full<T>(name: string, rows: T[]): T[] {
+  if (rows.length >= PAGE_CAP) throw new Error(`${name}: result truncated at ${PAGE_CAP} rows`);
+  return rows;
 }
 
 /**
@@ -312,8 +333,9 @@ export async function loadLibraryCounts(supabase: Client): Promise<{ cues: numbe
 }
 
 export type SprintItems = {
-  cues: (LibraryItem & { is_focus: boolean })[];
-  impediments: (LibraryItem & { is_highest: boolean })[];
+  /** `removed`: a postmortem member whose every membership row was removed mid-sprint (loadSprintMembers only). */
+  cues: (LibraryItem & { is_focus: boolean; removed?: boolean })[];
+  impediments: (LibraryItem & { is_highest: boolean; removed?: boolean })[];
 };
 
 /** The sprint's current members (active memberships only), each with its library row. */
@@ -421,8 +443,18 @@ export type FinishedSprint = {
   status: string;
   start_date: string;
   end_date: string;
+  amount: number;
+  /** Days closed, from `sprint_totals`; zero means the sprint never ran. */
+  closedDays: number;
   reviewedAt: string | null;
 };
+
+/**
+ * Rule 26 as `start_sprint` applies it since 0017: an unreviewed finished sprint blocks
+ * its Area only if it closed at least one day. A sprint ended before day 1 has nothing
+ * to review, and the sidebar and the gate must not say otherwise.
+ */
+export const needsReview = (s: FinishedSprint): boolean => s.reviewedAt === null && s.closedDays > 0;
 
 /**
  * Every finished sprint, newest first, with whether its postmortem is written. Drives
@@ -430,20 +462,25 @@ export type FinishedSprint = {
  * table and there is no join grant to lean on.
  */
 export const loadFinishedSprints = cache(async (supabase: Client): Promise<FinishedSprint[]> => {
-  const [sprints, reviews] = await Promise.all([
-    supabase.from("sprints").select("id, area, outcome, status, start_date, end_date, closed_at").neq("status", "active").order("closed_at", { ascending: false }).order("id"),
+  const [sprints, reviews, totals] = await Promise.all([
+    supabase.from("sprints").select("id, area, outcome, status, start_date, end_date, amount, closed_at").neq("status", "active").order("closed_at", { ascending: false }).order("id"),
     supabase.from("reviews").select("sprint_id, completed_at"),
+    supabase.from("sprint_totals").select("sprint_id, closed_days"),
   ]);
   if (sprints.error) throw new Error(`sprints: ${sprints.error.message}`);
   if (reviews.error) throw new Error(`reviews: ${reviews.error.message}`);
+  if (totals.error) throw new Error(`sprint_totals: ${totals.error.message}`);
   const reviewed = new Map(reviews.data.map((r) => [r.sprint_id, r.completed_at]));
-  return sprints.data.map((s) => ({
+  const closed = new Map(full("sprint_totals", totals.data).map((t) => [t.sprint_id, Number(t.closed_days ?? 0)]));
+  return full("sprints", sprints.data).map((s) => ({
     id: s.id,
     area: s.area as AreaKey,
     outcome: s.outcome,
     status: s.status,
     start_date: s.start_date,
     end_date: s.end_date,
+    amount: Number(s.amount),
+    closedDays: closed.get(s.id) ?? 0,
     reviewedAt: reviewed.get(s.id) ?? null,
   }));
 });
@@ -467,12 +504,12 @@ export const loadMeasuredSprints = cache(async (supabase: Client): Promise<Measu
   const finished = await loadFinishedSprints(supabase);
   if (finished.length === 0) return [];
 
-  const summaries = await allOrThrow(finished.map((s) => supabase.rpc("sprint_review_summary", { p_sprint_id: s.id }).then((res) => ({ id: s.id, res }))));
+  // One request for every sprint (0017), not one per sprint: the wrapper calls the same
+  // definer function per id, so each sprint's ownership check still runs.
+  const res = await supabase.rpc("sprint_review_summary_many", { p_sprint_ids: finished.map((s) => s.id) });
+  if (res.error) throw new Error(`sprint_review_summary_many: ${res.error.message}`);
   const byId = new Map<string, ReviewSummary | null>();
-  for (const { id, res } of summaries) {
-    if (res.error) throw new Error(`sprint_review_summary: ${res.error.message}`);
-    byId.set(id, ((res.data ?? [])[0] ?? null) as ReviewSummary | null);
-  }
+  for (const row of res.data ?? []) byId.set(row.sprint_id, row as unknown as ReviewSummary);
   return mergeMeasures(finished, byId);
 });
 
@@ -616,11 +653,10 @@ function numeric(v: unknown): number | null {
  * fails loudly instead of rendering an empty page.
  */
 export async function loadPostmortem(supabase: Client, sprintId: string): Promise<Postmortem | null> {
-  const sprint = await supabase.from("sprints").select("*").eq("id", sprintId).maybeSingle();
-  if (sprint.error) throw new Error(`sprint: ${sprint.error.message}`);
-  if (!sprint.data || sprint.data.status === "active") return null;
-
-  const [summary, impact, follow, recovery, cues, items, days, review] = await allOrThrow([
+  // One batch, the sprint row included (#26): a missing or running sprint returns null
+  // before any RPC result is inspected, so the not-found path is unchanged.
+  const [sprint, summary, impact, follow, recovery, cues, items, days, review] = await allOrThrow([
+    supabase.from("sprints").select("*").eq("id", sprintId).maybeSingle(),
     supabase.rpc("sprint_review_summary", { p_sprint_id: sprintId }),
     supabase.rpc("insight_impediment_impact", { p_sprint_id: sprintId }),
     supabase.rpc("insight_response_followthrough", { p_sprint_id: sprintId }),
@@ -630,6 +666,8 @@ export async function loadPostmortem(supabase: Client, sprintId: string): Promis
     loadClosedDays(supabase, sprintId),
     loadReview(supabase, sprintId),
   ]);
+  if (sprint.error) throw new Error(`sprint: ${sprint.error.message}`);
+  if (!sprint.data || sprint.data.status === "active") return null;
   for (const [name, res] of [
     ["sprint_review_summary", summary],
     ["insight_impediment_impact", impact],
@@ -666,15 +704,37 @@ export async function loadPostmortem(supabase: Client, sprintId: string): Promis
  */
 export async function loadSprintMembers(supabase: Client, sprintId: string): Promise<SprintItems> {
   const [cues, imps] = await Promise.all([
-    supabase.from("sprint_cues").select("cue_id, is_focus, cues(*)").eq("sprint_id", sprintId),
-    supabase.from("sprint_impediments").select("impediment_id, is_highest, impediments(*)").eq("sprint_id", sprintId),
+    supabase.from("sprint_cues").select("cue_id, is_focus, removed_at, cues(*)").eq("sprint_id", sprintId),
+    supabase.from("sprint_impediments").select("impediment_id, is_highest, removed_at, impediments(*)").eq("sprint_id", sprintId),
   ]);
   if (cues.error) throw new Error(`sprint_cues: ${cues.error.message}`);
   if (imps.error) throw new Error(`sprint_impediments: ${imps.error.message}`);
   return {
-    cues: cues.data.filter((m) => m.cues).map((m) => ({ ...toItem("cue", m.cues as Cue, IN_SPRINT), is_focus: m.is_focus })).sort(byRank),
-    impediments: imps.data.filter((m) => m.impediments).map((m) => ({ ...toItem("impediment", m.impediments as Impediment, IN_SPRINT), is_highest: m.is_highest })).sort(byRank),
+    cues: onePerItem(cues.data.filter((m) => m.cues).map((m) => ({ ...toItem("cue", m.cues as Cue, IN_SPRINT), is_focus: m.is_focus, removed: m.removed_at !== null }))).sort(byRank),
+    impediments: onePerItem(
+      imps.data.filter((m) => m.impediments).map((m) => ({ ...toItem("impediment", m.impediments as Impediment, IN_SPRINT), is_highest: m.is_highest, removed: m.removed_at !== null })),
+    ).sort(byRank),
   };
+}
+
+/**
+ * A member removed mid-sprint and added back is two membership rows and one item. The
+ * postmortem renders and decides per item, so the rows collapse here: a flag set on any
+ * of an item's rows counts (the partial unique indexes allow it on at most one), and the
+ * item is `removed` only if every one of its rows is.
+ */
+export function onePerItem<T extends { id: string; is_focus?: boolean; is_highest?: boolean; removed?: boolean }>(rows: T[]): T[] {
+  const byId = new Map<string, T>();
+  for (const row of rows) {
+    const seen = byId.get(row.id);
+    byId.set(
+      row.id,
+      seen
+        ? { ...seen, is_focus: seen.is_focus || row.is_focus, is_highest: seen.is_highest || row.is_highest, removed: Boolean(seen.removed && row.removed) }
+        : row,
+    );
+  }
+  return [...byId.values()];
 }
 
 /** Every day of the sprint with its tasks — the one place a closed day's tasks are read. */
@@ -727,14 +787,12 @@ export type AreaKit = {
  * pre-selects something start_sprint would then reject.
  */
 export async function loadAreaKit(supabase: Client, area: AreaKey): Promise<AreaKit | null> {
-  const sprints = await supabase.from("sprints").select("id").eq("area", area).neq("status", "active");
-  if (sprints.error) throw new Error(`sprints: ${sprints.error.message}`);
-  if (sprints.data.length === 0) return null;
-
+  // One embedded read for the Area's latest review and its decisions (#26): the review's
+  // sprint filters the Area, the decisions ride along on their FK.
   const review = await supabase
     .from("reviews")
-    .select("id, sprint_id, lesson")
-    .in("sprint_id", sprints.data.map((s) => s.id))
+    .select("id, sprint_id, lesson, sprints!inner(area), review_decisions(kind, item_id, decision)")
+    .eq("sprints.area", area)
     .order("completed_at", { ascending: false })
     .order("id")
     .limit(1)
@@ -742,9 +800,7 @@ export async function loadAreaKit(supabase: Client, area: AreaKey): Promise<Area
   if (review.error) throw new Error(`reviews: ${review.error.message}`);
   if (!review.data) return null;
 
-  const decisions = await supabase.from("review_decisions").select("kind, item_id, decision").eq("review_id", review.data.id);
-  if (decisions.error) throw new Error(`review_decisions: ${decisions.error.message}`);
-  const kept = decisions.data.filter((d) => d.decision !== "drop");
+  const kept = review.data.review_decisions.filter((d) => d.decision !== "drop");
   const cueIds = kept.filter((d) => d.kind === "cue").map((d) => d.item_id);
   const impIds = kept.filter((d) => d.kind === "impediment").map((d) => d.item_id);
 
@@ -790,44 +846,57 @@ export type AcrossData = {
  */
 export async function loadAcross(supabase: Client, scope: Scope): Promise<AcrossData> {
   const finished = (await loadFinishedSprints(supabase)).filter((s) => scope === "all" || s.area === scope);
+  const ids = finished.map((s) => s.id);
+  if (ids.length === 0) return { history: [], sprints: 0, closedDays: 0, onTarget: 0, firstStart: null };
 
-  const days = await supabase.from("sprint_days_effective").select("sprint_id, target, actual");
-  if (days.error) throw new Error(`sprint_days_effective: ${days.error.message}`);
-  const inScope = new Set(finished.map((s) => s.id));
-  const mine = days.data.filter((d) => d.sprint_id && inScope.has(d.sprint_id));
+  // Five requests for the whole history (0017), whatever N is: the `_many` wrappers call
+  // the same definer function per sprint, and `sprint_totals` is one row per sprint.
+  const [impact, follow, recovery, cues, totals] = await allOrThrow([
+    supabase.rpc("insight_impediment_impact_many", { p_sprint_ids: ids }),
+    supabase.rpc("insight_response_followthrough_many", { p_sprint_ids: ids }),
+    supabase.rpc("insight_response_recovery_many", { p_sprint_ids: ids }),
+    supabase.rpc("insight_cue_usefulness_many", { p_sprint_ids: ids }),
+    supabase.from("sprint_totals").select("sprint_id, effective_days, on_target_days").in("sprint_id", ids),
+  ]);
+  for (const [name, res] of [
+    ["insight_impediment_impact_many", impact],
+    ["insight_response_followthrough_many", follow],
+    ["insight_response_recovery_many", recovery],
+    ["insight_cue_usefulness_many", cues],
+    ["sprint_totals", totals],
+  ] as const) {
+    if (res.error) throw new Error(`${name}: ${res.error.message}`);
+  }
 
-  const history = await allOrThrow(
-    finished.map(async (sprint): Promise<SprintInsights> => {
-      const [impact, follow, recovery, cues] = await allOrThrow([
-        supabase.rpc("insight_impediment_impact", { p_sprint_id: sprint.id }),
-        supabase.rpc("insight_response_followthrough", { p_sprint_id: sprint.id }),
-        supabase.rpc("insight_response_recovery", { p_sprint_id: sprint.id }),
-        supabase.rpc("insight_cue_usefulness", { p_sprint_id: sprint.id }),
-      ]);
-      for (const [name, res] of [
-        ["insight_impediment_impact", impact],
-        ["insight_response_followthrough", follow],
-        ["insight_response_recovery", recovery],
-        ["insight_cue_usefulness", cues],
-      ] as const) {
-        if (res.error) throw new Error(`${name}: ${res.error.message}`);
-      }
-      const rows = (res: { data: unknown }): Record<string, unknown>[] => (res.data ?? []) as Record<string, unknown>[];
-      return {
-        sprint: { id: sprint.id, area: sprint.area, start_date: sprint.start_date, end_date: sprint.end_date },
-        impact: rows(impact).map((r) => ({ ...r, median_present: numeric(r.median_present), median_absent: numeric(r.median_absent) }) as unknown as ImpactRow),
-        follow: rows(follow) as unknown as FollowThroughRow[],
-        recovery: rows(recovery).map((r) => ({ ...r, median_recovered: numeric(r.median_recovered), median_not: numeric(r.median_not) }) as unknown as RecoveryRow),
-        cues: rows(cues).map((r) => ({ ...r, median_used: numeric(r.median_used), median_unused: numeric(r.median_unused) }) as unknown as CueRow),
-      };
+  const bySprint = (res: { data: unknown }): Map<string, Record<string, unknown>[]> => {
+    const map = new Map<string, Record<string, unknown>[]>();
+    for (const r of full("insights", (res.data ?? []) as (Record<string, unknown> & { sprint_id: string })[])) {
+      const list = map.get(r.sprint_id) ?? [];
+      list.push(r);
+      map.set(r.sprint_id, list);
+    }
+    return map;
+  };
+  const impactBy = bySprint(impact);
+  const followBy = bySprint(follow);
+  const recoveryBy = bySprint(recovery);
+  const cuesBy = bySprint(cues);
+
+  const history = finished.map(
+    (sprint): SprintInsights => ({
+      sprint: { id: sprint.id, area: sprint.area, start_date: sprint.start_date, end_date: sprint.end_date },
+      impact: (impactBy.get(sprint.id) ?? []).map((r) => ({ ...r, median_present: numeric(r.median_present), median_absent: numeric(r.median_absent) }) as unknown as ImpactRow),
+      follow: (followBy.get(sprint.id) ?? []) as unknown as FollowThroughRow[],
+      recovery: (recoveryBy.get(sprint.id) ?? []).map((r) => ({ ...r, median_recovered: numeric(r.median_recovered), median_not: numeric(r.median_not) }) as unknown as RecoveryRow),
+      cues: (cuesBy.get(sprint.id) ?? []).map((r) => ({ ...r, median_used: numeric(r.median_used), median_unused: numeric(r.median_unused) }) as unknown as CueRow),
     }),
   );
 
   return {
     history,
     sprints: finished.length,
-    closedDays: mine.length,
-    onTarget: mine.filter((d) => Number(d.actual) >= Number(d.target)).length,
+    closedDays: (totals.data ?? []).reduce((a, t) => a + Number(t.effective_days ?? 0), 0),
+    onTarget: (totals.data ?? []).reduce((a, t) => a + Number(t.on_target_days ?? 0), 0),
     firstStart: finished.reduce<string | null>((first, s) => (first === null || s.start_date < first ? s.start_date : first), null),
   };
 }
@@ -839,29 +908,26 @@ export async function loadAcross(supabase: Client, scope: Scope): Promise<Across
  * Reads `sprint_days_effective`, so cancelled, open and zero-target days are out.
  */
 export async function loadReviewStats(supabase: Client): Promise<ReviewStats> {
-  const [sprints, days, reviews] = await Promise.all([
-    supabase.from("sprints").select("id, amount").neq("status", "active"),
-    supabase.from("sprint_days_effective").select("sprint_id, target, actual"),
+  const finished = await loadFinishedSprints(supabase);
+  const ids = finished.map((s) => s.id);
+  const [totals, reviews] = await Promise.all([
+    ids.length ? supabase.from("sprint_totals").select("sprint_id, effective_days, on_target_days, total").in("sprint_id", ids) : { data: [], error: null },
     supabase.from("reviews").select("id"),
   ]);
-  if (sprints.error) throw new Error(`sprints: ${sprints.error.message}`);
-  if (days.error) throw new Error(`sprint_days_effective: ${days.error.message}`);
+  if (totals.error) throw new Error(`sprint_totals: ${totals.error.message}`);
   if (reviews.error) throw new Error(`reviews: ${reviews.error.message}`);
 
-  const finished = new Set(sprints.data.map((s) => s.id));
-  // A view's columns are all nullable in the generated types, so the id is narrowed
-  // here rather than asserted; a row without one could not be attributed anyway.
-  const mine = days.data.flatMap((d) => (d.sprint_id && finished.has(d.sprint_id) ? [{ sprintId: d.sprint_id, target: Number(d.target), actual: Number(d.actual) }] : []));
-  const onTarget = mine.filter((d) => d.actual >= d.target).length;
-  const totals = new Map<string, number>();
-  for (const d of mine) totals.set(d.sprintId, (totals.get(d.sprintId) ?? 0) + d.actual);
+  const byId = new Map(totals.data.map((t) => [t.sprint_id, t]));
+  const effective = totals.data.reduce((a, t) => a + Number(t.effective_days ?? 0), 0);
+  const onTarget = totals.data.reduce((a, t) => a + Number(t.on_target_days ?? 0), 0);
 
   return {
-    sprints: sprints.data.length,
-    daysOnTargetPct: mine.length ? Math.round((onTarget / mine.length) * 100) : null,
+    sprints: finished.length,
+    daysOnTargetPct: effective ? Math.round((onTarget / effective) * 100) : null,
     // Rule 25: goals are compared as met / not met, never by summing across
-    // measurements — a money sprint and an hours sprint are counted, not added.
-    goalsMet: sprints.data.filter((s) => (totals.get(s.id) ?? 0) >= Number(s.amount)).length,
-    lessons: reviews.data.length,
+    // measurements — a money sprint and an hours sprint are counted, not added. The
+    // total is `sprint_totals.total`, the result card's own sum (#15).
+    goalsMet: finished.filter((s) => goalMet(Number(byId.get(s.id)?.total ?? 0), s.amount)).length,
+    lessons: full("reviews", reviews.data).length,
   };
 }

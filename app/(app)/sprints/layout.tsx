@@ -1,5 +1,5 @@
 import { SideNav, type SideItem } from "@/components/SideNav";
-import { allOrThrow, loadFinishedSprints, loadOverview } from "@/lib/data";
+import { allOrThrow, loadFinishedSprints, loadOverview, needsReview } from "@/lib/data";
 import { sprintDayFor } from "@/lib/sprintDay";
 import { createClient } from "@/lib/supabase/server";
 
@@ -22,7 +22,7 @@ export default async function SprintsLayout({ children }: { children: React.Reac
       const meta = pos.kind === "during" ? `Day ${pos.dayIndex}/14` : pos.kind === "before" ? "Starts tomorrow" : "Ended";
       return { href: `/sprints/${a.key}`, label: a.name, meta, sub: a.sprint.outcome };
     }
-    const unreviewed = finished.find((s) => s.area === a.key && s.reviewedAt === null);
+    const unreviewed = finished.find((s) => s.area === a.key && needsReview(s));
     if (unreviewed) {
       return { href: `/sprints/${a.key}`, label: a.name, meta: "Ended", metaAccent: true, sub: "Needs review" };
     }

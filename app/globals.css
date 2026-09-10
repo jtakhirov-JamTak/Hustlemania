@@ -236,7 +236,7 @@
   --under: #c0392b;
   --divider: rgba(28, 27, 42, 0.13);
   --muted: rgba(28, 27, 42, 0.62);
-  --control-border: rgba(28, 27, 42, 0.45);
+  --control-border: rgba(28, 27, 42, 0.5);
   --faint: rgba(28, 27, 42, 0.06);
   --accent-tint: color-mix(in srgb, var(--accent) 8%, var(--panel));
   --accent-tint-border: color-mix(in srgb, var(--accent) 22%, transparent);
@@ -297,7 +297,7 @@ select {
 
 input::placeholder,
 textarea::placeholder {
-  color: color-mix(in srgb, currentColor 55%, transparent);
+  color: var(--muted);
 }
 
 a {
@@ -603,7 +603,7 @@ a {
   min-width: 0;
   border: none;
   background: transparent;
-  padding: 6px 0;
+  padding: 10px 0;
   font-size: 16px;
   line-height: 1.4;
   color: var(--ink);
@@ -698,7 +698,7 @@ a {
 
 .plan-input {
   margin-top: 4px;
-  padding: 5px 6px;
+  padding: 10px 6px;
   font-weight: 600;
   text-align: center;
   border-radius: 8px;
@@ -1133,6 +1133,12 @@ body:has(dialog[open]) {
   color: var(--muted);
 }
 
+/* On the tinted selected row the muted alpha lands at 4.35:1 in Dusk; ink at .72 clears 4.5. */
+.option-row-on .option-sub {
+  color: var(--ink);
+  opacity: 0.72;
+}
+
 /* WHEN → THEN pair. */
 .proof-grid {
   display: grid;
@@ -1301,8 +1307,16 @@ body:has(dialog[open]) {
   .side-link-head {
     gap: 8px;
   }
+  /* Off screen, not out of the accessibility tree: the row's reason ("Needs review") stays readable. */
   .side-sub {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
   }
   .side-cta {
     flex: none;
@@ -1314,8 +1328,12 @@ body:has(dialog[open]) {
     width: auto;
     padding: 8px 14px;
   }
-  /* Touch targets: 44px minimum on every control, hit boxes inflated where the
-     drawing must stay small. */
+}
+
+/* Touch targets: 44px minimum on every control, hit boxes inflated where the drawing
+   must stay small. Applied on any coarse pointer, not only below 940px — a tablet or a
+   touch laptop at desktop width taps the same 34px chip (full review 2026-09-09). */
+@media (max-width: 940px), (pointer: coarse) {
   .btn,
   .chip,
   .disclosure {
@@ -1323,6 +1341,7 @@ body:has(dialog[open]) {
   }
   .btn-ghost {
     padding: 6px 10px;
+    min-width: 44px;
   }
   .btn-ghost-flush {
     padding: 6px 0;
@@ -1349,12 +1368,15 @@ body:has(dialog[open]) {
     position: absolute;
     inset: -13px;
   }
+}
+
+@media (max-width: 940px) {
   .plan-cell {
     min-width: 0;
     padding: 8px 3px;
   }
   .plan-input {
-    padding: 5px 2px;
+    padding: 10px 2px;
   }
   .app-header .brand {
     min-width: 0;
@@ -1537,6 +1559,7 @@ body:has(dialog[open]) {
 .j-title {
   font-size: 30px;
   font-weight: 700;
+  overflow-wrap: anywhere;
   letter-spacing: -0.02em;
   line-height: 1.15;
   margin: 0;
@@ -1565,7 +1588,7 @@ body:has(dialog[open]) {
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.03em;
-  opacity: 0.85;
+  opacity: 0.92;
 }
 
 .j-progress-pct {
@@ -1607,7 +1630,7 @@ body:has(dialog[open]) {
 .j-progress-streak {
   font-size: 11px;
   margin-top: 8px;
-  opacity: 0.85;
+  opacity: 0.92;
 }
 
 /* Timeline: a label column, a 2px rule with a dot per row, the row's box. */
@@ -1852,6 +1875,7 @@ body:has(dialog[open]) {
 }
 
 .t-kicker {
+  margin: 0;
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.03em;
@@ -1946,7 +1970,7 @@ body:has(dialog[open]) {
   border: none;
   background: none;
   color: var(--ink);
-  padding: 6px 0;
+  padding: 10px 0;
   outline: none;
   resize: none;
   overflow: hidden;
@@ -2059,7 +2083,7 @@ body:has(dialog[open]) {
   border: none;
   background: none;
   color: var(--ink);
-  padding: 6px 0;
+  padding: 10px 0;
   outline: none;
   margin-top: 8px;
   border-radius: 0;
@@ -2218,6 +2242,7 @@ body:has(dialog[open]) {
 .r-proof {
   font-size: 13px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
   margin-top: 8px;
 }
 
@@ -2335,8 +2360,8 @@ body:has(dialog[open]) {
   }
   .theme-toggle {
     padding: 6px;
-    min-width: 32px;
-    min-height: 32px;
+    min-width: 44px;
+    min-height: 44px;
     justify-content: center;
   }
   .timeline {
@@ -2373,6 +2398,14 @@ body:has(dialog[open]) {
     min-height: 44px;
     display: inline-flex;
     align-items: center;
+  }
+  /* Text-only links are as wide as their word ("add" is ~22px); the hit box is not. */
+  .j-link,
+  .t-back,
+  .t-add-task {
+    min-width: 44px;
+    padding: 0 10px;
+    justify-content: center;
   }
   .j-future .plan-input {
     width: 96px;
@@ -2578,7 +2611,10 @@ body:has(dialog[open]) {
   border: none;
   background: none;
   font-size: 12.5px;
-  padding: 0 6px;
+  padding: 0 8px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
   color: var(--muted);
 }
 
@@ -2658,13 +2694,17 @@ body:has(dialog[open]) {
   background: none;
   font-size: 12px;
   color: var(--muted);
-  padding: 0;
+  padding: 0 6px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
   text-decoration: none;
 }
 
 .v-mini-body {
   font-size: 14.5px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .v-mini-sub {
@@ -2764,7 +2804,10 @@ body:has(dialog[open]) {
 .v-prev-toggle {
   border: none;
   background: none;
-  padding: 0;
+  padding: 0 6px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
   margin-top: 18px;
   font-size: 12px;
   font-weight: 600;
@@ -3008,6 +3051,8 @@ body:has(dialog[open]) {
   align-items: center;
   gap: 12px;
   margin-top: 22px;
+  min-height: 44px;
+  padding: 8px 0;
   cursor: pointer;
 }
 
@@ -3069,7 +3114,10 @@ body:has(dialog[open]) {
 .poster-link {
   font-size: 13px;
   color: var(--on-accent);
-  opacity: 0.85;
+  opacity: 0.92;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -3182,7 +3230,10 @@ body:has(dialog[open]) {
 .r-foot-link {
   border: none;
   background: none;
-  padding: 0;
+  padding: 0 8px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
   font-size: 11.5px;
   color: var(--muted);
 }
@@ -3318,6 +3369,7 @@ body:has(dialog[open]) {
 }
 
 .ic-kicker {
+  margin: 0;
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.03em;
@@ -3479,6 +3531,7 @@ body:has(dialog[open]) {
 .pm-rule {
   font-size: 15px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
   margin-top: 8px;
 }
 
@@ -3597,6 +3650,9 @@ body:has(dialog[open]) {
 
 .pm-days summary {
   cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
   font-size: 12px;
   color: var(--muted);
 }
@@ -3668,13 +3724,13 @@ body:has(dialog[open]) {
 .kit-kicker {
   font-size: 10.5px;
   font-weight: 600;
-  opacity: 0.85;
+  opacity: 0.92;
 }
 
 .kit-label {
   margin-top: 12px;
   font-size: 11px;
-  opacity: 0.8;
+  opacity: 0.92;
 }
 
 .kit-highest {
@@ -3694,6 +3750,7 @@ body:has(dialog[open]) {
   font-size: 14px;
   margin-top: 2px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
   white-space: pre-line;
 }
 

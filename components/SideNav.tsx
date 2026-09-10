@@ -49,10 +49,10 @@ export function SideNavList({ items }: { items: SideItem[] }) {
  */
 export function SideNav({ title, items, children }: { title: string; items: SideItem[]; children?: React.ReactNode }) {
   return (
-    <aside data-sidebar>
+    <nav data-sidebar aria-label={title}>
       <div className="label-muted side-title">{title}</div>
       <SideNavList items={items} />
       {children}
-    </aside>
+    </nav>
   );
 }

@@ -2,6 +2,24 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## Full review 2026-09-09 (`docs/audits/full-review-2026-09-09.md`)
+
+- **A promoted-away highest impediment's answers are not shown on that sprint's cards.**
+  0016 keys the verdict and the follow-through / recovery functions to the CURRENT highest.
+  The day rows keep the earlier highest's response and recovery answers, but no card reads
+  them (DECISIONS 2026-09-09). The alternative — a follow-through row per item that was
+  ever highest, verdict asked when any occurred — was rejected for asking one verdict about
+  two proof points. Revisit if a user asks where those answers went.
+- **`--divider` at 13% alpha is the only boundary of an unselected chip or option row**
+  (1.3:1 Dusk / 1.4:1 Night against the 3:1 non-text floor). Raising it changes every
+  divider in the app; a per-control border in `--control-border` is the alternative. A
+  design call, deferred from the 2026-09-09 fix pass (#28 summarised b).
+- **`stampDate` / `monthYear` format timestamps in the render host's zone** (server vs
+  device); the F11 review's LOW, now routed through two helpers so one fix covers both.
+- Every open LOW from the review stays numbered in the audit file; items are moved here
+  individually as they are deferred, not copied wholesale. All HIGH and MEDIUM items were
+  fixed in the 2026-09-09 second pass (FIX_LOG).
+
 ## Found during F11 (2026-09-09), not fixed there
 
 - **A response rewritten *inside* one sprint cannot be split into its own row.**

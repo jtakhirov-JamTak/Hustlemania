@@ -4,6 +4,7 @@ import { ErrorBar } from "@/components/ErrorBar";
 import { Fragment, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { archiveItem, createItem, deleteItem, moveItem, restoreItem, setItemScope, updateItem, type BlockedSprint, type ItemInput } from "@/app/(app)/actions/library";
 import { areaName, isAreaKey } from "@/lib/areas";
+import { onRadioArrowKeys } from "@/components/radioKeys";
 import { callAction } from "@/lib/callAction";
 import { SCOPES, type ItemKind, type ItemScope, type LibraryItem } from "@/lib/data";
 import { blockedReason } from "@/lib/errors";
@@ -108,6 +109,11 @@ function BlockedList({ blocked, verb }: { blocked: BlockedSprint[]; verb: string
   );
 }
 
+/** Archive, Delete and Restore unmount the pressed button; the page title takes focus (SC 2.4.3). */
+function focusLibraryTitle() {
+  document.getElementById("library-title")?.focus();
+}
+
 export function LibraryPage({ kind, items }: { kind: ItemKind; items: LibraryItem[] }) {
   const copy = COPY[kind];
   const [filter, setFilter] = useState<Filter>("all");
@@ -122,7 +128,7 @@ export function LibraryPage({ kind, items }: { kind: ItemKind; items: LibraryIte
   return (
     <div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
-        <h1 className="heading" style={{ fontSize: 38, margin: 0, letterSpacing: "-0.03em", lineHeight: 1.1 }}>
+        <h1 id="library-title" tabIndex={-1} className="heading focus-quiet" style={{ fontSize: 38, margin: 0, letterSpacing: "-0.03em", lineHeight: 1.1 }}>
           {copy.title}
         </h1>
         <span style={{ fontSize: 13, color: "var(--muted)" }} data-testid="library-count">
@@ -191,7 +197,7 @@ function ScopeChips({ value, onChange, disabled }: { value: ItemScope; onChange:
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Scope">
       {SCOPES.map((s) => (
-        <button key={s.key} type="button" role="radio" aria-checked={value === s.key} className={`chip ${value === s.key ? "chip-on" : ""}`} disabled={disabled} onClick={() => onChange(s.key)}>
+        <button key={s.key} type="button" role="radio" aria-checked={value === s.key} className={`chip ${value === s.key ? "chip-on" : ""}`} disabled={disabled} onClick={() => onChange(s.key)} onKeyDown={onRadioArrowKeys}>
           {s.label}
         </button>
       ))}
@@ -410,6 +416,7 @@ function ItemCard({
         return;
       }
       if (res.blocked && res.blocked.length > 0) setBlocked({ verb: "Archive", list: res.blocked });
+      else focusLibraryTitle();
     });
   }
 
@@ -418,6 +425,7 @@ function ItemCard({
     start(async () => {
       const res = await callAction(() => deleteItem(item.kind, item.id));
       if (res.error) setError(res.error);
+      else focusLibraryTitle();
     });
   }
 
@@ -510,6 +518,7 @@ function ArchivedRow({ item, onError }: { item: LibraryItem; onError: (e: string
           start(async () => {
             const res = await callAction(() => restoreItem(item.kind, item.id));
             onError(res.error ?? null);
+            if (!res.error) focusLibraryTitle();
           })
         }
       >

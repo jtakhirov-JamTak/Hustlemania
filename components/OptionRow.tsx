@@ -1,5 +1,7 @@
 "use client";
 
+import { onRadioArrowKeys } from "@/components/radioKeys";
+
 /**
  * A selection row with a leading square (multi-select) or circle (single-select), as the
  * visual language prescribes instead of native inputs. Keyboard: it is a real button;
@@ -31,21 +33,7 @@ export function OptionRow({
       aria-checked={on}
       disabled={disabled}
       onClick={onPick}
-      onKeyDown={
-        single
-          ? (e) => {
-              const delta = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
-              if (!delta) return;
-              const group = e.currentTarget.closest('[role="radiogroup"]');
-              const radios = Array.from(group?.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)') ?? []);
-              const next = radios[(radios.indexOf(e.currentTarget) + delta + radios.length) % radios.length];
-              if (!next) return;
-              e.preventDefault();
-              next.focus();
-              next.click();
-            }
-          : undefined
-      }
+      onKeyDown={single ? onRadioArrowKeys : undefined}
       className={`option-row ${on ? "option-row-on" : ""}`}
       data-testid={testId}
     >

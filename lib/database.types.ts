@@ -724,6 +724,9 @@ export type Database = {
           highest_impediment_id: string | null
           id: string | null
           impact: string | null
+          proof_recover: string | null
+          proof_then: string | null
+          proof_when: string | null
           recovered: string | null
           response: string | null
           sprint_id: string | null
@@ -739,6 +742,9 @@ export type Database = {
           highest_impediment_id?: string | null
           id?: string | null
           impact?: string | null
+          proof_recover?: string | null
+          proof_then?: string | null
+          proof_when?: string | null
           recovered?: string | null
           response?: string | null
           sprint_id?: string | null
@@ -754,6 +760,9 @@ export type Database = {
           highest_impediment_id?: string | null
           id?: string | null
           impact?: string | null
+          proof_recover?: string | null
+          proof_then?: string | null
+          proof_when?: string | null
           recovered?: string | null
           response?: string | null
           sprint_id?: string | null
@@ -768,6 +777,25 @@ export type Database = {
             referencedRelation: "impediments"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "sprint_days_sprint_id_fkey"
+            columns: ["sprint_id"]
+            isOneToOne: false
+            referencedRelation: "sprints"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sprint_totals: {
+        Row: {
+          closed_days: number | null
+          effective_days: number | null
+          on_target_days: number | null
+          sprint_id: string | null
+          total: number | null
+          user_id: string | null
+        }
+        Relationships: [
           {
             foreignKeyName: "sprint_days_sprint_id_fkey"
             columns: ["sprint_id"]
@@ -852,6 +880,23 @@ export type Database = {
           used_days: number
         }[]
       }
+      insight_cue_usefulness_many: {
+        Args: { p_sprint_ids: string[] }
+        Returns: {
+          delta_pts: number
+          enough: boolean
+          is_focus: boolean
+          item_id: string
+          logged_days: number
+          median_unused: number
+          median_used: number
+          name: string
+          sprint_id: string
+          unsure_days: number
+          unused_days: number
+          used_days: number
+        }[]
+      }
       insight_impediment_impact: {
         Args: { p_sprint_id: string }
         Returns: {
@@ -868,6 +913,26 @@ export type Database = {
           median_present: number
           name: string
           present_days: number
+          unsure_days: number
+        }[]
+      }
+      insight_impediment_impact_many: {
+        Args: { p_sprint_ids: string[] }
+        Returns: {
+          absent_days: number
+          delta_pts: number
+          enough: boolean
+          felt_a_lot: number
+          felt_nothing: number
+          felt_some: number
+          is_highest: boolean
+          item_id: string
+          logged_days: number
+          median_absent: number
+          median_present: number
+          name: string
+          present_days: number
+          sprint_id: string
           unsure_days: number
         }[]
       }
@@ -888,6 +953,23 @@ export type Database = {
           unsure: number
         }[]
       }
+      insight_response_followthrough_many: {
+        Args: { p_sprint_ids: string[] }
+        Returns: {
+          answered: number
+          didnt: number
+          enough: boolean
+          item_id: string
+          name: string
+          occurrences: number
+          partially: number
+          proof_then: string
+          ran: number
+          rate: number
+          sprint_id: string
+          unsure: number
+        }[]
+      }
       insight_response_recovery: {
         Args: { p_sprint_id: string }
         Returns: {
@@ -900,6 +982,25 @@ export type Database = {
           outcome_enough: boolean
           proof_recover: string
           rate: number
+          with_recovered: number
+          with_response: number
+          without_recovered: number
+          without_response: number
+        }[]
+      }
+      insight_response_recovery_many: {
+        Args: { p_sprint_ids: string[] }
+        Returns: {
+          answered: number
+          enough: boolean
+          item_id: string
+          median_not: number
+          median_recovered: number
+          name: string
+          outcome_enough: boolean
+          proof_recover: string
+          rate: number
+          sprint_id: string
           with_recovered: number
           with_response: number
           without_recovered: number
@@ -1002,6 +1103,21 @@ export type Database = {
           met: boolean
           missed_days: number
           pct: number
+          status: string
+          total: number
+        }[]
+      }
+      sprint_review_summary_many: {
+        Args: { p_sprint_ids: string[] }
+        Returns: {
+          best_streak: number
+          cancelled_days: number
+          closed_days: number
+          goal: number
+          met: boolean
+          missed_days: number
+          pct: number
+          sprint_id: string
           status: string
           total: number
         }[]
