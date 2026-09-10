@@ -252,7 +252,8 @@ function MantraCard({ sprintId, initial, streakText }: { sprintId: string; initi
 }
 
 /**
- * The highest impediment: name, WHEN → THEN → RECOVERED WHEN, Change (picker over the
+ * The highest impediment: name, then WHEN / THEN / RECOVERED WHEN each on its own row (U1),
+ * Change (picker over the
  * sprint's impediments, with proof inputs when the pick is incomplete), Edit proof point,
  * then "Also watching" — the other impediments, with Remove and Add.
  */
@@ -364,8 +365,10 @@ function HighestCard({
           {!editing ? (
             <>
               <div className="r-proof">
-                <span className="r-part">WHEN</span> <span data-testid="proof-when">{highest.proof_when}</span> → <span className="r-part">THEN</span>{" "}
-                <span data-testid="proof-then">{highest.proof_then}</span>
+                <span className="r-part">WHEN</span> <span data-testid="proof-when">{highest.proof_when}</span>
+              </div>
+              <div className="r-proof">
+                <span className="r-part">THEN</span> <span data-testid="proof-then">{highest.proof_then}</span>
               </div>
               <div className="r-proof-recover">
                 <span className="r-part">RECOVERED WHEN</span>{" "}

@@ -29,7 +29,7 @@ export default async function VisionLayout({ children }: { children: React.React
         <SideNavList items={libraries} />
       </SideNav>
       <main className="main">
-        <div className="workspace workspace-vision">{children}</div>
+        <div className="workspace">{children}</div>
       </main>
     </>
   );

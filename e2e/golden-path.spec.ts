@@ -41,18 +41,25 @@ test.describe("golden path", () => {
 
     await signInViaMagicLink(page, user.email);
 
-    // Visual language checks (SPEC F1): font, radius, hero size, sidebar width.
+    // Visual language checks (SPEC F1, U1): font, radius, hero size, the sidebar as a chip row on every width.
     await expect(page.getByTestId("empty-state")).toBeVisible();
     const font = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
     expect(font).toContain("Plus Jakarta Sans");
     const radius = await page.locator(".card").first().evaluate((el) => getComputedStyle(el).borderRadius);
     expect(radius).toBe("20px");
     const sidebarWidth = await page.locator("[data-sidebar]").evaluate((el) => getComputedStyle(el).width);
-    expect(sidebarWidth).toBe(isPhone ? "390px" : "266px");
+    expect(sidebarWidth).toBe(isPhone ? "390px" : "1280px");
+    const sidebarBox = await page.locator("[data-sidebar]").boundingBox();
+    const mainBox = await page.locator("main").boundingBox();
+    expect(sidebarBox && mainBox && mainBox.y >= sidebarBox.y + sidebarBox.height).toBe(true);
 
     // Empty state: no vision yet → the Sprints sidebar says Locked, the card links to /vision.
     await expect(page.getByRole("heading", { name: "No sprint can start here yet" })).toBeVisible();
     await expect(page.locator("[data-sidebar]").getByText("Locked")).toHaveCount(3);
+    // U1: /sprints lands on the first Area, so that chip is selected and shows its sub line; a chip
+    // that is not selected keeps its sub line off screen (clip, not display:none) on every width.
+    await expect(page.locator("[data-sidebar] .side-link-on").getByText("Vision not written yet")).toBeVisible();
+    await expect(page.locator("[data-sidebar] .side-link:not(.side-link-on)").getByText("Vision not written yet").first()).toHaveCSS("clip", "rect(0px, 0px, 0px, 0px)");
     await page.getByRole("link", { name: "Write the vision" }).click();
     await expect(page).toHaveURL(/\/vision$/);
 
@@ -60,10 +67,8 @@ test.describe("golden path", () => {
     const visionSetup = page.getByTestId("vision-setup");
     await expect(visionSetup).toHaveAttribute("data-step", "1");
     await expect(page.locator("[data-sidebar]").getByText("0 of 3")).toBeVisible();
-    // The sub line is in the DOM on both viewports; the phone chip row moves it off screen
-    // (clip, not display:none) so it stays in the accessibility tree (full review 2026-09-09).
-    const sideSub = (text: string) =>
-      isPhone ? expect(page.locator("[data-sidebar]").getByText(text)).toHaveCSS("clip", "rect(0px, 0px, 0px, 0px)") : expect(page.locator("[data-sidebar]").getByText(text)).toBeVisible();
+    // U1: the selected chip is the one that expands, so its sub line is visible on both viewports.
+    const sideSub = (text: string) => expect(page.locator("[data-sidebar]").getByText(text)).toBeVisible();
     await sideSub("Not written yet");
     await noOverflow();
     const saveVision = page.getByRole("button", { name: "Save & continue" });
@@ -443,10 +448,9 @@ test.describe("golden path", () => {
 
     // Sidebar reflects the sprint: label · meta · outcome, no streak line, no New Sprint button.
     await expect(page.locator("[data-sidebar]").getByText("Day 1/14")).toBeVisible();
-    // The outcome line is in the DOM on both viewports; the phone's chip row clips it off screen.
-    const sideOutcome = page.locator("[data-sidebar]").getByText("Save $8,000 toward the emergency fund");
-    if (isPhone) await expect(sideOutcome).toHaveCSS("clip", "rect(0px, 0px, 0px, 0px)");
-    else await expect(sideOutcome).toBeVisible();
+    // U1: this Area's chip is selected, so its outcome line shows on both viewports; the others stay clipped.
+    await expect(page.locator("[data-sidebar]").getByText("Save $8,000 toward the emergency fund")).toBeVisible();
+    await expect(page.locator("[data-sidebar]").getByText("No active sprint").first()).toHaveCSS("clip", "rect(0px, 0px, 0px, 0px)");
     await expect(page.locator("[data-sidebar]").getByRole("link", { name: "New Sprint" })).toHaveCount(0);
 
     // F8 night mode: the header toggle sets a cookie; the next paint is already dark.

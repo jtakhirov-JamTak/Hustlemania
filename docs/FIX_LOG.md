@@ -6,6 +6,26 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-10 — A clipped sidebar sub line escaped the chip row and made the phone page scroll sideways
+
+**Problem.** The chip row hides an unselected chip's sub line off screen with the usual
+visually-hidden recipe (`position: absolute; width: 1px; clip: rect(0,0,0,0)`), but the
+chip (`.side-link`) was not positioned, so the 1px span took the nearest positioned
+ancestor — the document — as its containing block. Its static position sits where the
+chip is, and a chip scrolled past the right edge of the row put the span at x ≈ 399 on a
+390px viewport. The row's own `overflow-x: auto` never saw it, and the document grew 9px
+wider. Latent since the phone chip row shipped; U1 surfaced it because the selected chip
+now shows its sub line and is wider, pushing the third chip out of view.
+
+**Fix.** `.side-link { position: relative }` (`app/globals.css`), so the span is contained
+by the chip and scrolls with the row.
+
+**Regression test.** `e2e/golden-path.spec.ts` (phone project), the `noOverflow()` after the
+plan edit on the journal: `scrollWidth - clientWidth` was 9 before the fix and 0 after.
+Remove the `position: relative` and it goes red again.
+
+**Where found.** U1 build, the phone golden path, first run after the CSS edits.
+
 ## 2026-09-10 — The first page after the owner's first production sign-in failed with `sprint_totals: JWT issued at future`
 
 **Problem.** The magic link landed, the session was minted, the callback redirected to

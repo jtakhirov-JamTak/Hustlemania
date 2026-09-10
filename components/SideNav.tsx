@@ -43,9 +43,10 @@ export function SideNavList({ items }: { items: SideItem[] }) {
 }
 
 /**
- * The section sidebar: a list beside the page on desktop, one scrolling row of chips
- * above it at ≤940px (see `[data-sidebar]` in globals.css). Section titles go with the
- * list layout; on the row the chips speak for themselves.
+ * The section sidebar (U1): one scrolling row of chips above the page on every width
+ * (see `[data-sidebar]` in globals.css). Only the selected chip shows its sub lines; the
+ * others keep theirs off screen but in the accessibility tree. Section titles are hidden —
+ * on the row the chips speak for themselves.
  */
 export function SideNav({ title, items, children }: { title: string; items: SideItem[]; children?: React.ReactNode }) {
   return (

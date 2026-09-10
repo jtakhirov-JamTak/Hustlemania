@@ -34,7 +34,7 @@ export default async function SprintsLayout({ children }: { children: React.Reac
     <>
       <SideNav title="Sprints" items={items} />
       <main className="main">
-        <div className="workspace workspace-journal">{children}</div>
+        <div className="workspace">{children}</div>
       </main>
     </>
   );
