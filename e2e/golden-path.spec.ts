@@ -772,10 +772,14 @@ test.describe("golden path", () => {
     // This sprint's closed days DO clear n≥3, so the kit speaks — and every number in it
     // is one the cards above print. Asserted as the exact sentence set: a loose regex here
     // passed while the expected branch was wrong, which is worse than no assertion.
+    // The response ran on 2 of the 4 answered occurrences, below the 3 a recovery figure
+    // needs, so the sentence carries no recovery clause (FIX_LOG 2026-09-11: the old one
+    // printed the overall 50%, which counted the recovery on a day the response did not run).
     await expect(page.getByTestId("suggested-kit")).toContainText(
       "Keep Late meetings as the highest impediment; days it shows up run 75 points lower. " +
-        "The response for Late meetings runs 50% of the time and recovers 50% of the time.",
+        "The response for Late meetings runs 50% of the time.",
     );
+    await expect(page.getByTestId("suggested-kit")).not.toContainText("recovers");
     await expect(page.getByTestId("suggested-kit")).not.toContainText("Not enough logged days yet");
     await noOverflow();
 

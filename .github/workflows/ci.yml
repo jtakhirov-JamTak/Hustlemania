@@ -1,0 +1,54 @@
+# CI: the fast half of `npm run verify`, run off this machine on every push and pull
+# request. typecheck → lint → hooks → unit, in the order the local gate runs them.
+# The DB and e2e suites need the local Supabase stack and stay in the pre-commit hook.
+# Vercel builds every push on its own, so there is no build step here; this job exists
+# to fail a minute sooner, with lint included, and to hold when the local hook is bypassed.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:hooks
+      - run: npm run test:unit
+
+  # DB + e2e: uncomment once the workflow can start the Supabase stack
+  # (supabase/setup-cli + `supabase start`), so `npm run verify` runs whole here too.
+  # verify-full:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with: { node-version: 22, cache: npm }
+  #     - uses: supabase/setup-cli@v1
+  #     - run: supabase start
+  #     - run: npm ci
+  #     - run: npm run verify

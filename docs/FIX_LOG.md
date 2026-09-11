@@ -6,6 +6,66 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-11 — The skew retry never retried inside a server render: Next.js handed it the memoised 401
+
+**Problem.** `withSkewRetry` (FIX_LOG 2026-09-10) re-issued the refused request
+byte-for-byte after one second. Inside a server-component render Next.js dedupes
+identical GETs — same method, headers and URL (`next/dist/server/lib/dedupe-fetch.js`)
+— and gives the second caller a clone of the first response without a network call. So
+the retry received the same `JWT issued at future` 401 and the page fell to the error
+boundary anyway. The gateway log showed it: one request for
+`sprints?select=*&status=eq.active` at :21, four sibling requests at :21 succeeding on
+the same token, no second request, the error thrown at :22.4. The unit tests injected
+their own fetch and could not see the dedupe; the local e2e reproduced it twice in four
+runs on 2026-09-11 with the Docker and host clocks agreeing.
+
+**Fix.** The retry carries `x-skew-retry: 1` (`lib/supabase/skew.ts`), which changes the
+dedupe key; the original headers, including the bearer, are preserved, and nothing
+reads the marker.
+
+**Regression test.** `tests/unit/skew.test.ts`, "under a deduping fetch": a fake fetch
+keyed like Next's returns the memoised refusal for an identical retry — the old code
+gets 401 and one real call, the new code 200 and two; a second test checks the apikey
+and bearer survive on the retry. The first describe's retry assertion now checks the
+marker instead of byte-equality.
+
+**Where found.** The pre-commit verify for U2–U4 (05:00Z), desktop golden path, after the
+clock-sync explanation had been shown wrong by a failure with synchronised clocks.
+
+---
+
+## 2026-09-11 — The Suggested kit credited a response with recoveries that happened without it, from a sprint it was not measured in
+
+**Problem.** Two defects in one sentence of `suggestedKit` (`lib/acrossCards.ts`), found
+by an outside review that ran the function on constructed rows and reproduced here.
+(1) The recovery clause matched the follow-through group by item and Area only. Each
+Across-sprints group quotes its own most recent sprint that clears n≥3, so the
+follow-through group could quote August while the recovery group for the same
+response quoted July, and the sentence read as one measurement. (2) The clause printed
+the row's `rate`, which migration 0014 defines as recoveries over all answered
+occurrences, including the days the response did not run. Recovered 0 of 3 times the
+response ran and 3 of 3 times it did not printed "recovers 50% of the time" — the
+opposite of what the data says about the response. Latent since F11 (2026-09-09).
+
+**Fix.** The recovery group must also share the follow-through group's `from.id`, and
+the clause prints `with_recovered / with_response` as "recovers N% of the times it
+ran", only when `with_response ≥ MIN_DAYS` (3), so a two-occurrence sample stays
+silent as every other kit sentence does.
+
+**Regression test.** `tests/unit/across.test.ts`, "the suggested kit": the 0-of-3 /
+3-of-3 case expects 0%, and printed 50% before the fix; the two-sprint case expects no
+recovery clause, and printed the older sprint's 50% before; the ran-twice case expects
+no clause, and printed 100% before. The existing three-sentence test moved from 60% to
+67% for the same reason. `e2e/golden-path.spec.ts` (F10): the seeded sprint's response
+ran 2 of 4 times, so the kit now carries no recovery clause; the old expectation
+("recovers 50%") was the defect on real rows, and the test now also asserts "recovers"
+is absent.
+
+**Where found.** Product review of `bf5c4cb` (2026-09-11), verified by running
+`suggestedKit` on the reviewer's two cases before any edit.
+
+---
+
 ## 2026-09-10 — A clipped sidebar sub line escaped the chip row and made the phone page scroll sideways
 
 **Problem.** The chip row hides an unselected chip's sub line off screen with the usual

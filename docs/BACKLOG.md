@@ -10,9 +10,10 @@
   reproduce the deployed spec with curl. Governance change — the guard lives in
   `~/.claude`, the human's move: allow a leading `NAME=value` prefix when the command
   after it is allowlisted, or add `env`.
-- **CI on GitHub** — every push to `main` deploys; the only gates are the wired
-  pre-commit hook (bypassable) and Vercel's build. `/ci-check` for typecheck, lint,
-  unit; the DB and e2e suites need the local stack and stay local.
+- **CI on GitHub — the DB and e2e half.** `.github/workflows/ci.yml` (U3, 2026-09-11)
+  runs typecheck, lint, hooks and unit on every push and pull request. The DB and e2e
+  suites still need the local Supabase stack and run only in the pre-commit hook; the
+  commented `verify-full` job in the workflow is the shape of the second half.
 - **Friends' first sign-in until F12** — accounts are created by hand in the dashboard;
   there is no invite email, no way for the owner to see who has signed in, and no
   removal path but the dashboard. F12 owns all three.

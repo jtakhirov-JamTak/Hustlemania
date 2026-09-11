@@ -3,7 +3,7 @@ import { areaName } from "@/lib/areas";
 import type { CueRow, FollowThroughRow, ImpactRow, RecoveryRow } from "@/lib/data";
 import { formatIsoDate } from "@/lib/dates";
 import type { InsightRow } from "@/components/insights/InsightCard";
-import { cueRows, followThroughRows, impactRows, recoveryRows } from "@/lib/insightCards";
+import { cueRows, followThroughRows, impactRows, MIN_DAYS, recoveryRows } from "@/lib/insightCards";
 
 /**
  * Across sprints (F11): the grouped rows dressed for the shared insight card.
@@ -104,9 +104,16 @@ export function suggestedKit({ impact, follow, recovery, cues, closedDays }: Kit
   const worst = [...impact].sort(bySeverity).find((g) => g.row.enough && g.row.delta_pts !== null && g.row.delta_pts <= HURT);
   const ft = follow.find((g) => g.row.enough && g.row.rate !== null);
   // The recovery figure belongs to the SAME response the follow-through sentence names:
-  // same item, same Area. The first qualifying recovery group in the scope may be a
-  // different impediment's (FIX_LOG 2026-09-09).
-  const rc = ft ? recovery.find((g) => g.row.enough && g.row.rate !== null && g.row.item_id === ft.row.item_id && g.area === ft.area) : undefined;
+  // same item, same Area (FIX_LOG 2026-09-09) and the same sprint — each group quotes its
+  // own most recent qualifying sprint, so two groups of one item can quote two sprints
+  // (FIX_LOG 2026-09-11). The clause is recovery on the occurrences the response ran, not
+  // the row's overall rate, and it needs MIN_DAYS such occurrences to speak at all.
+  const rc = ft
+    ? recovery.find(
+        (g) => g.row.enough && g.row.item_id === ft.row.item_id && g.area === ft.area && g.from?.id === ft.from?.id && g.row.with_response >= MIN_DAYS,
+      )
+    : undefined;
+  const ranRecovered = rc ? Math.round((rc.row.with_recovered * 100) / rc.row.with_response) : null;
   const best = [...cues].sort(byHelp).find((g) => g.row.enough && g.row.delta_pts !== null && g.row.delta_pts >= HELPED);
 
   if (!worst && !ft && !best) return "Not enough logged days yet. Each comparison needs 3 days on each side.";
@@ -116,7 +123,7 @@ export function suggestedKit({ impact, follow, recovery, cues, closedDays }: Kit
     ft
       ? (ft.row.rate as number) < RAN_LOW
         ? `The response for ${ft.row.name} ran on only ${ft.row.rate}% of occurrences — make the THEN smaller.`
-        : `The response for ${ft.row.name} runs ${ft.row.rate}% of the time${rc ? ` and recovers ${rc.row.rate}% of the time.` : "."}`
+        : `The response for ${ft.row.name} runs ${ft.row.rate}% of the time${ranRecovered !== null ? ` and recovers ${ranRecovered}% of the times it ran.` : "."}`
       : "",
     best ? `Keep ${best.row.name} — +${best.row.delta_pts} points on the days it's used.` : "",
   ];

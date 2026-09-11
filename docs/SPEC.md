@@ -1635,10 +1635,15 @@ areas is two rows · **the Suggested kit is deterministic sentences** off the ra
     "Keep {name} as the highest impediment; days it shows up run {|delta|} points lower.";
     the first `enough` follow-through row → below 50%, "The response for {name} ran on only
     {rate}% of occurrences — make the THEN smaller.", otherwise "The response for {name}
-    runs {rate}% of the time[ and recovers {rate}% of the time]." — the recovery clause
-    comes from the `enough` recovery group of the **same item and Area**, or is omitted
-    (corrected 2026-09-09 after the F11 review: the first build took the scope's first
-    qualifying recovery group, another impediment's — FIX_LOG); the best cue (`enough`,
+    runs {rate}% of the time[ and recovers {ran_rate}% of the times it ran]." — the
+    recovery clause comes from the `enough` recovery group of the **same item, Area and
+    quoted sprint**, and `ran_rate` is `with_recovered / with_response` rounded, printed
+    only when `with_response ≥ 3`; otherwise the clause is omitted (corrected 2026-09-09
+    after the F11 review: the first build took the scope's first qualifying recovery
+    group, another impediment's — FIX_LOG; corrected again 2026-09-11: the group could
+    quote a different sprint from the follow-through group, and the clause printed the
+    row's overall recovery, which counts recoveries on days the response did not run —
+    FIX_LOG); the best cue (`enough`,
     `delta_pts ≥ +10`) → "Keep {name} — +{delta} points on the days it's used." With no
     closed day: "Nothing to suggest yet — close a few days first." With closed days but no
     qualifying row: "Not enough logged days yet. Each comparison needs 3 days on each

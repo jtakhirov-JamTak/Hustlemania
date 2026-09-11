@@ -8,6 +8,7 @@
  */
 export const SKEW_MESSAGE = "JWT issued at future";
 export const SKEW_RETRY_MS = 1000;
+export const SKEW_RETRY_HEADER = "x-skew-retry";
 
 type Fetch = typeof fetch;
 
@@ -16,8 +17,21 @@ export function withSkewRetry(fetchImpl: Fetch = fetch, wait: (ms: number) => Pr
     const first = await fetchImpl(input, init);
     if (!(await isSkewRefusal(first))) return first;
     await wait(SKEW_RETRY_MS);
-    return fetchImpl(input, init);
+    return fetchImpl(input, { ...init, headers: retryHeaders(input, init) });
   };
+}
+
+/**
+ * The retry is not the same request. Inside a server render Next.js dedupes identical
+ * GETs (method + headers + URL, `next/dist/server/lib/dedupe-fetch.js`) and hands the
+ * second caller a clone of the first response, so an unmarked retry got the same 401
+ * back without touching the network (FIX_LOG 2026-09-11). The marker header changes the
+ * key; nothing downstream reads it.
+ */
+function retryHeaders(input: RequestInfo | URL, init?: RequestInit): Headers {
+  const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+  headers.set(SKEW_RETRY_HEADER, "1");
+  return headers;
 }
 
 async function isSkewRefusal(res: Response): Promise<boolean> {

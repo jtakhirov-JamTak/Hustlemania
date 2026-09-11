@@ -283,9 +283,43 @@ describe("across: the suggested kit", () => {
     });
     expect(sentence).toBe(
       "Keep Starting late as the highest impediment; days it shows up run 31 points lower. " +
-        "The response for Starting late runs 75% of the time and recovers 60% of the time. " +
+        "The response for Starting late runs 75% of the time and recovers 67% of the times it ran. " +
         "Keep First hour is outreach — +22 points on the days it's used.",
     );
+  });
+
+  it("quotes recovery on the occurrences the response ran, not the row's overall rate", () => {
+    // Recovered 0 of 3 times the response ran and 3 of 3 times it did not: the row's rate
+    // is 50, and the sentence must not attribute that to the response (FIX_LOG 2026-09-11).
+    const never = recovery({ with_response: 3, with_recovered: 0, without_response: 3, without_recovered: 3, answered: 6, rate: 50 });
+    const sentence = kit({
+      ...empty,
+      follow: groupFollow([sprintOf(AUG, { follow: [follow({ rate: 100 })] })], "wealth"),
+      recovery: groupRecovery([sprintOf(AUG, { recovery: [never] })], "wealth"),
+      closedDays: 12,
+    });
+    expect(sentence).toBe("The response for Starting late runs 100% of the time and recovers 0% of the times it ran.");
+  });
+
+  it("quotes a recovery rate only from the sprint the follow-through rate came from", () => {
+    // One response in two sprints. The newest sprint's follow-through qualifies but its
+    // recovery is thin; the older sprint's recovery qualifies. The two groups quote two
+    // sprints, and the older figure must not be attached to the newer rate (FIX_LOG 2026-09-11).
+    const newest = sprintOf(AUG, { follow: [follow({ rate: 100 })], recovery: [recovery({ answered: 2, rate: null, enough: false })] });
+    const older = sprintOf(JUL, { follow: [follow({ rate: 25 })], recovery: [recovery({ rate: 50 })] });
+    const sentence = kit({ ...empty, follow: groupFollow([older, newest], "wealth"), recovery: groupRecovery([older, newest], "wealth"), closedDays: 20 });
+    expect(sentence).toBe("The response for Starting late runs 100% of the time.");
+  });
+
+  it("stays silent on recovery when the response ran fewer than three times, even with enough answers", () => {
+    const ranTwice = recovery({ with_response: 2, with_recovered: 2, without_response: 2, without_recovered: 1, answered: 4, rate: 75 });
+    const sentence = kit({
+      ...empty,
+      follow: groupFollow([sprintOf(AUG, { follow: [follow()] })], "wealth"),
+      recovery: groupRecovery([sprintOf(AUG, { recovery: [ranTwice] })], "wealth"),
+      closedDays: 12,
+    });
+    expect(sentence).toBe("The response for Starting late runs 75% of the time.");
   });
 
   it("quotes a recovery rate only for the response it just named", () => {
