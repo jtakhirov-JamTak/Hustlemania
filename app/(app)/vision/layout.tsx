@@ -3,7 +3,7 @@ import { loadLibraryCounts, loadVision, visionSteps } from "@/lib/data";
 import { stampDate } from "@/lib/dates";
 import { createClient } from "@/lib/supabase/server";
 
-/** F9: one Vision row (`n of 3`, reviewed date) and the two library rows. */
+/** F9: one Vision row (`n of 3`, reviewed date) and the library rows (three since F17). */
 export default async function VisionLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   const [{ active }, counts] = await Promise.all([loadVision(supabase), loadLibraryCounts(supabase)]);
@@ -19,9 +19,8 @@ export default async function VisionLayout({ children }: { children: React.React
   ];
   const libraries: SideItem[] = [
     { href: "/vision/cues", label: "Execution cues", meta: String(counts.cues) },
-    { href: "/vision/cue-situations", label: "Cue situations", meta: String(counts.cueSituations) },
     { href: "/vision/impediments", label: "Impediments", meta: String(counts.impediments) },
-    { href: "/vision/impediment-situations", label: "Impediment situations", meta: String(counts.impedimentSituations) },
+    { href: "/vision/situations", label: "Situations", meta: String(counts.situations) },
   ];
 
   return (

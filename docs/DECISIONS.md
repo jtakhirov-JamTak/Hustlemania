@@ -6,6 +6,92 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-12 — F17–F19 dictation-first capture: a model sorts the words, one situations library, the wizard and Today reworked
+
+`/interview` in feature mode, **escalated to DESIGN → SPECIFY** (a new external service,
+an entity-model change, a destructive migration; Part 1 untouched). Plan of record
+`~/.claude/plans/i-want-to-make-wondrous-pebble.md`; direction approved 2026-09-12 in
+plan mode, the spec entries F17–F19 presented next. Fifteen calls, the user's:
+
+1. **The split is done by a Claude model from a server action** — every structured
+   entry (goal + proof, WHEN / THEN / RECOVERED WHEN, WHEN / REMIND, a situation list,
+   today's intention + tasks) is spoken or typed into one box and sorted into the
+   existing fields, shown for correction, then saved through the existing paths. The
+   model never writes to the database. Model `claude-haiku-4-5`, structured output;
+   the owner adds `ANTHROPIC_API_KEY` to `.env` and Vercel. This reverses the F16 call
+   "voice is free, no server" **for the split step only** — transcription stays on the
+   device. It does not touch the v1 non-goal "AI-written insights or reviews": nothing
+   is written, the user's own words are sorted.
+2. **A missing required part refuses the save and names it.** The database's
+   required-field rules stay as they are.
+3. **Deleting an assigned situation detaches and deletes it; archives instead when a
+   closed day asked about it; refused when an item in an active sprint would be left
+   without one.** The global no-delete rule holds for history rows.
+4. **`sprints.why` dropped, the "advances my vision" checkbox removed, the days 2–14
+   intention pre-planning removed.** Deviates from PRD §5 at the owner's call; the
+   no-delete rule yields to the second explicit call, as it did for F16. `why` was
+   written once and never read anywhere in the app.
+5. **Today re-record keeps done tasks**, archives the undone ones, replaces the intention.
+6. **Wizard step 5 keeps the Highest / Focus radio groups**; rows lacking a response or a
+   situation are disabled ("finish it on the Impediments page").
+7. **The rail's Edit is a small menu** (Change the Highest · Fix the response · Add or
+   remove), each item opening the existing form — over one screen holding everything.
+8. **Parse when dictation stops, show the parts under the box, then Save** — over
+   parse-on-save with the split shown only on the view.
+9. **Three features in order** (parser + migration + capture · wizard + rail · Today),
+   each green and evaluated before the next — over one big feature or two.
+10. Situation lists are dictated on the Situations tab **and** inside every APPLIES TO
+    picker.
+11. **Confidence band advice on both pickers** (sprint 1–10, vision 0–10): below 6
+    "may be unrealistic", 6–8 "sweet spot", above 8 "stretch".
+12. **Situations are one library.** Reverses F15 call 1 ("one list per kind") through
+    its own re-open clause — "a user asks for a situation to belong to both libraries".
+    Migration 0021 drops the `kind` axis and both composite FKs; same-name rows across
+    the old kinds are **not** merged (the owner deletes one; repointing immutable
+    observation rows is not worth the risk on a blank hosted app).
+13. **The cue NOTE leaves the UI and the database** (F16 had kept it by scope, not by
+    argument); "Why this sprint matters" leaves; the Mantra gets a hint.
+14. UI: primary action **type or speak, then correct the parts**; phone-first (390 px),
+    desktop checked; references the v8 README + Libraries artboard, f9-vision, the
+    Today handoff and f8 rail; states parsing / parse failed or part missing / mic
+    unsupported or blocked / delete sheet.
+15. The rail's controls change; the F8 look does not — the v8 "no interview trades the
+    look away" requirement is read as the look, and the owner is the one changing it.
+
+**Rejected.** A rule-based on-device parser alone (brittle on unscripted phrasing) and a
+rules-then-model hybrid (double the code) · saving what was found and filling the rest on
+the view (would loosen the database rules) · cascading the delete into observation rows ·
+detaching the last situation of an active-sprint member · one big Edit screen on the rail
+· parse-on-save · one or two features instead of three · auto-merging same-name
+situations in 0021 · an in-memory rate limit (per-instance on Vercel, so no cap) ·
+intercepting the parser in Playwright (server actions cannot be intercepted; a
+deterministic stub behind `PARSE_STUB=1` instead, with a live smoke test double-gated on
+the key and `PARSE_LIVE_SMOKE=1` so `npm run verify` never spends).
+
+**Cost and safety of the model call.** Text delimited as data with "never invent";
+2 000-character input cap; `max_tokens` 1024; 10 per minute and 200 per day per user in
+`parse_permit`; user text never in a log or a report; the parts are always editable
+before Save, so a wrong split is a correction, not a bad write.
+
+**Build-time calls (2026-09-12, F17).** An impediment's THEN and RECOVERED WHEN stay
+optional at the library (the F15 rule 6 bites at the sprint), so the "missing part
+refuses the save" case on the Impediments page is the WHEN; the cue's REMIND is the
+e2e's refused part. The parts render as growing textareas, not inputs — a THEN clipped
+sideways on the phone capture. A delete unmounts its row, so its outcome line is
+announced at page level. The compact situations box sorts on Enter (the full-size box
+on Ctrl/Cmd+Enter or the button). The SPEC's throwaway `app/mockup/capture/` page was
+not built: the pure module and `CaptureBox` came first and the real screens were
+captured in their place (48 shots, `docs/mockups/f17-capture/`), the F16 precedent.
+Same-name situations across the old kinds are kept as two rows (the migration does not
+merge; the owner can delete one). A `"use server"` module may export only async
+functions — a constant there is a build error `tsc` does not see (FIX_LOG, guard test).
+The Next dev overlay's "1 Issue" during a Playwright capture is the screenshot's own
+caret-hiding style landing mid-hydration, not an app mismatch. The visual pass itself
+tripped the parser's 10-a-minute cap (four sorts per pass, four passes): the capture
+script purges the seed user's `parse_log` per pass.
+
+---
+
 ## 2026-09-12 — F16 vision v3: three steps that each save something, all three unlock sprints, INTERFERES and the optional prompts deleted
 
 `/interview` in feature mode (`docs/SPEC.md` F16; plan of record

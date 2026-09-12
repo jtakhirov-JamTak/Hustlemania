@@ -2,29 +2,31 @@
 
 import { ErrorBar } from "@/components/ErrorBar";
 import { Fragment, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
-import { archiveItem, createItem, createSituation, deleteItem, moveItem, restoreItem, setItemScope, updateItem, type BlockedSprint, type ItemInput } from "@/app/(app)/actions/library";
+import { archiveItem, createItem, createSituations, deleteItem, moveItem, restoreItem, setItemScope, updateItem, type BlockedSprint, type ItemInput } from "@/app/(app)/actions/library";
 import { areaName, isAreaKey } from "@/lib/areas";
 import { onRadioArrowKeys } from "@/components/radioKeys";
+import { CaptureBox, focusMissingPart, type CapturePhase } from "@/components/CaptureBox";
 import { SituationPicker, type SituationOption } from "@/components/SituationPicker";
 import { callAction } from "@/lib/callAction";
+import { type CaptureKind, emptyParts, missingPart, partText, type Parts } from "@/lib/capture";
 import { SCOPES, type ItemKind, type ItemScope, type LibraryItem, type SituationItem } from "@/lib/data";
 import { blockedReason } from "@/lib/errors";
 
 type Filter = "all" | ItemScope;
 
-/** The editable parts of an item, keyed the way the inputs are labelled. F15: `situationIds` are the APPLIES TO ticks. */
-type Fields = { when: string; name: string; note: string; then: string; recover: string; situationIds: string[] };
+/** F17: the item's parts (the capture kind's keys) plus the APPLIES TO ticks. */
+type Fields = { parts: Parts; situationIds: string[] };
 
 const COPY: Record<
   ItemKind,
-  { title: string; blurb: string; example: string; guidance: string; examples: ReactNode; addTitle: string; empty: string; nameLabel: string; namePlaceholder: string; addHint: string }
+  { title: string; blurb: string; example: string; guidance: string; examples: ReactNode; addTitle: string; empty: string; situationHint: string }
 > = {
   cue: {
     title: "Execution cues",
     blurb: "A when → reminder or action you keep in front of you, and the situations it applies to. Ranked, reusable across sprints.",
     example: 'e.g. WHEN I schedule anything → remind: ask "How much does this pay?" · applies to: Scheduling',
     guidance:
-      "A good cue names a moment you will recognise (WHEN) and a reminder, question or action specific enough to act on right there (REMIND). Then tick the situations it applies to — one cue can cover several.",
+      "Say it in one breath — the moment you will recognise (WHEN) and a reminder, question or action specific enough to act on right there (REMIND): “When I schedule anything, remind me to ask how much this pays.” Then tick the situations it applies to — one cue can cover several.",
     examples: (
       <div>
         WHEN I schedule anything → remind: ask “How much does this pay?” · applies to: <em>Scheduling</em>, <em>A client call</em>
@@ -32,16 +34,14 @@ const COPY: Record<
     ),
     addTitle: "Add an execution cue",
     empty: "No execution cues yet. Add the first one above — a cue needs a WHEN, a REMIND and at least one situation.",
-    nameLabel: "REMIND",
-    namePlaceholder: 'ask "How much does this pay?"',
-    addHint: "WHEN, REMIND and at least one situation are needed.",
+    situationHint: "Tick at least one situation.",
   },
   impediment: {
     title: "Impediments",
     blurb: "A moment you will recognise (WHEN), the THEN → RECOVERED WHEN response that answers it — and the situations it applies to.",
     example: "e.g. WHEN I notice delaying → THEN a 10-minute timer on the smallest task · RECOVERED WHEN the timer is running within 10 minutes · applies to: Starting late.",
     guidance:
-      "Name the moment you will recognise (WHEN), a response that is specific and feasible right there (THEN), and what you would observe, within a time window, to know you are back on track (RECOVERED WHEN). Then tick the situations it applies to — one response usually covers several.",
+      "Say it in one breath — the moment you will recognise (WHEN), a response that is specific and feasible right there (THEN), and what you would observe, within a time window, to know you are back on track (RECOVERED WHEN): “When I notice myself delaying, then I start a 10-minute timer. Recovered when the timer is running within 10 minutes.” Then tick the situations it applies to — one response usually covers several.",
     examples: (
       <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
         <li>
@@ -57,17 +57,11 @@ const COPY: Record<
     ),
     addTitle: "Add an impediment",
     empty: "No impediments yet. Add the first one above — a sprint needs at least one, with a THEN → RECOVERED WHEN and a situation.",
-    nameLabel: "WHEN",
-    namePlaceholder: "I notice myself delaying my first work block",
-    addHint: "WHEN and at least one situation are needed.",
+    situationHint: "Tick at least one situation.",
   },
 };
 
-const PLACEHOLDER = {
-  cueWhen: "I schedule anything",
-  then: "I start a 10-minute timer on the smallest executable task",
-  recover: "The timer is running within 10 minutes",
-};
+const CAPTURE_KIND: Record<ItemKind, CaptureKind> = { cue: "cue", impediment: "impediment" };
 
 function scopeLabel(scope: ItemScope): string {
   return scope === "global" ? "Global" : isAreaKey(scope) ? areaName(scope) : scope;
@@ -80,27 +74,31 @@ function usageLabel(item: LibraryItem): string {
 
 function fieldsOf(item: LibraryItem): Fields {
   return {
-    when: item.kind === "cue" ? (item.cue_when ?? "") : "",
-    name: item.name,
-    note: item.kind === "cue" ? (item.explanation ?? "") : "",
-    then: item.proof_then ?? "",
-    recover: item.proof_recover ?? "",
+    parts:
+      item.kind === "cue"
+        ? { when: item.cue_when ?? "", remind: item.name }
+        : { when: item.name, then: item.proof_then ?? "", recovered_when: item.proof_recover ?? "" },
     situationIds: item.situations.map((s) => s.id),
   };
 }
 
 function toInput(kind: ItemKind, f: Fields, scope: ItemScope): ItemInput {
+  const p = f.parts;
   return kind === "cue"
-    ? { name: f.name, explanation: f.note, scope, cueWhen: f.when, situationIds: f.situationIds }
-    : { name: f.name, scope, proofThen: f.then, proofRecover: f.recover, situationIds: f.situationIds };
+    ? { name: partText(p, "remind"), scope, cueWhen: partText(p, "when"), situationIds: f.situationIds }
+    : { name: partText(p, "when"), scope, proofThen: partText(p, "then"), proofRecover: partText(p, "recovered_when"), situationIds: f.situationIds };
 }
 
-/** What gates Add / Save: a cue needs WHEN and REMIND, an impediment its WHEN; both need at least one situation (F15). */
-function ready(kind: ItemKind, f: Fields): boolean {
-  return Boolean(f.name.trim()) && (kind !== "cue" || Boolean(f.when.trim())) && f.situationIds.length > 0;
+/** What gates Add / Save: every required part (a cue's WHEN and REMIND, an impediment's WHEN) and at least one situation (F15); null when ready. */
+function saveHint(kind: ItemKind, f: Fields, phase: CapturePhase): string | null {
+  if (phase === "parsing") return "Reading your words…";
+  const missing = missingPart(CAPTURE_KIND[kind], f.parts);
+  if (missing) return missing.hint;
+  if (f.situationIds.length === 0) return COPY[kind].situationHint;
+  return null;
 }
 
-const EMPTY: Fields = { when: "", name: "", note: "", then: "", recover: "", situationIds: [] };
+const empty = (kind: ItemKind): Fields => ({ parts: emptyParts(CAPTURE_KIND[kind]), situationIds: [] });
 
 function BlockedList({ blocked, verb }: { blocked: BlockedSprint[]; verb: string }) {
   return (
@@ -128,20 +126,20 @@ export function LibraryPage({ kind, items, situations }: { kind: ItemKind; items
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  // The live situations offered by every editor on the page; one created inline joins the list at once.
+  // The live situations offered by every editor on the page; ones created inline join the list at once.
   const [options, setOptions] = useState<SituationOption[]>(() => situations.filter((s) => s.archived_at === null).map((s) => ({ id: s.id, name: s.name })));
 
   const active = items.filter((i) => i.archived_at === null);
   const archived = items.filter((i) => i.archived_at !== null);
   const shown = filter === "all" ? active : active.filter((i) => i.scope === filter);
 
-  /** Saves a situation named inside an editor and adds it to every editor's options; the caller ticks it. */
-  const createOption = async (name: string): Promise<{ id: string } | { error: string }> => {
-    const res = await callAction(() => createSituation(kind, name, "global"));
-    if (res.error || !res.id) return { error: res.error ?? "That did not save." };
-    const id = res.id;
-    setOptions((o) => [...o, { id, name }]);
-    return { id };
+  /** Saves situations named inside an editor (a spoken list) and adds them to every editor's options; the caller ticks them. */
+  const createOptions = async (names: string[]): Promise<{ ids: string[] } | { error: string }> => {
+    const res = await callAction(() => createSituations(names, "global"));
+    if (res.error || !res.ids) return { error: res.error ?? "That did not save." };
+    const ids = res.ids;
+    setOptions((o) => [...o, ...ids.map((id, i) => ({ id, name: names[i] ?? "" })).filter((n) => !o.some((x) => x.id === n.id))]);
+    return { ids };
   };
 
   return (
@@ -165,7 +163,7 @@ export function LibraryPage({ kind, items, situations }: { kind: ItemKind; items
         ))}
       </div>
 
-      <AddCard kind={kind} options={options} onCreateOption={createOption} onError={setPageError} />
+      <AddCard kind={kind} options={options} onCreateOptions={createOptions} onError={setPageError} />
 
       {pageError ? (
         <ErrorBar style={{ marginBottom: 12 }} action={{ label: "Dismiss", onClick: () => setPageError(null) }}>{pageError}</ErrorBar>
@@ -177,7 +175,7 @@ export function LibraryPage({ kind, items, situations }: { kind: ItemKind; items
             key={item.id}
             item={item}
             options={options}
-            onCreateOption={createOption}
+            onCreateOptions={createOptions}
             position={i + 1}
             first={active[0]?.id === item.id}
             last={active[active.length - 1]?.id === item.id}
@@ -226,72 +224,54 @@ function ScopeChips({ value, onChange, disabled }: { value: ItemScope; onChange:
   );
 }
 
-/** One labelled input on the part grid. */
-function Part({ id, label, value, onChange, placeholder, strong }: { id: string; label: string; value: string; onChange: (v: string) => void; placeholder?: string; strong?: boolean }) {
-  return (
-    <>
-      <label htmlFor={id} className="label-accent proof-label" style={{ whiteSpace: "nowrap" }}>
-        {label}
-      </label>
-      <input id={id} className="input input-compact" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={strong ? { fontWeight: 600 } : undefined} />
-    </>
-  );
-}
+type CreateOptions = (names: string[]) => Promise<{ ids: string[] } | { error: string }>;
 
-/** The editor for both Add and Edit: one input per part, the note, the situations, then the guidance line and examples. */
-type CreateOption = (name: string) => Promise<{ id: string } | { error: string }>;
-
+/**
+ * The editor for both Add and Edit (F17): one box sorted into the parts (Add), or the parts
+ * with Re-record (Edit); the situations under them; then the guidance line and examples.
+ */
 function Editor({
   kind,
   idPrefix,
+  mode,
   f,
   onChange,
   onTick,
+  onPhase,
   options,
-  onCreateOption,
+  onCreateOptions,
+  disabled,
 }: {
   kind: ItemKind;
   idPrefix: string;
+  mode: "capture" | "fields";
   f: Fields;
   onChange: (f: Fields) => void;
-  /** Ticks a situation by id against the latest fields (a create resolves after `f` was captured). */
-  onTick: (id: string) => void;
+  /** Ticks situations by id against the latest fields (a create resolves after `f` was captured). */
+  onTick: (ids: string[]) => void;
+  onPhase: (phase: CapturePhase) => void;
   options: SituationOption[];
-  onCreateOption: CreateOption;
+  onCreateOptions: CreateOptions;
+  disabled?: boolean;
 }) {
   const copy = COPY[kind];
   const [examplesOpen, setExamplesOpen] = useState(false);
-  const setF = (k: keyof Fields) => (v: string) => onChange({ ...f, [k]: v });
   return (
     <>
-      <div className="proof-grid">
-        {kind === "cue" ? (
-          <>
-            <Part id={`${idPrefix}-when`} label="WHEN" value={f.when} onChange={setF("when")} placeholder={PLACEHOLDER.cueWhen} />
-            <Part id={`${idPrefix}-name`} label="REMIND" value={f.name} onChange={setF("name")} placeholder={copy.namePlaceholder} strong />
-            <Part id={`${idPrefix}-note`} label="NOTE" value={f.note} onChange={setF("note")} placeholder="optional" />
-          </>
-        ) : (
-          <>
-            <Part id={`${idPrefix}-name`} label="WHEN" value={f.name} onChange={setF("name")} placeholder={copy.namePlaceholder} strong />
-            <Part id={`${idPrefix}-then`} label="THEN" value={f.then} onChange={setF("then")} placeholder={PLACEHOLDER.then} />
-            <Part id={`${idPrefix}-recover`} label="RECOVERED WHEN" value={f.recover} onChange={setF("recover")} placeholder={PLACEHOLDER.recover} />
-          </>
-        )}
-      </div>
-      <SituationPicker
-        idPrefix={idPrefix}
-        kind={kind}
-        options={options}
-        selected={f.situationIds}
-        onToggle={(id) => onChange({ ...f, situationIds: f.situationIds.includes(id) ? f.situationIds.filter((x) => x !== id) : [...f.situationIds, id] })}
-        onCreate={async (name) => {
-          const res = await onCreateOption(name);
-          if ("error" in res) return res.error;
-          onTick(res.id);
-          return null;
-        }}
-      />
+      <CaptureBox kind={CAPTURE_KIND[kind]} idPrefix={idPrefix} mode={mode} parts={f.parts} onParts={(parts) => onChange({ ...f, parts })} onPhase={onPhase} disabled={disabled}>
+        <SituationPicker
+          idPrefix={idPrefix}
+          options={options}
+          selected={f.situationIds}
+          onToggle={(id) => onChange({ ...f, situationIds: f.situationIds.includes(id) ? f.situationIds.filter((x) => x !== id) : [...f.situationIds, id] })}
+          onCreate={async (names) => {
+            const res = await onCreateOptions(names);
+            if ("error" in res) return res.error;
+            onTick(res.ids);
+            return null;
+          }}
+        />
+      </CaptureBox>
       <p style={{ fontSize: 12, color: "var(--muted)", margin: "10px 0 0", lineHeight: 1.5, maxWidth: "70ch" }}>{copy.guidance}</p>
       <button type="button" className="disclosure" style={{ marginTop: 6, fontSize: 12 }} aria-expanded={examplesOpen} onClick={() => setExamplesOpen((o) => !o)}>
         <span aria-hidden="true">{examplesOpen ? "▾" : "▸"}</span> Examples
@@ -304,23 +284,30 @@ function Editor({
 function AddCard({
   kind,
   options,
-  onCreateOption,
+  onCreateOptions,
   onError,
 }: {
   kind: ItemKind;
   options: SituationOption[];
-  onCreateOption: CreateOption;
+  onCreateOptions: CreateOptions;
   onError: (e: string | null) => void;
 }) {
   const copy = COPY[kind];
-  const [f, setF] = useState<Fields>(EMPTY);
+  const [f, setF] = useState<Fields>(() => empty(kind));
+  const [phase, setPhase] = useState<CapturePhase>("idle");
+  const [key, setKey] = useState(0);
   const [scope, setScope] = useState<ItemScope>("global");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const ok = ready(kind, f);
+  const hint = saveHint(kind, f, phase);
+  const ok = hint === null;
 
   function submit() {
-    if (!ok || pending) return;
+    if (pending) return;
+    if (!ok) {
+      focusMissingPart("add", CAPTURE_KIND[kind], f.parts);
+      return;
+    }
     setError(null);
     start(async () => {
       const res = await callAction(() => createItem(kind, toInput(kind, f, scope)));
@@ -328,12 +315,14 @@ function AddCard({
         setError(res.error);
         return;
       }
-      setF(EMPTY);
+      setF(empty(kind));
+      setPhase("idle");
+      setKey((k) => k + 1);
       onError(null);
     });
   }
 
-  const tick = (id: string) => setF((p) => (p.situationIds.includes(id) ? p : { ...p, situationIds: [...p.situationIds, id] }));
+  const tick = (ids: string[]) => setF((p) => ({ ...p, situationIds: [...p.situationIds, ...ids.filter((id) => !p.situationIds.includes(id))] }));
 
   return (
     <form
@@ -348,7 +337,7 @@ function AddCard({
       <h2 className="card-title" style={{ marginBottom: 12 }}>
         {copy.addTitle}
       </h2>
-      <Editor kind={kind} idPrefix="add" f={f} onChange={setF} onTick={tick} options={options} onCreateOption={onCreateOption} />
+      <Editor key={key} kind={kind} idPrefix="add" mode="capture" f={f} onChange={setF} onTick={tick} onPhase={setPhase} options={options} onCreateOptions={onCreateOptions} disabled={pending} />
       {error ? (
         <ErrorBar style={{ marginTop: 12 }} action={{ label: "Retry", submit: true }}>{error}</ErrorBar>
       ) : null}
@@ -356,7 +345,7 @@ function AddCard({
         <ScopeChips value={scope} onChange={setScope} />
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span className="hint" id="add-hint" aria-live="polite">
-            {ok ? "" : copy.addHint}
+            {hint ?? ""}
           </span>
           <button type="submit" className="btn btn-primary" aria-disabled={pending || !ok} aria-describedby={ok ? undefined : "add-hint"}>
             {pending ? "Adding…" : "Add"}
@@ -411,7 +400,7 @@ function ViewParts({ item }: { item: LibraryItem }) {
 function ItemCard({
   item,
   options,
-  onCreateOption,
+  onCreateOptions,
   position,
   first,
   last,
@@ -420,7 +409,7 @@ function ItemCard({
 }: {
   item: LibraryItem;
   options: SituationOption[];
-  onCreateOption: CreateOption;
+  onCreateOptions: CreateOptions;
   position: number;
   first: boolean;
   last: boolean;
@@ -429,6 +418,7 @@ function ItemCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [f, setF] = useState<Fields>(() => fieldsOf(item));
+  const [phase, setPhase] = useState<CapturePhase>("manual");
   const [scope, setScope] = useState<ItemScope>(item.scope);
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<{ verb: string; list: BlockedSprint[] } | null>(null);
@@ -439,11 +429,13 @@ function ItemCard({
     if (wasEditing.current && !editing) editButton.current?.focus();
     wasEditing.current = editing;
   }, [editing]);
-  const ok = ready(item.kind, f);
-  const tick = (id: string) => setF((p) => (p.situationIds.includes(id) ? p : { ...p, situationIds: [...p.situationIds, id] }));
+  const hint = saveHint(item.kind, f, phase);
+  const ok = hint === null;
+  const tick = (ids: string[]) => setF((p) => ({ ...p, situationIds: [...p.situationIds, ...ids.filter((id) => !p.situationIds.includes(id))] }));
 
   function startEdit() {
     setF(fieldsOf(item));
+    setPhase("manual");
     setScope(item.scope);
     setError(null);
     setBlocked(null);
@@ -451,7 +443,11 @@ function ItemCard({
   }
 
   function save() {
-    if (!ok || busy) return;
+    if (busy) return;
+    if (!ok) {
+      focusMissingPart(`edit-${item.id}`, CAPTURE_KIND[item.kind], f.parts);
+      return;
+    }
     setError(null);
     setBlocked(null);
     start(async () => {
@@ -523,7 +519,6 @@ function ItemCard({
           {!editing ? (
             <>
               <ViewParts item={item} />
-              {item.kind === "cue" && item.explanation ? <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8, lineHeight: 1.45 }}>{item.explanation}</div> : null}
               <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 10 }}>
                 <span className="option-tag" style={{ marginTop: 0 }}>
                   {scopeLabel(item.scope)}
@@ -552,12 +547,12 @@ function ItemCard({
                 save();
               }}
             >
-              <Editor kind={item.kind} idPrefix={`edit-${item.id}`} f={f} onChange={setF} onTick={tick} options={options} onCreateOption={onCreateOption} />
+              <Editor kind={item.kind} idPrefix={`edit-${item.id}`} mode="fields" f={f} onChange={setF} onTick={tick} onPhase={setPhase} options={options} onCreateOptions={onCreateOptions} disabled={busy} />
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
                 <ScopeChips value={scope} onChange={setScope} disabled={busy} />
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <span className="hint" id={`edit-${item.id}-hint`} aria-live="polite">
-                    {ok ? "" : COPY[item.kind].addHint}
+                    {hint ?? ""}
                   </span>
                   <button type="button" className="btn btn-ghost" onClick={() => setEditing(false)}>
                     Cancel

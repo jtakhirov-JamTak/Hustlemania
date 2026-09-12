@@ -48,8 +48,8 @@ export function TodayCard({
   observations: DayObservations;
   items: SprintItems;
   library: { cues: LibraryItem[]; impediments: LibraryItem[] };
-  /** F15: the live situations per kind, for "Set up tomorrow"'s inline creates. */
-  situations: { cues: SituationItem[]; impediments: SituationItem[] };
+  /** F15 / F17: the live situations, for "Set up tomorrow"'s inline creates. */
+  situations: SituationItem[];
   canClose: boolean;
   cannotCloseReason?: string;
   /** The sprint starts tomorrow: this is Day 1 shown ahead of time. */
@@ -354,7 +354,7 @@ function Closed({
   observations: DayObservations;
   items: SprintItems;
   library: { cues: LibraryItem[]; impediments: LibraryItem[] };
-  situations: { cues: SituationItem[]; impediments: SituationItem[] };
+  situations: SituationItem[];
   setupTomorrow: boolean;
   /** The close just happened here: the result takes focus so it is announced (SC 4.1.3). */
   announce: boolean;
@@ -467,7 +467,7 @@ function Closed({
               kind={adding}
               sprintId={sprintId}
               candidates={candidatesFor(adding, library, adding === "cue" ? items.cues : items.impediments)}
-              situations={adding === "cue" ? situations.cues : situations.impediments}
+              situations={situations}
               onClose={() => setAdding(null)}
             />
           ) : null}

@@ -77,9 +77,9 @@ export async function insertVision(user: TestUser, body = "A 1-year vision", opt
 
 export type ItemKind = "cue" | "impediment";
 
-/** F15: a situation in the owner's library for one kind (direct INSERT; rank by trigger). */
-export async function insertSituation(user: TestUser, kind: ItemKind, name: string, scope = "global"): Promise<string> {
-  const res = await user.client.from("situations").insert({ user_id: user.id, kind, name, scope }).select("id").single();
+/** F15 / F17: a situation in the owner's one library (direct INSERT; rank by trigger). */
+export async function insertSituation(user: TestUser, name: string, scope = "global"): Promise<string> {
+  const res = await user.client.from("situations").insert({ user_id: user.id, name, scope }).select("id").single();
   if (res.error) throw new Error(res.error.message);
   return res.data.id as string;
 }
@@ -107,17 +107,16 @@ export async function insertCue(
   user: TestUser,
   name: string,
   scope = "global",
-  explanation: string | null = null,
   opts: { situation?: boolean | string; cueWhen?: string | null } = {},
 ): Promise<string> {
   const res = await user.client
     .from("cues")
-    .insert({ user_id: user.id, name, scope, explanation, cue_when: opts.cueWhen ?? null })
+    .insert({ user_id: user.id, name, scope, cue_when: opts.cueWhen ?? null })
     .select("id")
     .single();
   if (res.error) throw new Error(res.error.message);
   if (opts.situation !== false) {
-    const sit = await insertSituation(user, "cue", typeof opts.situation === "string" ? opts.situation : name, scope);
+    const sit = await insertSituation(user, typeof opts.situation === "string" ? opts.situation : name, scope);
     await setSituations(user, "cue", res.data.id as string, [sit]);
   }
   return res.data.id as string;
@@ -145,7 +144,7 @@ export async function insertImpediment(
     .single();
   if (res.error) throw new Error(res.error.message);
   if (opts.situation !== false) {
-    const sit = await insertSituation(user, "impediment", typeof opts.situation === "string" ? opts.situation : name, opts.scope ?? "global");
+    const sit = await insertSituation(user, typeof opts.situation === "string" ? opts.situation : name, opts.scope ?? "global");
     await setSituations(user, "impediment", res.data.id as string, [sit]);
   }
   return res.data.id as string;
@@ -161,7 +160,7 @@ export type SprintItems = {
 
 /** One global cue and one global impediment with a complete response, each with a situation — the minimum start_sprint accepts. */
 export async function seedItems(user: TestUser, scope = "global"): Promise<SprintItems & { situations: { cue: string; impediment: string } }> {
-  const cue = await insertCue(user, "Ask how much this pays", scope, null, { situation: "Scheduling", cueWhen: "I schedule anything" });
+  const cue = await insertCue(user, "Ask how much this pays", scope, { situation: "Scheduling", cueWhen: "I schedule anything" });
   const imp = await insertImpediment(user, "I notice myself delaying my first work block", {
     scope,
     proofThen: "I start a 10-minute timer on the smallest executable task",
@@ -189,7 +188,6 @@ export type StartSprintArgs = SprintItems & {
   p_unit: string | null;
   p_amount: number;
   p_confidence: number;
-  p_why: string;
   p_celebration: string;
   p_mantra: string;
   p_usage_of_funds: unknown[];
@@ -199,7 +197,6 @@ export type StartSprintArgs = SprintItems & {
   p_proof_then?: string | null;
   p_proof_recover?: string | null;
   p_targets?: number[] | null;
-  p_intentions?: (string | null)[] | null;
 };
 
 export function moneySprintArgs(
@@ -217,7 +214,6 @@ export function moneySprintArgs(
     p_unit: null,
     p_amount: 800_000, // 8,000.00 USD in minor units
     p_confidence: 7,
-    p_why: "Because a cushion buys calm",
     p_celebration: "Dinner at the lake",
     p_mantra: "Boring money is the money that stays.",
     p_usage_of_funds: [{ label: "Rent", amount: 280_000 }],

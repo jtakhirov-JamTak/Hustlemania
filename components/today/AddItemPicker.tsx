@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { addSprintItem, createItem, createSituation } from "@/app/(app)/actions/library";
+import { addSprintItem, createItem, createSituations } from "@/app/(app)/actions/library";
 import { ItemPicker } from "@/components/ItemPicker";
 import type { SituationOption } from "@/components/SituationPicker";
 import { callAction } from "@/lib/callAction";
@@ -23,7 +23,7 @@ export function AddItemPicker({
   kind: ItemKind;
   sprintId: string;
   candidates: LibraryItem[];
-  /** The live situations of this kind, for the inline create's APPLIES TO ticks. */
+  /** The live situations, for the inline create's APPLIES TO ticks (one library, F17). */
   situations: SituationOption[];
   onClose: () => void;
 }) {
@@ -74,15 +74,15 @@ export function AddItemPicker({
         placeholder: kind === "cue" ? "Create a new execution cue" : "Create a new impediment",
         whenLabel: kind === "cue" ? "I schedule anything" : undefined,
         situations: {
-          kind,
           options,
           selected: ticked,
           onToggle: (id) => setTicked((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id])),
-          onCreate: async (name) => {
-            const res = await callAction(() => createSituation(kind, name, "global"));
-            if (res.error || !res.id) return res.error ?? "That did not save.";
-            setOptions((o) => [...o, { id: res.id!, name }]);
-            setTicked((t) => [...t, res.id!]);
+          onCreate: async (names) => {
+            const res = await callAction(() => createSituations(names, "global"));
+            if (res.error || !res.ids) return res.error ?? "That did not save.";
+            const ids = res.ids;
+            setOptions((o) => [...o, ...ids.map((id, i) => ({ id, name: names[i] ?? "" })).filter((n) => !o.some((x) => x.id === n.id))]);
+            setTicked((t) => [...t, ...ids.filter((id) => !t.includes(id))]);
             return null;
           },
         },
@@ -95,7 +95,6 @@ export function AddItemPicker({
               id: res.id!,
               kind,
               name,
-              explanation: null,
               scope: "global",
               rank: 0,
               archived_at: null,

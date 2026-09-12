@@ -60,16 +60,16 @@ async function library(userId: string) {
     await admin
       .from("situations")
       .insert([
-        { user_id: userId, kind: "impediment", name: "Starting late", rank: 1 },
-        { user_id: userId, kind: "impediment", name: "Late night before", rank: 2 },
-        { user_id: userId, kind: "impediment", name: "After lunch", rank: 3 },
-        { user_id: userId, kind: "cue", name: "Scheduling", rank: 1 },
-        { user_id: userId, kind: "cue", name: "Any meeting", rank: 2 },
+        { user_id: userId, name: "Starting late", rank: 1 },
+        { user_id: userId, name: "Late night before", rank: 2 },
+        { user_id: userId, name: "After lunch", rank: 3 },
+        { user_id: userId, name: "Scheduling", rank: 4 },
+        { user_id: userId, name: "Any meeting", rank: 5 },
       ])
-      .select("id, kind, name"),
+      .select("id, name"),
     "situations",
   );
-  const sit = (kind: string, name: string) => sits.find((s) => s.kind === kind && s.name === name)!.id;
+  const sit = (_kind: string, name: string) => sits.find((s) => s.name === name)!.id;
   const S = { S1: sit("impediment", "Starting late"), S2: sit("impediment", "Late night before"), S3: sit("impediment", "After lunch") };
   const C = { C1: sit("cue", "Scheduling"), C2: sit("cue", "Any meeting") };
 

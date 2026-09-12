@@ -16,7 +16,8 @@ import { celebrationState } from "@/lib/sprintDay";
 
 const PROOF_HINT = "THEN and the recovery criterion are both required.";
 
-export type Situations = { cues: SituationItem[]; impediments: SituationItem[] };
+/** F17: one situations library; both cards offer the same list to their inline creates. */
+export type Situations = SituationItem[];
 
 type UsageRow = { label: string; amount: number };
 
@@ -48,7 +49,7 @@ export function Rail({
   streakText: string;
   items: SprintItems;
   library: { cues: LibraryItem[]; impediments: LibraryItem[] };
-  /** F15: the live situations per kind, for the inline creates. */
+  /** F15 / F17: the live situations, for the inline creates. */
   situations: Situations;
   /** The sprint window has passed: the rail reads, nothing edits. */
   locked: boolean;
@@ -74,8 +75,8 @@ export function Rail({
           <div className="r-lesson">“{lastLesson}”</div>
         </section>
       ) : null}
-      <HighestCard sprintId={sprintId} impediments={items.impediments} library={library} situations={situations.impediments} locked={locked} />
-      <CuesCard sprintId={sprintId} cues={items.cues} library={library} situations={situations.cues} locked={locked} />
+      <HighestCard sprintId={sprintId} impediments={items.impediments} library={library} situations={situations} locked={locked} />
+      <CuesCard sprintId={sprintId} cues={items.cues} library={library} situations={situations} locked={locked} />
       {goalReached && !locked ? <CompleteCard sprintId={sprintId} measured={measured} cumulative={cumulative} goal={goal} openDays={openDays} /> : null}
       <Celebration text={celebration} cumulative={cumulative} goal={goal} />
       {measured.measurement === "money" && usage.length > 0 ? (

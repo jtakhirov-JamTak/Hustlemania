@@ -218,12 +218,12 @@ describe("start_sprint with cues and impediments (rules 3–6)", () => {
   });
 
   it("rejects a member without a live situation (F15)", async () => {
-    const bareCue = await insertCue(u, "Bare cue", "global", null, { situation: false });
+    const bareCue = await insertCue(u, "Bare cue", "global", { situation: false });
     const bareImp = await insertImpediment(u, "Bare impediment", { ...PROOF, situation: false });
     await expectRpcError(u, "start_sprint", base({ p_cue_ids: [bareCue], p_impediment_ids: [imps[0]], p_highest_impediment_id: imps[0] }), "no_situations");
     await expectRpcError(u, "start_sprint", base({ p_cue_ids: [cues[0]], p_impediment_ids: [bareImp], p_highest_impediment_id: bareImp }), "no_situations");
     // An archived situation does not count as live.
-    const sit = await insertSituation(u, "impediment", "Archived later");
+    const sit = await insertSituation(u, "Archived later");
     await setSituations(u, "impediment", bareImp, [sit]);
     await rpc(u, "archive_item", { p_kind: "situation", p_item_id: sit });
     await expectRpcError(u, "start_sprint", base({ p_cue_ids: [cues[0]], p_impediment_ids: [bareImp], p_highest_impediment_id: bareImp }), "no_situations");
@@ -283,7 +283,7 @@ describe("library rules and sprint membership", () => {
     u = await createTestUser("lib-rules");
     today = await dbTodayIn(TZ);
     await insertVision(u);
-    cueA = await insertCue(u, "Cue A", "global", "  why it matters  ");
+    cueA = await insertCue(u, "Cue A");
     cueB = await insertCue(u, "Cue B");
     impHighest = await insertImpediment(u, "Highest", PROOF);
     impOther = await insertImpediment(u, "Other", { proofThen: "then", proofRecover: "recovered" });
@@ -297,13 +297,12 @@ describe("library rules and sprint membership", () => {
     await deleteTestUser(u);
   });
 
-  it("insert appends at the end of the owner's library and trims explanation", async () => {
-    const rows = await u.client.from("cues").select("name, rank, explanation").order("rank");
+  it("insert appends at the end of the owner's library", async () => {
+    const rows = await u.client.from("cues").select("name, rank").order("rank");
     expect(rows.data!.map((r) => [r.name, r.rank])).toEqual([
       ["Cue A", 1],
       ["Cue B", 2],
     ]);
-    expect(rows.data![0].explanation).toBe("why it matters");
   });
 
   it("rule 22: the highest impediment's response may be edited but not cleared", async () => {
@@ -354,7 +353,7 @@ describe("library rules and sprint membership", () => {
     await expectRpcError(u, "add_sprint_item", { p_sprint_id: sprintId, p_kind: "impediment", p_item_id: noProof }, "proof_point_required");
     const noSituation = await insertImpediment(u, "No situation", { ...PROOF, situation: false });
     await expectRpcError(u, "add_sprint_item", { p_sprint_id: sprintId, p_kind: "impediment", p_item_id: noSituation }, "no_situations");
-    const bareCue = await insertCue(u, "Bare cue", "global", null, { situation: false });
+    const bareCue = await insertCue(u, "Bare cue", "global", { situation: false });
     await expectRpcError(u, "add_sprint_item", { p_sprint_id: sprintId, p_kind: "cue", p_item_id: bareCue }, "no_situations");
 
     const extra = await insertImpediment(u, "Extra", PROOF);
@@ -578,7 +577,7 @@ describe("close_day with day observations (F7)", () => {
     u = await createTestUser("lib-close");
     today = await dbTodayIn(KTZ);
     await insertVision(u);
-    cueA = await insertCue(u, "Cue A", "global", "  why it matters  ", { situation: "Calendar open" });
+    cueA = await insertCue(u, "Cue A", "global", { situation: "Calendar open" });
     cueRemoved = await insertCue(u, "Cue removed today");
     impHighest = await insertImpediment(u, "Highest", { ...PROOF, situation: "Starting late" });
     impRemoved = await insertImpediment(u, "Removed today", PROOF);
@@ -608,7 +607,7 @@ describe("close_day with day observations (F7)", () => {
     await deleteTestUser(u);
   });
 
-  type Offered = { kind: string; item_id: string; name: string; explanation: string | null; cue_when: string | null; proof_recover: string | null; is_focus: boolean; situations: { id: string; name: string; rank: number }[] };
+  type Offered = { kind: string; item_id: string; name: string; cue_when: string | null; proof_recover: string | null; is_focus: boolean; situations: { id: string; name: string; rank: number }[] };
 
   it("offers the items whose membership overlapped the day, later removal notwithstanding, with the F6 columns, the focus flag and each item's live situations (F15)", async () => {
     const res = await u.client.rpc("day_offered_items", { p_sprint_day_id: day1 });
@@ -616,16 +615,16 @@ describe("close_day with day observations (F7)", () => {
     const rows = res.data as Offered[];
     const ids = rows.map((r) => `${r.kind}:${r.item_id}`).sort();
     expect(ids).toEqual([`cue:${cueA}`, `cue:${cueRemoved}`, `impediment:${impHighest}`, `impediment:${impRemoved}`].sort());
-    // F16: a cue's explanation (its NOTE) is still offered, trimmed; an impediment's is null — the column is gone.
-    expect(rows.find((r) => r.item_id === cueA)).toMatchObject({ cue_when: "I open the calendar", is_focus: true, proof_recover: null, explanation: "why it matters" });
+    // F17: no explanation column on either kind — the return type was rebuilt without it.
+    expect(rows.find((r) => r.item_id === cueA)).toMatchObject({ cue_when: "I open the calendar", is_focus: true, proof_recover: null });
     expect(rows.find((r) => r.item_id === cueRemoved)).toMatchObject({ is_focus: false });
-    expect(rows.find((r) => r.item_id === impHighest)).toMatchObject({ proof_recover: PROOF.proofRecover, is_focus: false, cue_when: null, explanation: null });
-    expect(Object.keys(rows[0])).toContain("explanation");
+    expect(rows.find((r) => r.item_id === impHighest)).toMatchObject({ proof_recover: PROOF.proofRecover, is_focus: false, cue_when: null });
+    expect(Object.keys(rows[0])).not.toContain("explanation");
     expect(rows.find((r) => r.item_id === impHighest)!.situations.map((s) => s.name)).toEqual(["Starting late"]);
     expect(rows.find((r) => r.item_id === cueA)!.situations.map((s) => s.name)).toEqual(["Calendar open"]);
     expect(Object.keys(rows[0])).not.toContain("proof_when");
     // An archived situation is not offered; the live one still is.
-    const second = await insertSituation(u, "impediment", "Late night");
+    const second = await insertSituation(u, "Late night");
     await setSituations(u, "impediment", impHighest, [(await situationsOf("impediment", impHighest))[0], second]);
     await rpc(u, "archive_item", { p_kind: "situation", p_item_id: second });
     const again = (await u.client.rpc("day_offered_items", { p_sprint_day_id: day1 })).data as Offered[];
@@ -1114,13 +1113,15 @@ describe("F6 libraries v2", () => {
     };
     // 0005 markers kept by 0009.
     expect(src("start_sprint")).toMatch(/p_targets/);
-    expect(src("start_sprint")).toMatch(/p_intentions/);
+    // F17: the wizard's why and the days 2–14 pre-planning left start_sprint.
+    expect(src("start_sprint")).not.toMatch(/p_intentions|p_why/);
+    expect(src("start_sprint")).toMatch(/p_intention/);
     // 0008 markers kept by 0009.
     expect(src("sprint_invalid_reason")).toMatch(/not coalesce\(p_kind = 'cue' and cue_id = p_exclude_item, false\)/);
     // 0004 markers kept by 0009.
     expect(src("library_item_before_insert")).toMatch(/coalesce\(max\(rank\), 0\) \+ 1/);
     expect(src("impediments_before_update")).toMatch(/s\.status = 'active'/);
-    expect(src("cues_before_update")).toMatch(/new\.explanation := nullif/);
+    expect(src("cues_before_update")).not.toMatch(/explanation/);
     // 0009 itself.
     for (const name of ["start_sprint", "sprint_invalid_reason", "set_highest_impediment", "library_item_before_insert", "impediments_before_update"]) {
       expect(src(name), `${name}: proof_recover`).toMatch(/proof_recover/);
@@ -1157,14 +1158,24 @@ describe("F6 libraries v2", () => {
     }
     // The 0012 lock is untouched: the legacy day columns stay guarded.
     expect(src("sprint_days_immutable_after_close")).toMatch(/new\.proof_when/);
-    // 0020 (F16): the sprint gate, the explanation trim kept for cues only, the atomic
-    // obstacle + rule, the step functions; the old three entry points are gone.
+    // 0020 (F16): the sprint gate, the atomic obstacle + rule, the step functions; the
+    // old three entry points are gone.
     expect(src("start_sprint")).toMatch(/vision_incomplete/);
-    const insertSrc = src("library_item_before_insert");
-    expect(insertSrc.indexOf("new.explanation")).toBeGreaterThan(insertSrc.indexOf("tg_table_name = 'cues'"));
     expect(src("impediments_before_update")).not.toMatch(/explanation/);
-    expect(src("day_offered_items")).toMatch(/null::text as explanation/);
-    expect(src("day_offered_items")).not.toMatch(/i\.explanation/);
+    // 0021 (F17): no body names the cue note, the situation kind or the anchors; the
+    // two new functions carry their own markers; exactly one start_sprint remains.
+    for (const name of ["library_item_before_insert", "cues_before_update", "day_offered_items"]) {
+      expect(src(name), `${name}: explanation`).not.toMatch(/explanation/);
+    }
+    expect(src("set_item_situations")).not.toMatch(/kind = p_kind/);
+    expect(src("move_item")).not.toMatch(/v_kind/);
+    expect(src("situations_before_insert")).not.toMatch(/kind/);
+    expect(src("delete_situation")).toMatch(/affected_sprints_check/);
+    expect(src("delete_situation")).toMatch(/archived_at = coalesce/);
+    expect(src("delete_situation")).toMatch(/day_impediment_situation_observations/);
+    expect(src("create_situations")).toMatch(/ordinality/);
+    expect(src("create_situations")).toMatch(/lower\(name\)/);
+    expect(fns.filter((f) => f.proname === "start_sprint")).toHaveLength(1);
     expect(src("save_vision_goal")).toMatch(/interval '12 months'/);
     expect(src("save_vision_picture")).toMatch(/vision_picture_required/);
     expect(src("set_vision_obstacle")).toMatch(/rule_incomplete/);
@@ -1374,9 +1385,10 @@ describe("F6 libraries v2", () => {
 });
 
 // ---------------------------------------------------------------------------
-// F15 — Situations: the library, the attachments, the amended sprint rules.
+// F15 / F17 — Situations: one library, the attachments, the amended sprint rules,
+// create_situations and delete_situation.
 // ---------------------------------------------------------------------------
-describe("F15 situations", () => {
+describe("F17 situations", () => {
   let u: TestUser;
   let today: string;
   let cue: string;
@@ -1384,10 +1396,10 @@ describe("F15 situations", () => {
   let sprintId: string;
 
   beforeAll(async () => {
-    u = await createTestUser("lib-f15");
+    u = await createTestUser("lib-f17");
     today = await dbTodayIn(TZ);
     await insertVision(u);
-    cue = await insertCue(u, "Ask how much this pays", "global", null, { situation: "Scheduling" });
+    cue = await insertCue(u, "Ask how much this pays", "global", { situation: "Scheduling" });
     imp = await insertImpediment(u, "I notice delaying", { ...PROOF, situation: "Starting late" });
   });
 
@@ -1395,39 +1407,44 @@ describe("F15 situations", () => {
     await deleteTestUser(u);
   });
 
-  it("situations rank per user and kind, trim their name, and refuse a blank one or an unknown kind", async () => {
-    const a = await insertSituation(u, "impediment", "  Late night  ");
-    const b = await insertSituation(u, "cue", "Any meeting");
-    const rows = await sql<{ kind: string; name: string; rank: number }[]>`select kind, name, rank from public.situations where user_id = ${u.id} order by kind, rank`;
+  const order = async () => (await sql<{ id: string }[]>`select id from public.situations where user_id = ${u.id} and archived_at is null order by rank, id`).map((r) => r.id);
+
+  it("situations rank per user in one sequence, trim their name, refuse a blank one, and carry no kind", async () => {
+    const a = await insertSituation(u, "  Late night  ");
+    const b = await insertSituation(u, "Any meeting");
+    const rows = await sql<{ name: string; rank: number }[]>`select name, rank from public.situations where user_id = ${u.id} order by rank`;
     expect(rows).toEqual([
-      { kind: "cue", name: "Scheduling", rank: 1 },
-      { kind: "cue", name: "Any meeting", rank: 2 },
-      { kind: "impediment", name: "Starting late", rank: 1 },
-      { kind: "impediment", name: "Late night", rank: 2 },
+      { name: "Scheduling", rank: 1 },
+      { name: "Starting late", rank: 2 },
+      { name: "Late night", rank: 3 },
+      { name: "Any meeting", rank: 4 },
     ]);
-    const blank = await u.client.from("situations").insert({ user_id: u.id, kind: "impediment", name: "   " });
+    const blank = await u.client.from("situations").insert({ user_id: u.id, name: "   " });
     expect(blank.error).not.toBeNull();
-    const badKind = await u.client.from("situations").insert({ user_id: u.id, kind: "obstacle", name: "x" });
-    expect(badKind.error).not.toBeNull();
+    const withKind = await u.client.from("situations").insert({ user_id: u.id, name: "x", kind: "cue" } as never);
+    expect(withKind.error?.message).toMatch(/kind/);
     await sql`delete from public.situations where id in (${a}, ${b})`;
   });
 
-  it("set_item_situations replaces the set; refuses a stranger's, the other kind's or an archived situation; empty is fine on an unused item", async () => {
+  it("set_item_situations replaces the set; one situation may serve a cue and an impediment at once; refuses a stranger's or an archived one; empty is fine on an unused item", async () => {
     const s1 = (await situationsOf("impediment", imp))[0];
-    const s2 = await insertSituation(u, "impediment", "Late night");
-    const cueSit = await insertSituation(u, "cue", "Any meeting");
+    const cueSit = (await situationsOf("cue", cue))[0];
+    const s2 = await insertSituation(u, "Late night");
     await setSituations(u, "impediment", imp, [s2, s1, s2]);
     expect(await situationsOf("impediment", imp)).toEqual([s1, s2]);
-    await expectRpcError(u, "set_item_situations", { p_kind: "impediment", p_item_id: imp, p_situation_ids: [cueSit] }, "situation_not_found");
-    const other = await createTestUser("lib-f15-other");
+    // F17: the cue's situation attaches to the impediment too — one library.
+    await setSituations(u, "impediment", imp, [s1, s2, cueSit]);
+    expect(await situationsOf("impediment", imp)).toEqual([cueSit, s1, s2]);
+    await setSituations(u, "impediment", imp, [s1, s2]);
+    const other = await createTestUser("lib-f17-other");
     try {
-      const theirs = await insertSituation(other, "impediment", "Not yours");
+      const theirs = await insertSituation(other, "Not yours");
       await expectRpcError(u, "set_item_situations", { p_kind: "impediment", p_item_id: imp, p_situation_ids: [theirs] }, "situation_not_found");
       await expectRpcError(other, "set_item_situations", { p_kind: "impediment", p_item_id: imp, p_situation_ids: [theirs] }, "item_not_found");
     } finally {
       await deleteTestUser(other);
     }
-    const archived = await insertSituation(u, "impediment", "Archived");
+    const archived = await insertSituation(u, "Archived");
     await rpc(u, "archive_item", { p_kind: "situation", p_item_id: archived });
     await expectRpcError(u, "set_item_situations", { p_kind: "impediment", p_item_id: imp, p_situation_ids: [s1, archived] }, "situation_archived");
     expect(await situationsOf("impediment", imp)).toEqual([s1, s2]);
@@ -1438,52 +1455,49 @@ describe("F15 situations", () => {
     expect(await situationsOf("impediment", spare)).toEqual([]);
   });
 
-  it("the composite FK refuses a cue situation on an impediment even for the postgres role", async () => {
-    const [cueSit] = await sql<{ id: string }[]>`select id from public.situations where user_id = ${u.id} and kind = 'cue' limit 1`;
-    await expect(sql`insert into public.impediment_situations (user_id, impediment_id, situation_id) values (${u.id}, ${imp}, ${cueSit.id})`).rejects.toThrow(/foreign key/);
-    await expect(
-      sql`insert into public.impediment_situations (user_id, impediment_id, situation_id, situation_kind) values (${u.id}, ${imp}, ${cueSit.id}, 'cue')`,
-    ).rejects.toThrow(/situation_kind/);
+  it("the plain FK refuses an unknown situation even for the postgres role; the same row sits in both join tables; the anchors are gone", async () => {
+    await expect(sql`insert into public.impediment_situations (user_id, impediment_id, situation_id) values (${u.id}, ${imp}, '00000000-0000-0000-0000-000000000000')`).rejects.toThrow(/foreign key/);
+    const cueSit = (await situationsOf("cue", cue))[0];
+    await sql`insert into public.impediment_situations (user_id, impediment_id, situation_id) values (${u.id}, ${imp}, ${cueSit})`;
+    expect(await situationsOf("impediment", imp)).toContain(cueSit);
+    await sql`delete from public.impediment_situations where impediment_id = ${imp} and situation_id = ${cueSit}`;
+    const [cols] = await sql<{ n: number }[]>`select count(*)::int as n from information_schema.columns where table_schema = 'public' and table_name in ('impediment_situations', 'cue_situations') and column_name = 'situation_kind'`;
+    expect(cols.n).toBe(0);
   });
 
-  it("authenticated cannot write kind, scope, rank or archived_at on a situation, nor the join tables directly", async () => {
+  it("authenticated cannot write scope, rank or archived_at on a situation, delete one directly, or touch the join tables", async () => {
     const [sit] = await situationsOf("impediment", imp);
-    for (const patch of [{ kind: "cue" }, { scope: "health" }, { rank: 99 }, { archived_at: new Date().toISOString() }]) {
+    for (const patch of [{ scope: "health" }, { rank: 99 }, { archived_at: new Date().toISOString() }]) {
       const res = await u.client.from("situations").update(patch).eq("id", sit);
       expect(res.error, JSON.stringify(patch)).not.toBeNull();
       expect(res.error!.code).toBe("42501");
     }
+    // F17: no DELETE grant — a row goes only through delete_situation.
+    const loose = await insertSituation(u, "Loose");
+    const del = await u.client.from("situations").delete().eq("id", loose).select("id");
+    expect(del.error?.code).toBe("42501");
+    expect((await sql`select 1 from public.situations where id = ${loose}`).length).toBe(1);
+    await sql`delete from public.situations where id = ${loose}`;
     const ins = await u.client.from("impediment_situations").insert({ user_id: u.id, impediment_id: imp, situation_id: sit });
     expect(ins.error!.code).toBe("42501");
-    const del = await u.client.from("impediment_situations").delete().eq("impediment_id", imp);
-    expect(del.error!.code).toBe("42501");
+    const delJoin = await u.client.from("impediment_situations").delete().eq("impediment_id", imp);
+    expect(delJoin.error!.code).toBe("42501");
     expect(await situationsOf("impediment", imp)).toHaveLength(2);
   });
 
-  it("rule 19 analogue: a situation deletes only while unattached", async () => {
-    const [attached] = await situationsOf("impediment", imp);
-    const refused = await u.client.from("situations").delete().eq("id", attached).select("id");
-    expect(refused.error).toBeNull();
-    expect(refused.data).toEqual([]);
-    const loose = await insertSituation(u, "impediment", "Loose");
-    const ok = await u.client.from("situations").delete().eq("id", loose).select("id");
-    expect(ok.error).toBeNull();
-    expect(ok.data).toHaveLength(1);
-  });
-
-  it("move_item, set_item_scope and restore_item take the situation kind; scope never touches a sprint", async () => {
-    const [s1, s2] = await situationsOf("impediment", imp);
-    const order = async () => (await sql<{ id: string }[]>`select id from public.situations where user_id = ${u.id} and kind = 'impediment' and archived_at is null order by rank, id`).map((r) => r.id);
-    expect(await order()).toEqual([s1, s2]);
-    await rpc(u, "move_item", { p_kind: "situation", p_item_id: s2, p_direction: "up" });
-    expect(await order()).toEqual([s2, s1]);
-    await rpc(u, "move_item", { p_kind: "situation", p_item_id: s2, p_direction: "down" });
-    expect(await order()).toEqual([s1, s2]);
-    // A cue situation is not a neighbour of an impediment situation.
+  it("move_item, set_item_scope and restore_item take the situation kind; the one list moves across the former kinds; scope never touches a sprint", async () => {
     const cueSit = (await situationsOf("cue", cue))[0];
-    const [cueRank] = await sql<{ rank: number }[]>`select rank from public.situations where id = ${cueSit}`;
+    const [s1, s2] = await situationsOf("impediment", imp);
+    expect(await order()).toEqual([cueSit, s1, s2]);
+    await rpc(u, "move_item", { p_kind: "situation", p_item_id: s2, p_direction: "up" });
+    expect(await order()).toEqual([cueSit, s2, s1]);
+    await rpc(u, "move_item", { p_kind: "situation", p_item_id: s2, p_direction: "down" });
+    expect(await order()).toEqual([cueSit, s1, s2]);
+    // F17: the cue's situation is a neighbour of the impediment's — there is one list.
+    await rpc(u, "move_item", { p_kind: "situation", p_item_id: cueSit, p_direction: "down" });
+    expect(await order()).toEqual([s1, cueSit, s2]);
     await rpc(u, "move_item", { p_kind: "situation", p_item_id: cueSit, p_direction: "up" });
-    expect((await sql<{ rank: number }[]>`select rank from public.situations where id = ${cueSit}`)[0].rank).toBe(cueRank.rank);
+    expect(await order()).toEqual([cueSit, s1, s2]);
 
     expect(await rpc<ArchiveResult>(u, "set_item_scope", { p_kind: "situation", p_item_id: s2, p_scope: "health" })).toEqual({ ok: true, removed_from: 0 });
     const [scoped] = await sql<{ scope: string }[]>`select scope from public.situations where id = ${s2}`;
@@ -1505,6 +1519,76 @@ describe("F15 situations", () => {
       moneySprintArgs({ p_area: "health", p_cue_ids: [], p_focus_cue_id: null, p_impediment_ids: [imp, second], p_highest_impediment_id: null as never, p_start_date: today }),
       "no_highest_impediment",
     );
+  });
+
+  it("create_situations: rows in the spoken order with contiguous ranks; blanks and in-list duplicates dropped; a live same-name row reused, an archived one not; [] → []; a bad scope refused", async () => {
+    const [{ max }] = await sql<{ max: number }[]>`select max(rank)::int as max from public.situations where user_id = ${u.id}`;
+    const s2 = (await situationsOf("impediment", imp))[1];
+    const ids = await rpc<string[]>(u, "create_situations", { p_names: ["  Phone   in bed ", "", "phone in bed", "late night", "Archived", "Weekend"], p_scope: "global" });
+    expect(ids).toHaveLength(4);
+    expect(ids[1]).toBe(s2);
+    const rows = await sql<{ name: string; rank: number; scope: string }[]>`select name, rank, scope from public.situations where id in (${ids[0]}, ${ids[2]}, ${ids[3]}) order by rank`;
+    expect(rows.map((r) => [r.name, r.rank, r.scope])).toEqual([
+      ["Phone in bed", max + 1, "global"],
+      ["Archived", max + 2, "global"],
+      ["Weekend", max + 3, "global"],
+    ]);
+    // The archived "Archived" row was not reused: two rows carry the name now.
+    const [arch] = await sql<{ n: number }[]>`select count(*)::int as n from public.situations where user_id = ${u.id} and name = 'Archived'`;
+    expect(arch.n).toBe(2);
+    expect(await rpc<string[]>(u, "create_situations", { p_names: [], p_scope: "global" })).toEqual([]);
+    expect(await rpc<string[]>(u, "create_situations", { p_names: ["  ", ""], p_scope: "health" })).toEqual([]);
+    await expectRpcError(u, "create_situations", { p_names: ["x"], p_scope: "everywhere" }, "invalid_scope");
+    await sql`delete from public.situations where id in (${ids[0]}, ${ids[2]}, ${ids[3]})`;
+  });
+
+  it("delete_situation: a loose one is deleted; an attached one is detached and deleted; a member's last live one is refused; a stranger's is not found", async () => {
+    const loose = await insertSituation(u, "Loose");
+    expect(await rpc(u, "delete_situation", { p_id: loose })).toEqual({ ok: true, outcome: "deleted", detached_from: [] });
+    expect((await sql`select 1 from public.situations where id = ${loose}`).length).toBe(0);
+    const spare = await insertImpediment(u, "Spare two", { ...PROOF, situation: "Spare situation" });
+    const spareSit = (await situationsOf("impediment", spare))[0];
+    expect(await rpc(u, "delete_situation", { p_id: spareSit })).toEqual({ ok: true, outcome: "deleted", detached_from: ["Spare two"] });
+    expect(await situationsOf("impediment", spare)).toEqual([]);
+    expect((await sql`select 1 from public.situations where id = ${spareSit}`).length).toBe(0);
+    // The sprint started above watches `imp`: with s1 as its only live situation, s1 is refused and nothing changes.
+    const [s1, s2] = await situationsOf("impediment", imp);
+    await setSituations(u, "impediment", imp, [s1]);
+    const refused = await rpc<ArchiveResult>(u, "delete_situation", { p_id: s1 });
+    expect(refused.ok).toBe(false);
+    expect(refused.failing![0]).toMatchObject({ sprint_id: sprintId, reason: "no_situations" });
+    expect((await sql`select 1 from public.situations where id = ${s1} and archived_at is null`).length).toBe(1);
+    expect(await situationsOf("impediment", imp)).toEqual([s1]);
+    await setSituations(u, "impediment", imp, [s1, s2]);
+    const other = await createTestUser("lib-f17-stranger");
+    try {
+      await expectRpcError(other, "delete_situation", { p_id: s1 }, "item_not_found");
+    } finally {
+      await deleteTestUser(other);
+    }
+  });
+
+  it("delete_situation archives instead when a closed day asked about it — attachments kept, the observation row untouched", async () => {
+    const [s1, s2] = await situationsOf("impediment", imp);
+    const cueSit = (await situationsOf("cue", cue))[0];
+    const [d1] = await sql<{ id: string }[]>`select id from public.sprint_days where sprint_id = ${sprintId} and day_index = 1`;
+    await rpc(u, "close_day", { p_sprint_day_id: d1.id, p_actual: 100, p_impediments: [occurred(imp, [{ situation_id: s1, recovered: "yes" }])], p_cues: [used(cue, [cueSit])] });
+    const [before] = await sql<{ n: number }[]>`select count(*)::int as n from public.day_impediment_situation_observations where situation_id = ${s1}`;
+    expect(before.n).toBe(1);
+    expect(await rpc(u, "delete_situation", { p_id: s1 })).toEqual({ ok: true, outcome: "archived", detached_from: ["I notice delaying"] });
+    const [row] = await sql<{ archived_at: string | null }[]>`select archived_at from public.situations where id = ${s1}`;
+    expect(row.archived_at).not.toBeNull();
+    expect(await situationsOf("impediment", imp)).toEqual([s1, s2]);
+    const [after] = await sql<{ n: number }[]>`select count(*)::int as n from public.day_impediment_situation_observations where situation_id = ${s1}`;
+    expect(after.n).toBe(1);
+    // The cue's situation was asked about too, but it is the cue's only live one in the
+    // active sprint: the sprint rule answers before history does — refused, not archived.
+    const refused = await rpc<ArchiveResult>(u, "delete_situation", { p_id: cueSit });
+    expect(refused.ok).toBe(false);
+    expect(refused.failing![0]).toMatchObject({ sprint_id: sprintId, reason: "no_situations" });
+    const [cueRow] = await sql<{ archived_at: string | null }[]>`select archived_at from public.situations where id = ${cueSit}`;
+    expect(cueRow.archived_at).toBeNull();
+    await rpc(u, "restore_item", { p_kind: "situation", p_item_id: s1 });
   });
 
   it("archive_item on a situation is blocked while it is a member's only live one, allowed once another is attached, and the offer follows", async () => {
@@ -1530,7 +1614,7 @@ describe("F15 situations", () => {
     expect(mine.error).toBeNull();
     const by = new Map((mine.data as { item_id: string; used: boolean; active: boolean }[]).map((r) => [r.item_id, r]));
     expect(by.get(s1)).toMatchObject({ used: true, active: true });
-    const loose = await insertSituation(u, "cue", "Never attached");
+    const loose = await insertSituation(u, "Never attached");
     const again = await u.client.from("library_item_usage").select("*").eq("item_id", loose).single();
     expect(again.data).toMatchObject({ kind: "situation", used: false, active: false });
   });

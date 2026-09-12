@@ -31,7 +31,7 @@ export function VisionOverview({
   active: ActiveVision;
   sprints: VisionSprintRow[];
   previous: PreviousVision[];
-  counts: { cues: number; impediments: number; cueSituations: number; impedimentSituations: number };
+  counts: { cues: number; impediments: number; situations: number };
 }) {
   const router = useRouter();
   const [review, setReview] = useState(false);
@@ -210,13 +210,9 @@ export function VisionOverview({
             <span>Impediments</span>
             <span className="v-row-n">{counts.impediments} →</span>
           </Link>
-          <Link href="/vision/cue-situations" className="v-row">
-            <span>Cue situations</span>
-            <span className="v-row-n">{counts.cueSituations} →</span>
-          </Link>
-          <Link href="/vision/impediment-situations" className="v-row">
-            <span>Impediment situations</span>
-            <span className="v-row-n">{counts.impedimentSituations} →</span>
+          <Link href="/vision/situations" className="v-row">
+            <span>Situations</span>
+            <span className="v-row-n">{counts.situations} →</span>
           </Link>
           <div className="v-mini-note">Cues and impediments are picked per sprint; each applies to one or more situations.</div>
         </div>

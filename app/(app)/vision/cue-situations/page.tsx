@@ -1,12 +1,6 @@
-import type { Metadata } from "next";
-import { SituationLibraryPage } from "@/components/SituationLibraryPage";
-import { loadSituations } from "@/lib/data";
-import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Cue situations" };
-
-export default async function CueSituationsPage() {
-  const supabase = await createClient();
-  const items = await loadSituations(supabase, "cue");
-  return <SituationLibraryPage kind="cue" items={items} />;
+/** F17: the two per-kind situation libraries became one at /vision/situations. */
+export default function CueSituationsPage() {
+  redirect("/vision/situations");
 }

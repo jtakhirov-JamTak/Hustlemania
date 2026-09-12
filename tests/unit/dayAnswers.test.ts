@@ -10,7 +10,6 @@ const item = (id: string, name: string, kind: "cue" | "impediment", situations: 
   id,
   kind,
   name,
-  explanation: null,
   scope: "global" as const,
   rank: 1,
   archived_at: null,

@@ -10,10 +10,8 @@ import { createClient, requireUser } from "@/lib/supabase/server";
 // Libraries (F2, F6, F15) and sprint membership during a sprint.
 
 export type ItemInput = {
-  /** A cue's REMIND; an impediment's WHEN (F15). */
+  /** A cue's REMIND; an impediment's WHEN (F15). No free-text note on either (F16, F17). */
   name: string;
-  /** A cue's optional NOTE. Impediments have no free-text note (F16 dropped INTERFERES). */
-  explanation?: string;
   scope: ItemScope;
   /** F6: a cue's WHEN. Required by every UI path that creates or edits a cue (D5: nullable in the DB). */
   cueWhen?: string;
@@ -52,7 +50,7 @@ export async function createItem(kind: ItemKind, input: ItemInput): Promise<Resu
     kind === "cue"
       ? await supabase
           .from("cues")
-          .insert({ user_id: user.id, name, explanation: blank(input.explanation), scope: input.scope, cue_when: blank(input.cueWhen), rank })
+          .insert({ user_id: user.id, name, scope: input.scope, cue_when: blank(input.cueWhen), rank })
           .select("id")
           .single()
       : await supabase
@@ -89,7 +87,7 @@ export async function updateItem(kind: ItemKind, id: string, input: Omit<ItemInp
   if (!user) return { error: friendlyError("not_authenticated") };
   const res =
     kind === "cue"
-      ? await supabase.from("cues").update({ name, explanation: blank(input.explanation), cue_when: blank(input.cueWhen) }).eq("id", id).select("id")
+      ? await supabase.from("cues").update({ name, cue_when: blank(input.cueWhen) }).eq("id", id).select("id")
       : await supabase
           .from("impediments")
           .update({
@@ -121,18 +119,51 @@ export async function setItemSituations(kind: ItemKind, id: string, situationIds
   return {};
 }
 
-/** F15: a situation in one kind's library, appended at the end (rank by trigger). */
-export async function createSituation(kind: ItemKind, name: string, scope: ItemScope): Promise<Result<{ id: string }>> {
+/** F15 / F17: one situation in the library, appended at the end (rank by trigger). */
+export async function createSituation(name: string, scope: ItemScope): Promise<Result<{ id: string }>> {
   const trimmed = name.trim();
   if (!trimmed) return { error: friendlyError("situations_name_check") };
   if (!isItemScope(scope)) return { error: friendlyError("invalid_scope") };
   const { supabase, user } = await requireUser();
   if (!user) return { error: friendlyError("not_authenticated") };
   const rank = undefined as unknown as number;
-  const res = await supabase.from("situations").insert({ user_id: user.id, kind, name: trimmed, scope, rank }).select("id").single();
-  if (res.error) return failed("createSituation", res.error, { kind });
+  const res = await supabase.from("situations").insert({ user_id: user.id, name: trimmed, scope, rank }).select("id").single();
+  if (res.error) return failed("createSituation", res.error);
   revalidatePath("/", "layout");
   return { id: res.data.id };
+}
+
+/**
+ * F17: a dictated list of situations, one row each in the order spoken (the DB function
+ * ranks them in sequence, skips duplicates within the list and reuses a live same-name
+ * row). Returns the ids in input order, one per surviving name.
+ */
+export async function createSituations(names: string[], scope: ItemScope): Promise<Result<{ ids: string[] }>> {
+  const cleaned = names.map((n) => n.trim()).filter(Boolean);
+  if (cleaned.length === 0) return { error: friendlyError("situations_name_check") };
+  if (!isItemScope(scope)) return { error: friendlyError("invalid_scope") };
+  const supabase = await createClient();
+  const res = await supabase.rpc("create_situations", { p_names: cleaned, p_scope: scope });
+  if (res.error) return failed("createSituations", res.error, { count: cleaned.length });
+  revalidatePath("/", "layout");
+  return { ids: (res.data ?? []) as string[] };
+}
+
+export type DeleteSituationOutcome = { outcome: "deleted" | "archived"; detachedFrom: string[]; blocked: BlockedSprint[] };
+
+/**
+ * F17: the one delete path for a situation. Detaches and deletes; archives instead when a
+ * closed day ever asked about it; comes back `blocked` (nothing changed) when an item in
+ * an active sprint would be left without a situation.
+ */
+export async function deleteSituation(id: string): Promise<Result<DeleteSituationOutcome>> {
+  const supabase = await createClient();
+  const res = await supabase.rpc("delete_situation", { p_id: id });
+  if (res.error) return failed("deleteSituation", res.error, { situationId: id });
+  const out = res.data as { ok: boolean; outcome?: "deleted" | "archived"; detached_from?: string[]; failing?: BlockedSprint[] };
+  if (!out.ok) return { outcome: "deleted", detachedFrom: [], blocked: out.failing ?? [] };
+  revalidatePath("/", "layout");
+  return { outcome: out.outcome ?? "deleted", detachedFrom: out.detached_from ?? [], blocked: [] };
 }
 
 /** F15: renames a situation (the only column authenticated may update directly). */
@@ -181,13 +212,13 @@ export async function restoreItem(kind: LibraryKind, id: string): Promise<Result
   return {};
 }
 
-/** Permanent delete; RLS allows it only for an item with no sprint history (rule 19), or a situation with no attachment (F15). */
-export async function deleteItem(kind: LibraryKind, id: string): Promise<Result> {
+/** Permanent delete of a cue or impediment; RLS allows it only for an item with no sprint history (rule 19). Situations go through deleteSituation (F17). */
+export async function deleteItem(kind: ItemKind, id: string): Promise<Result> {
   const { supabase, user } = await requireUser();
   if (!user) return { error: friendlyError("not_authenticated") };
   const res = await supabase.from(table(kind)).delete().eq("id", id).select("id");
   if (res.error) return failed("deleteItem", res.error, { kind, itemId: id });
-  if (res.data.length === 0) return { error: kind === "situation" ? friendlyError("situation_in_use") : friendlyError("violates foreign key") };
+  if (res.data.length === 0) return { error: friendlyError("violates foreign key") };
   revalidatePath("/", "layout");
   return {};
 }

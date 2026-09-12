@@ -6,6 +6,30 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-12 — A constant exported from a `"use server"` module took every page down, and `tsc` said nothing
+
+**Problem.** `app/(app)/actions/capture.ts` (F17) exported `CAPTURE_TEXT_MAX` next to
+its server action. Next.js allows only async functions (and types) as exports of a
+`"use server"` file, so the dev server answered every route with a build error — the
+first Playwright run failed on the sign-in heading of `/login`, four tests, nothing to
+do with the feature. `tsc --noEmit`, `eslint` and the unit suite were all green: the
+rule is enforced by the bundler, not the compiler.
+
+**Fix.** The constant moved to `lib/capture.ts` (the pure module) and the action imports
+it; a comment on the action names the rule.
+
+**Regression test.** `tests/unit/serverActions.test.ts` reads every file under
+`app/(app)/actions/`, asserts it opens with `"use server"`, and fails on any `export`
+that is not `async function`, `type` or `interface` — it turned red on the offending
+line before the fix and green after.
+
+**Found.** F17 build, the first e2e run after the migration; `.next/dev/logs` named the
+file and line. Verification lesson: the compiler pass is not a build pass — a fresh
+dev-server start belongs before the e2e suite, and its log is the first place to look
+when a whole suite fails on the login page.
+
+---
+
 ## 2026-09-12 — The code reached production before its migration: `git push` is a deploy
 
 **Problem.** F15's commit was pushed to `main` on the user's word before the production

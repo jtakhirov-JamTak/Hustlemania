@@ -65,8 +65,8 @@ describe("0011 collapse transform (one active vision per user)", () => {
         values (${p.user.id}, ${`${p.area} vision`}, '2099-01-01', now() - make_interval(hours => ${p.hoursAgo + 100}), now() - make_interval(hours => ${p.hoursAgo}))
         returning id`;
       await tx`
-        insert into public.sprints (user_id, vision_id, area, outcome, measurement, currency, amount, confidence, why, celebration, mantra, tz, start_date, end_date)
-        values (${p.user.id}, ${v.id}, ${p.area}, 'o', 'money', 'USD', 1400, 7, 'w', 'c', 'm', ${TZ}, current_date, current_date + 13)`;
+        insert into public.sprints (user_id, vision_id, area, outcome, measurement, currency, amount, confidence, celebration, mantra, tz, start_date, end_date)
+        values (${p.user.id}, ${v.id}, ${p.area}, 'o', 'money', 'USD', 1400, 7, 'c', 'm', ${TZ}, current_date, current_date + 13)`;
       visions.push({ id: v.id, user: p.user.id, area: p.area });
     }
     return { kept: { [a.id]: visions[1].id, [b.id]: visions[4].id }, visions };
@@ -144,12 +144,12 @@ describe("0011 collapse transform (one active vision per user)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The 0020 assertion block, run on its own inside rolled-back transactions: clean it
-// passes; each provoked deviation makes it throw. A branch that cannot throw is a
-// branch that checks nothing.
+// The 0021 assertion block (which carries the 0020 branches forward), run on its own
+// inside rolled-back transactions: clean it passes; each provoked deviation makes it
+// throw. A branch that cannot throw is a branch that checks nothing.
 // ---------------------------------------------------------------------------
-describe("0020 assertion block can fail", () => {
-  const migration = readFileSync(join(__dirname, "../../supabase/migrations/0020_vision_v3.sql"), "utf8");
+describe("0021 assertion block can fail", () => {
+  const migration = readFileSync(join(__dirname, "../../supabase/migrations/0021_one_situations_library.sql"), "utf8");
   const block = migration.slice(migration.indexOf("-- assert:begin"), migration.indexOf("-- assert:end"));
   let a: TestUser;
 
@@ -182,20 +182,31 @@ describe("0020 assertion block can fail", () => {
     expect(await provoked(async () => {})).toBeNull();
   });
 
-  it("throws when visions.meaning comes back, when impediments.explanation comes back, and when cues.explanation goes", async () => {
+  it("throws when visions.meaning, impediments.explanation, cues.explanation or sprints.why come back", async () => {
     expect(await provoked(async (tx) => await tx`alter table public.visions add column meaning text`)).toMatch(/schema_unexpected: visions columns/);
     expect(await provoked(async (tx) => await tx`alter table public.impediments add column explanation text`)).toMatch(/impediments\.explanation still present/);
-    expect(await provoked(async (tx) => await tx`alter table public.cues drop column explanation`)).toMatch(/cues\.explanation missing/);
+    expect(await provoked(async (tx) => await tx`alter table public.cues add column explanation text`)).toMatch(/cues\.explanation still present/);
+    expect(await provoked(async (tx) => await tx`alter table public.sprints add column why text`)).toMatch(/sprints\.why still present/);
   });
 
-  it("throws on a vision row with neither picture nor goal, and on a reason above confidence 6", async () => {
-    expect(await provoked(async (tx) => await tx`insert into public.visions (user_id) values (${a.id})`)).toMatch(/data_unexpected: 1 vision rows/);
+  it("throws when a situation kind or anchor comes back, on a duplicate rank, on a second start_sprint, and when the delete policy returns", async () => {
+    expect(await provoked(async (tx) => await tx`alter table public.situations add column kind text`)).toMatch(/situations columns are/);
+    expect(await provoked(async (tx) => await tx`alter table public.cue_situations add column situation_kind text`)).toMatch(/situation_kind still present/);
     expect(
       await provoked(async (tx) => {
-        await tx`alter table public.visions drop constraint visions_confidence_reason_check`;
-        await tx`insert into public.visions (user_id, picture, confidence, confidence_reason) values (${a.id}, 'p', 9, 'stale')`;
+        await tx`insert into public.situations (user_id, name, rank) values (${a.id}, 'one', 7), (${a.id}, 'two', 7)`;
       }),
-    ).toMatch(/reason without a low confidence/);
+    ).toMatch(/duplicate situation ranks/);
+    expect(
+      await provoked(async (tx) => {
+        await tx`create function public.start_sprint(p_only text) returns uuid language sql as $$ select null::uuid $$`;
+      }),
+    ).toMatch(/2 start_sprint overloads/);
+    expect(
+      await provoked(async (tx) => {
+        await tx`create policy situations_delete on public.situations for delete to authenticated using (true)`;
+      }),
+    ).toMatch(/situations_delete policy still present/);
   });
 });
 
@@ -494,16 +505,14 @@ describe("vision write path (F16 functions)", () => {
     expect(row.vision_id).toBe(fresh);
   });
 
-  it("visions_body_check admits a null body and refuses a blank one; cues keep their explanation, impediments have none", async () => {
+  it("visions_body_check admits a null body and refuses a blank one; neither cues nor impediments carry an explanation (F17)", async () => {
     const w = await createTestUser("vision-fns-check");
     try {
       await expect(sql`insert into public.visions (user_id, body) values (${w.id}, '   ')`).rejects.toThrow(/visions_body_check/);
       await expect(sql`insert into public.impediments (user_id, name, explanation) values (${w.id}, 'x', 'y')`).rejects.toThrow(/column "explanation" of relation "impediments" does not exist/);
-      const cue = await w.client.from("cues").insert({ user_id: w.id, name: "Cue", explanation: "  why it matters  " }).select("id, explanation").single();
-      expect(cue.error).toBeNull();
-      expect(cue.data!.explanation).toBe("why it matters");
-      const edited = await w.client.from("cues").update({ explanation: "  edited  " }).eq("id", cue.data!.id).select("explanation").single();
-      expect(edited.data!.explanation).toBe("edited");
+      await expect(sql`insert into public.cues (user_id, name, explanation) values (${w.id}, 'x', 'y')`).rejects.toThrow(/column "explanation" of relation "cues" does not exist/);
+      const cue = await w.client.from("cues").insert({ user_id: w.id, name: "Cue", explanation: "note" } as never).select("id");
+      expect(cue.error?.message).toMatch(/explanation/);
       const imp = await w.client.from("impediments").insert({ user_id: w.id, name: "Imp", explanation: "gone" } as never).select("id");
       expect(imp.error?.message).toMatch(/explanation/);
     } finally {

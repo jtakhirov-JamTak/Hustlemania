@@ -47,7 +47,6 @@ export async function insertSprintRows(
       currency: "USD",
       amount: target * 14,
       confidence: 7,
-      why: "why",
       celebration: "celebration",
       mantra: opts.mantra ?? "mantra",
       tz: opts.tz,

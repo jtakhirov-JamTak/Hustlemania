@@ -18,7 +18,6 @@ export type StartSprintInput = {
   unit: string | null;
   amount: number; // base units
   confidence: number;
-  why: string;
   celebration: string;
   mantra: string;
   usageOfFunds: { label: string; amount: number }[];
@@ -33,8 +32,8 @@ export type StartSprintInput = {
   proofRecover: string | null;
   /** F3: a custom plan in base units (14 entries summing to `amount`), or null for Goal ÷ 14. */
   targets: number[] | null;
-  /** F3: pre-planned Daily Intentions by day (14 entries; blank = none). Day 1 travels here too. */
-  intentions: string[] | null;
+  /** Day 1's intention, optional (F17: days 2–14 are written on their own day). */
+  intention: string | null;
 };
 
 /** Calls start_sprint; on success redirects to the new sprint's Today. */
@@ -48,7 +47,6 @@ export async function startSprintAction(input: StartSprintInput): Promise<{ erro
     if (bad) return { error: bad };
     if (input.targets.reduce((a, b) => a + b, 0) !== input.amount) return { error: friendlyError("targets_sum_mismatch") };
   }
-  const intentions = input.intentions?.map((t) => t.trim());
   const supabase = await createClient();
   const res = await supabase.rpc("start_sprint", {
     p_area: input.area,
@@ -59,7 +57,6 @@ export async function startSprintAction(input: StartSprintInput): Promise<{ erro
     p_unit: (input.unit?.trim() || null) as unknown as string,
     p_amount: input.amount,
     p_confidence: input.confidence,
-    p_why: input.why.trim(),
     p_celebration: input.celebration.trim(),
     p_mantra: input.mantra.trim(),
     p_usage_of_funds: input.usageOfFunds,
@@ -73,7 +70,7 @@ export async function startSprintAction(input: StartSprintInput): Promise<{ erro
     p_proof_then: input.proofThen?.trim() || undefined,
     p_proof_recover: input.proofRecover?.trim() || undefined,
     p_targets: input.targets ?? undefined,
-    p_intentions: intentions?.some((t) => t) ? intentions : undefined,
+    p_intention: input.intention?.trim() || undefined,
   });
   if (res.error) return failed("startSprint", res.error, { area: input.area, measurement: input.measurement });
 

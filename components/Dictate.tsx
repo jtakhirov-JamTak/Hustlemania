@@ -29,7 +29,20 @@ let active: Recognition | null = null;
  * Continuous with interim results: the words land in the box as they are recognised,
  * after whatever was already typed. A denied microphone shows a one-line note.
  */
-export function Dictate({ label, value, onChange, disabled }: { label: string; value: string; onChange: (v: string) => void; disabled?: boolean }) {
+export function Dictate({
+  label,
+  value,
+  onChange,
+  disabled,
+  onStop,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  /** F17: called with the box's text when a dictation ends (the tap, or the recogniser's own end) — the capture box sorts it then. */
+  onStop?: (text: string) => void;
+}) {
   // Support is a property of the browser, not of React state: the server snapshot says
   // "no" so the markup matches on hydration, the client snapshot asks the window.
   const supported = useSyncExternalStore(
@@ -41,6 +54,12 @@ export function Dictate({ label, value, onChange, disabled }: { label: string; v
   const [blocked, setBlocked] = useState(false);
   const rec = useRef<Recognition | null>(null);
   const base = useRef("");
+  // The latest box value and stop callback, read by the recogniser's own `onend` (whose
+  // closure would otherwise hold the values from the tap that started it).
+  const latest = useRef({ value, onStop });
+  useEffect(() => {
+    latest.current = { value, onStop };
+  });
 
   useEffect(() => {
     const current = rec;
@@ -78,6 +97,7 @@ export function Dictate({ label, value, onChange, disabled }: { label: string; v
     r.onend = () => {
       setListening(false);
       if (active === r) active = null;
+      if (latest.current.value.trim()) latest.current.onStop?.(latest.current.value);
     };
     rec.current = r;
     active = r;

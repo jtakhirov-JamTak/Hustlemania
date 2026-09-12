@@ -6,14 +6,13 @@ import { useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { OptionRow } from "@/components/OptionRow";
 import { SituationPicker, type SituationOption } from "@/components/SituationPicker";
-import type { ItemKind } from "@/lib/data";
 
 export type PickerOption = { id: string; label: string; sub?: string | null; tag?: string | null; disabled?: boolean };
 
 export type PickerProof = { then: string; recover: string; onThen: (v: string) => void; onRecover: (v: string) => void };
 
-/** F15: the inline create needs at least one situation; the caller owns the options and the ticks. */
-export type PickerSituations = { kind: ItemKind; options: SituationOption[]; selected: string[]; onToggle: (id: string) => void; onCreate: (name: string) => Promise<string | null> };
+/** F15 / F17: the inline create needs at least one situation; the caller owns the options and the ticks, and creates a spoken list at once. */
+export type PickerSituations = { options: SituationOption[]; selected: string[]; onToggle: (id: string) => void; onCreate: (names: string[]) => Promise<string | null> };
 
 /**
  * The 560px picker dialog: a list of selection rows, optional proof inputs, an optional
@@ -127,7 +126,6 @@ export function ItemPicker({
             )}
             <SituationPicker
               idPrefix="picker"
-              kind={create.situations.kind}
               options={create.situations.options}
               selected={create.situations.selected}
               onToggle={create.situations.onToggle}

@@ -2,10 +2,41 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## Deferred from F17 (2026-09-12)
+
+- **The parser has not been exercised against the real model in this repo.** Every
+  suite runs the keyword stub (`PARSE_STUB=1`); the live smoke
+  (`tests/unit/capture.live.test.ts`) is double-gated on `ANTHROPIC_API_KEY` and
+  `PARSE_LIVE_SMOKE=1`. Run it once the key is in `.env`, and try one spoken sentence
+  per kind in the app: the prompts in `lib/capture.server.ts` are untested against
+  speech-to-text phrasing.
+- **The delete sheet's "It has day history" line is an approximation.** It shows when
+  the situation is attached to an item that was ever a sprint member (`used`); the
+  function decides on observation rows and the outcome line says which. A closed day
+  that never asked about it gets a delete, not an archive.
+- **Situations spoken inside an APPLIES TO picker are always global.** The tab's box
+  has scope chips; the picker does not (F15 did the same for its one-at-a-time field).
+- **No per-part re-sort.** Re-record reopens the whole box; a single part is fixed by
+  typing into it.
+- **Dictation with real audio is still a hand check** (the F16 line below) — now on
+  every capture box, and the sort that follows a stop.
+- **The delete refusal names the sprint, not the item** (eval-11 P2-2): `no_situations`
+  comes back in the `archive_item` shape (`sprint_id, area, outcome, reason`), so the
+  error bar reads "Wealth · “…”: one of its items would be left without a situation";
+  the item is on the sheet that preceded it. Naming it needs `sprint_invalid_reason` to
+  return the offending member.
+- **Two visual states not captured as such** (eval-11 P2-3): the `PARSE_STUB=fail`
+  status line (the captured "failed" state is the too-long-input path, same phase) and
+  the APPLIES TO picker's own box as a state of its own (it is in every Impediments Add
+  capture). Take them on the next visual pass.
+- **Situations tab copy runs longer than the SPEC strings** (eval-11 P2-4): the blurb and
+  the empty line extend the specified sentences; the e2e checks by containment.
+
 ## Deferred from F16 (2026-09-12)
 
 - **Dictate on the review note and the library editors.** F16 put the mic on the seven
   Vision setup boxes only; `components/Dictate.tsx` is one line per box to extend.
+  *Library editors taken by F17 (SPEC 2026-09-12); the review note stays here.*
 - **Dictation inside the installed iOS app is unverified.** Web Speech works in iOS
   Safari; past iOS versions refused it in home-screen (standalone) mode. Try it on a
   phone after the release; if it fails there, the button hides itself and the keyboard
@@ -16,11 +47,12 @@
 - **Wizard blocked-line copy** (eval-10 P2-1): the SPEC quotes "A sprint has to advance
   the vision; finish its three steps first."; the wizard says "…and its three steps are
   not all saved. Write the vision first; it takes three short steps." Same behaviour;
-  align the sentence when the wizard is next touched.
+  align the sentence when the wizard is next touched. *Taken by F18 (SPEC 2026-09-12).*
 - **Accessible names on the Goal and Obstacle steps** (eval-10 P2-2): the proof input's
   name is "Proof" and the WHEN input's is "WHEN" while the SPEC writes the visible label
   text and "When". Sighted users see the SPEC wording; only `getByLabel` by the long
-  text misses. Pick one convention across the three steps.
+  text misses. Pick one convention across the three steps. *Taken by F18 (SPEC
+  2026-09-12).*
 
 ## Deferred from F15 (2026-09-11)
 
@@ -152,7 +184,9 @@
   took the kit pre-fill only (DECISIONS 2026-09-08), so the wizard keeps its F9 look. The
   v8 README §New Sprint dialog draws it: 800px, radius 22, the step progress bar and the
   small picker modal. The plan grid and the start-date control are not drawn there and
-  need a home in that design. Its own one-line entry, not part of F11.
+  need a home in that design. Its own one-line entry, not part of F11. *Taken by F18
+  (SPEC 2026-09-12): the card width, radius and the step bar; the overlay dialog and
+  area cards stay out.*
 - **The Insights sidebar rows carry no Met / Under or % of goal yet** — F11 owns them
   (reconciliation D9), and F10 built the rows so the postmortem had a home.
 - **`insight_min_days` is duplicated as `MIN_DAYS` in `lib/insightCards.ts`** for the
@@ -232,7 +266,8 @@
 
 - **#43 wizard split by step.** `components/NewSprintWizard.tsx` is ~600 lines across
   four steps in one component. A refactor with no behaviour change; deferred rather
-  than done inside a fix pass. Actions were split by domain in phase 3.
+  than done inside a fix pass. Actions were split by domain in phase 3. *Taken by F18
+  (SPEC 2026-09-12): `components/wizard/Step*.tsx`.*
 - ~~**Tailwind keep or drop** (audit bucket D)~~ Dropped 2026-09-07 in the enabling
   pass (DECISIONS); its preflight is inlined in `app/globals.css`.
 - **Inline styles remain in the components the redesign rewrites** (`TodayView`,
@@ -389,6 +424,7 @@ The ranked backlog itself is `docs/audits/full-audit-2026-09-05.md` (47 findings
 
 - **Wizard step 4: clicking the confirmation label text does not toggle** — the box is a
   `<span role="checkbox">` inside a `<label>` with no control; only the 18px square
+  *(the checkbox itself is removed by F18, SPEC 2026-09-12)*
   responds. `components/NewSprintWizard.tsx`.
 - **Close dialog: primary stays enabled for a fractional actual** (`1.5`); native
   `step=1` stops submission, not the SPEC's hint-beside-disabled-primary pattern.

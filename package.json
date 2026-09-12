@@ -14,7 +14,7 @@
     "test:unit": "vitest run tests/unit",
     "pretest:db": "node scripts/local-env.mjs",
     "test:db": "vitest run tests/db",
-    "pretest:e2e": "node scripts/local-env.mjs",
+    "pretest:e2e": "node scripts/local-env.mjs --e2e",
     "test:e2e": "playwright test",
     "test:hooks": "python scripts/hooks/test_write_guard.py && python scripts/hooks/test_evaluator_guard.py && python scripts/hooks/test_pre_commit.py",
     "verify": "npm run typecheck && npm run lint && npm run test:hooks && npm run test:unit && npm run test:db && npm run test:e2e"
@@ -23,12 +23,14 @@
     "node": ">=22.12"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
     "@supabase/ssr": "^0.12.6",
     "@supabase/supabase-js": "^2.115.0",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "zod": "^4.6.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

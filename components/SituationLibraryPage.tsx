@@ -2,32 +2,23 @@
 
 import { ErrorBar } from "@/components/ErrorBar";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { archiveItem, createSituation, deleteItem, moveItem, restoreItem, setItemScope, updateSituation, type BlockedSprint } from "@/app/(app)/actions/library";
+import { archiveItem, createSituations, deleteSituation, moveItem, restoreItem, setItemScope, updateSituation, type BlockedSprint } from "@/app/(app)/actions/library";
 import { areaName, isAreaKey } from "@/lib/areas";
 import { onRadioArrowKeys } from "@/components/radioKeys";
+import { CaptureBox, type CapturePhase } from "@/components/CaptureBox";
+import { Modal } from "@/components/Modal";
 import { callAction } from "@/lib/callAction";
-import { SCOPES, type ItemKind, type ItemScope, type SituationItem } from "@/lib/data";
+import { emptyParts, missingPart, partList, type Parts } from "@/lib/capture";
+import { SCOPES, type ItemScope, type SituationItem } from "@/lib/data";
 import { blockedReason } from "@/lib/errors";
 
 type Filter = "all" | ItemScope;
 
-const COPY: Record<ItemKind, { title: string; blurb: string; addTitle: string; empty: string; placeholder: string; itemsPage: string }> = {
-  impediment: {
-    title: "Impediment situations",
-    blurb: "The situations your impediments apply to. One response usually covers several; tick them on the Impediments page.",
-    addTitle: "Add a situation",
-    empty: "No impediment situations yet. Name the first one above, then tick it under an impediment.",
-    placeholder: "Starting late",
-    itemsPage: "impediment",
-  },
-  cue: {
-    title: "Cue situations",
-    blurb: "The situations your execution cues apply to. One cue usually covers several; tick them on the Cues page.",
-    addTitle: "Add a situation",
-    empty: "No cue situations yet. Name the first one above, then tick it under a cue.",
-    placeholder: "Scheduling anything",
-    itemsPage: "cue",
-  },
+const COPY = {
+  title: "Situations",
+  blurb: "The situations your cues and impediments apply to — one list, ticked under an item on its own page. Say several at once: “getting up early, going to bed late”.",
+  addTitle: "Add situations",
+  empty: "No situations yet. Say or type the first ones above, then tick them under a cue or an impediment.",
 };
 
 function scopeLabel(scope: ItemScope): string {
@@ -35,7 +26,7 @@ function scopeLabel(scope: ItemScope): string {
 }
 
 function usageLabel(s: SituationItem): string {
-  const applied = s.attached ? `Applied by ${s.attached} ${s.kind}${s.attached === 1 ? "" : "s"}` : "Unused";
+  const applied = s.attached ? `Applied by ${s.attached} item${s.attached === 1 ? "" : "s"}` : "Unused";
   return s.active ? `${applied} · in an active sprint` : s.used ? `${applied} · in sprint history` : applied;
 }
 
@@ -43,10 +34,10 @@ function focusTitle() {
   document.getElementById("library-title")?.focus();
 }
 
-function BlockedList({ blocked }: { blocked: BlockedSprint[] }) {
+function BlockedList({ blocked, verb }: { blocked: BlockedSprint[]; verb: string }) {
   return (
     <div role="alert" className="error-bar" style={{ marginTop: 12, display: "block" }}>
-      <div style={{ fontWeight: 600 }}>Archive is blocked — fix these sprints first, then retry.</div>
+      <div style={{ fontWeight: 600 }}>{verb} is blocked — fix these sprints first, then retry.</div>
       <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
         {blocked.map((b) => (
           <li key={b.sprint_id}>
@@ -71,15 +62,17 @@ function ScopeChips({ value, onChange, disabled }: { value: ItemScope; onChange:
 }
 
 /**
- * F15: one kind's situations library — the same skeleton as the item libraries: rank,
- * scope chips, an archived fold, and the usage line. A situation is attached to items
- * on their own page; here it is named, ranked, scoped, archived or deleted.
+ * F15 / F17: the one situations library — the same skeleton as the item libraries: rank,
+ * scope chips, an archived fold, the usage line. Situations are added as a spoken or typed
+ * list (one box), attached to items on their own pages, and deleted from here: the sheet
+ * names what they apply to; a situation a closed day asked about is archived instead.
  */
-export function SituationLibraryPage({ kind, items }: { kind: ItemKind; items: SituationItem[] }) {
-  const copy = COPY[kind];
+export function SituationLibraryPage({ items }: { items: SituationItem[] }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
+  // A delete unmounts its row, so its outcome is announced at page level.
+  const [outcome, setOutcome] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   const active = items.filter((s) => s.archived_at === null);
@@ -87,16 +80,16 @@ export function SituationLibraryPage({ kind, items }: { kind: ItemKind; items: S
   const shown = filter === "all" ? active : active.filter((s) => s.scope === filter);
 
   return (
-    <div data-testid="situations-page" data-kind={kind}>
+    <div data-testid="situations-page">
       <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
         <h1 id="library-title" tabIndex={-1} className="heading focus-quiet" style={{ fontSize: 38, margin: 0, letterSpacing: "-0.03em", lineHeight: 1.1 }}>
-          {copy.title}
+          {COPY.title}
         </h1>
         <span style={{ fontSize: 13, color: "var(--muted)" }} data-testid="library-count">
           {active.length} · {archived.length} archived
         </span>
       </div>
-      <p style={{ fontSize: 13.5, color: "var(--muted)", margin: "6px 0 20px", maxWidth: "62ch", lineHeight: 1.55 }}>{copy.blurb}</p>
+      <p style={{ fontSize: 13.5, color: "var(--muted)", margin: "6px 0 20px", maxWidth: "62ch", lineHeight: 1.55 }}>{COPY.blurb}</p>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }} role="group" aria-label="Scope filter">
         {[{ key: "all" as Filter, label: "All" }, ...SCOPES.map((s) => ({ key: s.key as Filter, label: s.label }))].map((f) => (
@@ -106,10 +99,15 @@ export function SituationLibraryPage({ kind, items }: { kind: ItemKind; items: S
         ))}
       </div>
 
-      <AddCard kind={kind} onError={setPageError} />
+      <AddCard onError={setPageError} />
 
       {pageError ? (
         <ErrorBar style={{ marginBottom: 12 }} action={{ label: "Dismiss", onClick: () => setPageError(null) }}>{pageError}</ErrorBar>
+      ) : null}
+      {outcome ? (
+        <div className="hint" style={{ marginBottom: 12 }} role="status" data-testid="delete-outcome">
+          {outcome}
+        </div>
       ) : null}
 
       <div data-testid="library-list">
@@ -121,6 +119,10 @@ export function SituationLibraryPage({ kind, items }: { kind: ItemKind; items: S
             first={active[0]?.id === s.id}
             last={active[active.length - 1]?.id === s.id}
             pending={pending}
+            onOutcome={(text) => {
+              setOutcome(text);
+              setPageError(null);
+            }}
             onMove={(dir) =>
               start(async () => {
                 const res = await callAction(() => moveItem("situation", s.id, dir));
@@ -132,7 +134,7 @@ export function SituationLibraryPage({ kind, items }: { kind: ItemKind; items: S
       </div>
       {shown.length === 0 ? (
         <div style={{ border: "1px dashed var(--divider)", borderRadius: 16, padding: "26px 24px", fontSize: 13.5, color: "var(--muted)", lineHeight: 1.55, maxWidth: "56ch" }} data-testid="library-empty">
-          {active.length === 0 ? copy.empty : "Nothing in this scope. Filters keep the rank order of the full list."}
+          {active.length === 0 ? COPY.empty : "Nothing in this scope. Filters keep the rank order of the full list."}
         </div>
       ) : null}
 
@@ -153,24 +155,31 @@ export function SituationLibraryPage({ kind, items }: { kind: ItemKind; items: S
   );
 }
 
-function AddCard({ kind, onError }: { kind: ItemKind; onError: (e: string | null) => void }) {
-  const copy = COPY[kind];
-  const [name, setName] = useState("");
+function AddCard({ onError }: { onError: (e: string | null) => void }) {
+  const [parts, setParts] = useState<Parts>(() => emptyParts("situations"));
+  const [phase, setPhase] = useState<CapturePhase>("idle");
+  const [key, setKey] = useState(0);
   const [scope, setScope] = useState<ItemScope>("global");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const ok = Boolean(name.trim());
+  const names = partList(parts, "situations")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const hint = phase === "parsing" ? "Reading your words…" : (missingPart("situations", parts)?.hint ?? null);
+  const ok = hint === null;
 
   function submit() {
     if (!ok || pending) return;
     setError(null);
     start(async () => {
-      const res = await callAction(() => createSituation(kind, name, scope));
+      const res = await callAction(() => createSituations(names, scope));
       if (res.error) {
         setError(res.error);
         return;
       }
-      setName("");
+      setParts(emptyParts("situations"));
+      setPhase("idle");
+      setKey((k) => k + 1);
       onError(null);
     });
   }
@@ -186,12 +195,9 @@ function AddCard({ kind, onError }: { kind: ItemKind; onError: (e: string | null
       }}
     >
       <h2 className="card-title" style={{ marginBottom: 12 }}>
-        {copy.addTitle}
+        {COPY.addTitle}
       </h2>
-      <label htmlFor="add-situation" className="label-accent proof-label block">
-        SITUATION
-      </label>
-      <input id="add-situation" className="input mt-6" value={name} onChange={(e) => setName(e.target.value)} placeholder={copy.placeholder} />
+      <CaptureBox key={key} kind="situations" idPrefix="add" mode="capture" parts={parts} onParts={setParts} onPhase={setPhase} disabled={pending} />
       {error ? (
         <ErrorBar style={{ marginTop: 12 }} action={{ label: "Retry", submit: true }}>{error}</ErrorBar>
       ) : null}
@@ -199,10 +205,10 @@ function AddCard({ kind, onError }: { kind: ItemKind; onError: (e: string | null
         <ScopeChips value={scope} onChange={setScope} />
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span className="hint" id="add-hint" aria-live="polite">
-            {ok ? "" : "Name the situation."}
+            {hint ?? ""}
           </span>
           <button type="submit" className="btn btn-primary" aria-disabled={pending || !ok} aria-describedby={ok ? undefined : "add-hint"}>
-            {pending ? "Adding…" : "Add"}
+            {pending ? "Adding…" : names.length > 1 ? `Add ${names.length}` : "Add"}
           </button>
         </div>
       </div>
@@ -210,12 +216,69 @@ function AddCard({ kind, onError }: { kind: ItemKind; onError: (e: string | null
   );
 }
 
-function SituationCard({ item, position, first, last, pending, onMove }: { item: SituationItem; position: number; first: boolean; last: boolean; pending: boolean; onMove: (dir: "up" | "down") => void }) {
+/** F17: the confirmation before a delete — what it applies to, and whether history turns it into an archive. */
+function DeleteSheet({ item, busy, onConfirm, onCancel }: { item: SituationItem; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  return (
+    <Modal labelledBy="delete-situation-title" onDismiss={busy ? undefined : onCancel} initialFocus={heading} maxWidth={480}>
+      <div className="dialog-head dialog-head-rule" data-testid="delete-situation">
+        <h2 id="delete-situation-title" className="card-title focus-quiet" ref={heading} tabIndex={-1}>
+          Delete “{item.name}”?
+        </h2>
+        <button type="button" className="link-quiet dialog-x" aria-label="Cancel" onClick={onCancel} disabled={busy}>
+          ×
+        </button>
+      </div>
+      <div className="dialog-body dialog-body-rule">
+        <div className="dialog-blurb">
+          {item.attachedTo.length > 0 ? (
+            <>
+              Removed from: <strong>{item.attachedTo.join(", ")}</strong>.
+            </>
+          ) : (
+            "It is not applied to any cue or impediment."
+          )}
+        </div>
+        {item.used ? <div className="dialog-blurb">It has day history, so it will be archived instead.</div> : null}
+        {item.active ? <div className="dialog-blurb">An item in an active sprint that would be left without a situation keeps it — you would be told which.</div> : null}
+      </div>
+      <div className="dialog-foot dialog-foot-rule">
+        <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+        <div className="actions">
+          <button type="button" className="btn btn-primary" aria-disabled={busy} onClick={onConfirm}>
+            {busy ? "Deleting…" : "Delete"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function SituationCard({
+  item,
+  position,
+  first,
+  last,
+  pending,
+  onOutcome,
+  onMove,
+}: {
+  item: SituationItem;
+  position: number;
+  first: boolean;
+  last: boolean;
+  pending: boolean;
+  onOutcome: (text: string) => void;
+  onMove: (dir: "up" | "down") => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.name);
   const [scope, setScope] = useState<ItemScope>(item.scope);
   const [error, setError] = useState<string | null>(null);
-  const [blocked, setBlocked] = useState<BlockedSprint[] | null>(null);
+  const [blocked, setBlocked] = useState<{ verb: string; list: BlockedSprint[] } | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [busy, start] = useTransition();
   const editButton = useRef<HTMLButtonElement>(null);
   const wasEditing = useRef(false);
@@ -256,17 +319,27 @@ function SituationCard({ item, position, first, last, pending, onMove }: { item:
         setError(res.error);
         return;
       }
-      if (res.blocked && res.blocked.length > 0) setBlocked(res.blocked);
+      if (res.blocked && res.blocked.length > 0) setBlocked({ verb: "Archive", list: res.blocked });
       else focusTitle();
     });
   }
 
   function remove() {
     setError(null);
+    setBlocked(null);
     start(async () => {
-      const res = await callAction(() => deleteItem("situation", item.id));
-      if (res.error) setError(res.error);
-      else focusTitle();
+      const res = await callAction(() => deleteSituation(item.id));
+      setConfirming(false);
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      if (res.blocked && res.blocked.length > 0) {
+        setBlocked({ verb: "Delete", list: res.blocked });
+        return;
+      }
+      onOutcome(res.outcome === "archived" ? `“${item.name}” archived instead — a closed day asked about it.` : `“${item.name}” deleted.`);
+      focusTitle();
     });
   }
 
@@ -318,11 +391,10 @@ function SituationCard({ item, position, first, last, pending, onMove }: { item:
                   <button type="button" className="link-quiet" disabled={busy} onClick={archive}>
                     Archive
                   </button>
-                ) : (
-                  <button type="button" className="link-quiet" disabled={busy} onClick={remove}>
-                    Delete
-                  </button>
-                )}
+                ) : null}
+                <button type="button" className="link-quiet" disabled={busy} onClick={() => setConfirming(true)} aria-label={`Delete ${item.name}`}>
+                  Delete
+                </button>
               </div>
             </>
           ) : (
@@ -355,9 +427,10 @@ function SituationCard({ item, position, first, last, pending, onMove }: { item:
           {error ? (
             <ErrorBar style={{ marginTop: 12 }} action={{ label: "Dismiss", onClick: () => setError(null) }}>{error}</ErrorBar>
           ) : null}
-          {blocked ? <BlockedList blocked={blocked} /> : null}
+          {blocked ? <BlockedList blocked={blocked.list} verb={blocked.verb} /> : null}
         </div>
       </div>
+      {confirming ? <DeleteSheet item={item} busy={busy} onConfirm={remove} onCancel={() => setConfirming(false)} /> : null}
     </div>
   );
 }

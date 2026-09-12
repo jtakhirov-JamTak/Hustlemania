@@ -206,7 +206,7 @@ describe("F3 targets: save_targets, locking, ownership", () => {
     });
   });
 
-  describe("start_sprint with a custom plan and pre-planned intentions", () => {
+  describe("start_sprint with a custom plan and a day-1 intention", () => {
     let u2: TestUser;
 
     beforeAll(async () => {
@@ -226,29 +226,28 @@ describe("F3 targets: save_targets, locking, ownership", () => {
       expect(Number(c.n)).toBe(0);
     });
 
-    it("starts in 'custom' mode with the given targets and per-day intentions; today's target locks at start", async () => {
+    it("starts in 'custom' mode with the given targets; a trimmed day-1 intention lands on day 1 alone; today's target locks at start", async () => {
       const items = await seedItems(u2);
       const plan = withDay(SAME, { 1: 0, 2: SAME[1] + SAME[0] });
-      const intentions = Array.from({ length: 14 }, (_, i) => (i === 0 ? "  Day one  " : i === 2 ? "Day three" : i === 5 ? "   " : null));
-      const id = await startSprint(u2, moneySprintArgs({ ...items, p_tz: TZ, p_start_date: today, p_targets: plan, p_intentions: intentions, p_intention: "ignored when p_intentions[1] is set" }));
+      const id = await startSprint(u2, moneySprintArgs({ ...items, p_tz: TZ, p_start_date: today, p_targets: plan, p_intention: "  Day one  " }));
 
       const [s] = await sql<{ target_mode: string }[]>`select target_mode from public.sprints where id = ${id}`;
       expect(s.target_mode).toBe("custom");
       expect(await targetsOf(id)).toEqual(plan);
 
       const days = await sql<{ day_index: number; intention: string | null }[]>`select day_index, intention from public.sprint_days where sprint_id = ${id} order by day_index`;
-      expect(days.map((d) => d.intention)).toEqual(["Day one", null, "Day three", null, null, null, null, null, null, null, null, null, null, null]);
+      expect(days.map((d) => d.intention)).toEqual(["Day one", null, null, null, null, null, null, null, null, null, null, null, null, null]);
 
       // Today began, so its (zero) target is now locked.
       await expectRpcError(u2, "save_targets", { p_sprint_id: id, p_targets: withDay(plan, { 1: 100, 2: plan[1] - 100 }) }, "target_locked");
     });
 
-    it("p_intention still fills day 1 when p_intentions is absent", async () => {
+    it("F17: the 22-argument form with p_intentions is gone — the call fails to resolve, nothing starts", async () => {
       const items = await seedItems(u2);
-      const id = await startSprint(u2, moneySprintArgs({ ...items, p_area: "health", p_tz: TZ, p_start_date: today, p_intention: "Only day one" }));
-      const days = await sql<{ intention: string | null }[]>`select intention from public.sprint_days where sprint_id = ${id} order by day_index`;
-      expect(days[0].intention).toBe("Only day one");
-      expect(days.slice(1).every((d) => d.intention === null)).toBe(true);
+      const res = await u2.client.rpc("start_sprint", { ...moneySprintArgs({ ...items, p_area: "health", p_tz: TZ, p_start_date: today }), p_why: "w", p_intentions: ["a"] } as never);
+      expect(res.error).not.toBeNull();
+      const [n] = await sql<{ n: number }[]>`select count(*)::int as n from public.sprints where user_id = ${u2.id} and area = 'health'`;
+      expect(n.n).toBe(0);
     });
   });
 

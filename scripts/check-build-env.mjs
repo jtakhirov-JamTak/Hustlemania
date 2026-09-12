@@ -36,4 +36,13 @@ if (hosted && (local || !url.startsWith("https://"))) {
   console.error(`[build-env] refusing a hosted build (VERCEL/CI set) against ${url}. Remove .env.local or set the production URL.`);
   process.exit(1);
 }
+// F17: the parser stub is for local runs and Playwright only. A hosted build that
+// carried it would sort every capture with the keyword splitter and never call the model.
+if (hosted && process.env.PARSE_STUB) {
+  console.error("[build-env] refusing a hosted build with PARSE_STUB set; the capture parser must use the model there.");
+  process.exit(1);
+}
+if (!process.env.ANTHROPIC_API_KEY) {
+  console.warn("[build-env] ANTHROPIC_API_KEY is not set; every one-box capture will answer 'Sorting is unavailable' in this build.");
+}
 console.log(`[build-env] build targets ${url}${local ? " (local stack — not a deployable build)" : ""}`);

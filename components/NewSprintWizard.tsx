@@ -3,8 +3,8 @@
 import { ProofInputs } from "@/components/ProofInputs";
 import { ErrorBar } from "@/components/ErrorBar";
 import Link from "next/link";
-import { Fragment, useEffect, useRef, useState, useTransition } from "react";
-import { createItem, createSituation } from "@/app/(app)/actions/library";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { createItem, createSituations } from "@/app/(app)/actions/library";
 import { startSprintAction, type StartSprintInput } from "@/app/(app)/actions/sprint";
 import { OptionRow } from "@/components/OptionRow";
 import { effectivePlan, PlanGrid, type PlanCell } from "@/components/PlanGrid";
@@ -33,11 +33,10 @@ type Draft = {
   usage: { label: string; amount: string }[];
   startsTomorrow: boolean;
   confidence: number | null;
-  why: string;
   celebration: string;
   mantra: string;
-  /** Daily Intentions by day, index 0 = day 1 (PRD §6: setup may pre-fill any day). */
-  intentions: string[];
+  /** F17: day 1 only; the days 2–14 pre-planning left with the wizard. */
+  intention: string;
   mode: "same" | "custom";
   /** Raw custom-target inputs by day; parsed with parseTargetInput. */
   custom: string[];
@@ -52,7 +51,7 @@ type Draft = {
 };
 
 type Library = { cues: LibraryItem[]; impediments: LibraryItem[] };
-type Situations = { cues: SituationOption[]; impediments: SituationOption[] };
+type Situations = SituationOption[];
 
 const STEPS = ["Area & outcome", "Measure & goal", "Confidence & mantra", "Plan & start"];
 
@@ -73,17 +72,14 @@ export function NewSprintWizard({
   areas: AreaOption[];
   initialArea: AreaKey | null;
   library: Library;
-  situations: { cues: SituationItem[]; impediments: SituationItem[] };
+  situations: SituationItem[];
   vision: string | null;
   kits: Partial<Record<AreaKey, AreaKit | null>>;
 }) {
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [library, setLibrary] = useState<Library>(initialLibrary);
-  const [sits, setSits] = useState<Situations>({
-    cues: initialSituations.cues.map((s) => ({ id: s.id, name: s.name })),
-    impediments: initialSituations.impediments.map((s) => ({ id: s.id, name: s.name })),
-  });
+  const [sits, setSits] = useState<Situations>(initialSituations.map((s) => ({ id: s.id, name: s.name })));
   const [newImp, setNewImp] = useState("");
   const [newImpSits, setNewImpSits] = useState<string[]>([]);
   const [newCue, setNewCue] = useState("");
@@ -104,14 +100,15 @@ export function NewSprintWizard({
     });
   };
 
-  /** A situation named inline is saved to its library (global scope) and ticked for the item being created. */
-  async function createSituationInline(kind: ItemKind, name: string): Promise<string | null> {
-    const res = await callAction(() => createSituation(kind, name, "global"));
-    if (res.error || !res.id) return res.error ?? "That did not save.";
-    const id = res.id;
-    setSits((s) => (kind === "cue" ? { ...s, cues: [...s.cues, { id, name }] } : { ...s, impediments: [...s.impediments, { id, name }] }));
-    if (kind === "cue") setNewCueSits((t) => [...t, id]);
-    else setNewImpSits((t) => [...t, id]);
+  /** F17: situations named inline (a spoken list) are saved to the library (global scope) and ticked for the item being created. */
+  async function createSituationInline(kind: ItemKind, names: string[]): Promise<string | null> {
+    const res = await callAction(() => createSituations(names, "global"));
+    if (res.error || !res.ids) return res.error ?? "That did not save.";
+    const ids = res.ids;
+    setSits((s) => [...s, ...ids.map((id, i) => ({ id, name: names[i] ?? "" })).filter((n) => !s.some((x) => x.id === n.id))]);
+    const tick = (t: string[]) => [...t, ...ids.filter((id) => !t.includes(id))];
+    if (kind === "cue") setNewCueSits(tick);
+    else setNewImpSits(tick);
     return null;
   }
 
@@ -127,10 +124,9 @@ export function NewSprintWizard({
     usage: [{ label: "", amount: "" }],
     startsTomorrow: false,
     confidence: null,
-    why: "",
     celebration: "",
     mantra: "",
-    intentions: Array(14).fill(""),
+    intention: "",
     mode: "same",
     custom: Array(14).fill(""),
     proofThen: "",
@@ -167,7 +163,6 @@ export function NewSprintWizard({
         : toBaseUnits(d.measurement, { whole: Number(d.goalWhole) });
   const amountValid = amount !== null && Number.isInteger(amount) && amount > 0 && (d.measurement !== "hours" || Number(d.goalMinutes || 0) < 60);
   const sameTargets = amountValid ? sameDailyTargets(amount!, measurementStep(d.measurement)) : null;
-  const [showIntentions, setShowIntentions] = useState(false);
 
   // F3: before the sprint starts every day is editable, today included (it locks at start).
   // Step 4 is never the first render, so the cells always have the device date by the
@@ -225,7 +220,7 @@ export function NewSprintWizard({
           : !usageValid
             ? "Each usage row needs a label and an amount."
             : null,
-    d.confidence === null ? "Pick a confidence from 1 to 10." : !d.why.trim() ? "Say why this matters." : !d.celebration.trim() ? "Name a celebration." : !d.mantra.trim() ? "A mantra is required." : null,
+    d.confidence === null ? "Pick a confidence from 1 to 10." : !d.celebration.trim() ? "Name a celebration." : !d.mantra.trim() ? "A mantra is required." : null,
     planHint
       ? planHint
       : d.impedimentIds.length === 0
@@ -257,13 +252,12 @@ export function NewSprintWizard({
       unit: d.measurement === "quantity" ? d.unit : null,
       amount,
       confidence: d.confidence ?? 0,
-      why: d.why,
       celebration: d.celebration,
       mantra: d.mantra,
       usageOfFunds: d.measurement === "money" ? usageRows.map((u) => ({ label: u.label.trim(), amount: toBaseUnits("money", { whole: Number(u.amount) }) })) : [],
       tz,
       startDate,
-      intentions: d.intentions.some((t) => t.trim()) ? d.intentions : null,
+      intention: d.intention.trim() || null,
       targets: d.mode === "custom" ? targets : null,
       cueIds: d.cueIds,
       focusCueId: d.cueIds.length > 0 ? d.focusId : null,
@@ -299,14 +293,13 @@ export function NewSprintWizard({
       id: res.id,
       kind,
       name,
-      explanation: null,
       scope: "global",
       rank: 0,
       archived_at: null,
       cue_when: kind === "cue" ? cueWhen : null,
       proof_then: null,
       proof_recover: null,
-      situations: (kind === "cue" ? sits.cues : sits.impediments).filter((s) => situationIds.includes(s.id)),
+      situations: sits.filter((s) => situationIds.includes(s.id)),
       used: false,
       active: false,
     };
@@ -506,11 +499,7 @@ export function NewSprintWizard({
                 </button>
               ))}
             </div>
-            <label className="label-accent block mt-22" htmlFor="why">
-              Why this sprint matters
-            </label>
-            <textarea id="why" className="input mt-6" rows={3} value={d.why} onChange={(e) => set("why", e.target.value)} />
-            <label className="label-accent block mt-18" htmlFor="celebration">
+            <label className="label-accent block mt-22" htmlFor="celebration">
               Celebration when the goal lands
             </label>
             <input id="celebration" className="input mt-6" value={d.celebration} onChange={(e) => set("celebration", e.target.value)} />
@@ -600,11 +589,10 @@ export function NewSprintWizard({
               </div>
               <SituationPicker
                 idPrefix="new-impediment"
-                kind="impediment"
-                options={sits.impediments}
+                options={sits}
                 selected={newImpSits}
                 onToggle={(id) => setNewImpSits((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id]))}
-                onCreate={(name) => createSituationInline("impediment", name)}
+                onCreate={(names) => createSituationInline("impediment", names)}
                 compact
               />
               <div className="wz-row mt-8">
@@ -666,7 +654,7 @@ export function NewSprintWizard({
                       on={d.cueIds.includes(c.id)}
                       disabled={noSituation || (!d.cueIds.includes(c.id) && d.cueIds.length >= 3)}
                       label={c.name}
-                      sub={noSituation ? "No situation yet — add one on the Cues page" : [cueSummary(c), appliesTo(c) && `applies to: ${appliesTo(c)}`].filter(Boolean).join(" · ") || c.explanation}
+                      sub={noSituation ? "No situation yet — add one on the Cues page" : [cueSummary(c), appliesTo(c) && `applies to: ${appliesTo(c)}`].filter(Boolean).join(" · ") || null}
                       tag={c.scope === "global" ? "Global" : null}
                       onPick={() => setCues(d.cueIds.includes(c.id) ? d.cueIds.filter((x) => x !== c.id) : [...d.cueIds, c.id])}
                     />
@@ -719,11 +707,10 @@ export function NewSprintWizard({
               </div>
               <SituationPicker
                 idPrefix="new-cue"
-                kind="cue"
-                options={sits.cues}
+                options={sits}
                 selected={newCueSits}
                 onToggle={(id) => setNewCueSits((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id]))}
-                onCreate={(name) => createSituationInline("cue", name)}
+                onCreate={(names) => createSituationInline("cue", names)}
                 compact
               />
               <div className="wz-row mt-8">
@@ -739,22 +726,7 @@ export function NewSprintWizard({
             <label className="label-accent block mt-22" htmlFor="intention-1">
               Day 1 intention · optional
             </label>
-            <textarea id="intention-1" className="input mt-6" rows={2} value={d.intentions[0]} onChange={(e) => set("intentions", d.intentions.map((x, j) => (j === 0 ? e.target.value : x)))} placeholder="Today I will…" />
-            <button type="button" className="disclosure mt-10" aria-expanded={showIntentions} onClick={() => setShowIntentions((v) => !v)} data-testid="intentions-toggle">
-              <span aria-hidden="true">{showIntentions ? "▾" : "▸"}</span> Pre-plan intentions for days 2–14
-            </button>
-            {showIntentions ? (
-              <div className="wz-intentions" data-testid="intentions">
-                {planCells.slice(1).map((c) => (
-                  <Fragment key={c.dayIndex}>
-                    <label htmlFor={`intention-${c.dayIndex}`} className="wz-note nowrap">
-                      <strong className="wz-day">D{c.dayIndex}</strong> {formatIsoDate(c.date, { weekday: "short", day: "numeric" })}
-                    </label>
-                    <input id={`intention-${c.dayIndex}`} className="input wz-input-tight" value={d.intentions[c.dayIndex - 1]} onChange={(e) => set("intentions", d.intentions.map((x, j) => (j === c.dayIndex - 1 ? e.target.value : x)))} placeholder="On this day I will…" />
-                  </Fragment>
-                ))}
-              </div>
-            ) : null}
+            <textarea id="intention-1" className="input mt-6" rows={2} value={d.intention} onChange={(e) => set("intention", e.target.value)} placeholder="Today I will…" />
 
             <label className="wz-align">
               <input type="checkbox" className="check" aria-label="Vision alignment" checked={d.aligned} onChange={(e) => set("aligned", e.target.checked)} />

@@ -34,10 +34,10 @@ describe("public schema access model", () => {
       order by table_name, privilege_type`;
     // Table-level: DELETE only on the libraries. INSERT is granted per column (below),
     // which role_table_grants does not report.
+    // F17: a situation is deleted only through delete_situation; the direct grant is gone.
     expect(rows).toEqual([
       { table_name: "cues", privilege_type: "DELETE" },
       { table_name: "impediments", privilege_type: "DELETE" },
-      { table_name: "situations", privilege_type: "DELETE" },
     ]);
     const cols = await sql<{ table_name: string; column_name: string }[]>`
       select table_name, column_name from information_schema.column_privileges
@@ -45,7 +45,6 @@ describe("public schema access model", () => {
       order by table_name, column_name`;
     expect(cols).toEqual([
       { table_name: "cues", column_name: "cue_when" },
-      { table_name: "cues", column_name: "explanation" },
       { table_name: "cues", column_name: "name" },
       { table_name: "cues", column_name: "scope" },
       { table_name: "cues", column_name: "user_id" },
@@ -54,7 +53,6 @@ describe("public schema access model", () => {
       { table_name: "impediments", column_name: "proof_then" },
       { table_name: "impediments", column_name: "scope" },
       { table_name: "impediments", column_name: "user_id" },
-      { table_name: "situations", column_name: "kind" },
       { table_name: "situations", column_name: "name" },
       { table_name: "situations", column_name: "scope" },
       { table_name: "situations", column_name: "user_id" },
@@ -71,7 +69,6 @@ describe("public schema access model", () => {
       order by table_name, column_name`;
     expect(rows).toEqual([
       { table_name: "cues", column_name: "cue_when" },
-      { table_name: "cues", column_name: "explanation" },
       { table_name: "cues", column_name: "name" },
       { table_name: "impediments", column_name: "name" },
       { table_name: "impediments", column_name: "proof_recover" },
@@ -154,7 +151,9 @@ describe("public schema access model", () => {
       "archive_item",
       "close_day",
       "complete_sprint",
+      "create_situations",
       "day_offered_items",
+      "delete_situation",
       "end_sprint_early",
       "finish_review",
       "finish_sprint",
@@ -167,6 +166,7 @@ describe("public schema access model", () => {
       "insight_situations",
       "insight_situations_many",
       "move_item",
+      "parse_permit",
       "remove_sprint_item",
       "replace_vision",
       "restore_item",
@@ -189,7 +189,7 @@ describe("public schema access model", () => {
 
   it("anon cannot execute the write functions", async () => {
     const [row] = await sql<{ start: boolean; close: boolean }[]>`
-      select has_function_privilege('anon', 'public.start_sprint(text,text,text,text,text,bigint,int,text,text,text,jsonb,text,date,uuid[],uuid[],uuid,uuid,text,text,text,bigint[],text[])', 'execute') as "start",
+      select has_function_privilege('anon', 'public.start_sprint(text,text,text,text,text,bigint,int,text,text,jsonb,text,date,uuid[],uuid[],uuid,uuid,text,text,text,bigint[])', 'execute') as "start",
              has_function_privilege('anon', 'public.close_day(uuid,bigint,text,jsonb,jsonb)', 'execute') as close`;
     expect(row).toEqual({ start: false, close: false });
   });

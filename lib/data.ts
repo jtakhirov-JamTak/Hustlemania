@@ -40,7 +40,6 @@ export type LibraryItem = {
   id: string;
   kind: ItemKind;
   name: string;
-  explanation: string | null;
   scope: ItemScope;
   rank: number;
   archived_at: string | null;
@@ -57,10 +56,9 @@ export type LibraryItem = {
   active: boolean;
 };
 
-/** F15: one row of a situations library (per kind), archived rows included. */
+/** F15 / F17: one row of the situations library (one list, both kinds attach to it), archived rows included. */
 export type SituationItem = {
   id: string;
-  kind: ItemKind;
   name: string;
   scope: ItemScope;
   rank: number;
@@ -71,6 +69,8 @@ export type SituationItem = {
   active: boolean;
   /** Live items it is attached to. */
   attached: number;
+  /** F17: the names of those items, for the delete sheet. */
+  attachedTo: string[];
 };
 
 export type AreaOverview = {
@@ -355,8 +355,6 @@ function toItem(kind: ItemKind, row: CueRowWithSituations | ImpedimentRowWithSit
     id: row.id,
     kind,
     name: row.name,
-    // F16: only a cue carries a free-text note; impediments lost INTERFERES.
-    explanation: "explanation" in row ? row.explanation : null,
     scope: row.scope as ItemScope,
     rank: row.rank,
     archived_at: row.archived_at,
@@ -399,55 +397,54 @@ export async function loadActiveLibrary(supabase: Client): Promise<{ cues: Libra
 }
 
 /**
- * F15: the situations library of one kind, archived rows included, in rank order.
+ * F15 / F17: the situations library — one list, archived rows included, in rank order.
  * `used` / `active` come from `library_item_usage`'s situation branch; `attached` counts
- * the live items it is attached to, from the join table under RLS.
+ * the live cues and impediments it is attached to, from both join tables under RLS.
  */
-export async function loadSituations(supabase: Client, kind: ItemKind): Promise<SituationItem[]> {
-  const [rows, usage, joins] = await Promise.all([
-    supabase.from("situations").select("*").eq("kind", kind).order("rank").order("created_at"),
+export async function loadSituations(supabase: Client): Promise<SituationItem[]> {
+  const [rows, usage, cueJoins, impJoins] = await Promise.all([
+    supabase.from("situations").select("*").order("rank").order("created_at"),
     supabase.from("library_item_usage").select("item_id, used, active").eq("kind", "situation"),
-    kind === "cue"
-      ? supabase.from("cue_situations").select("situation_id, cues!inner(archived_at)").is("cues.archived_at", null)
-      : supabase.from("impediment_situations").select("situation_id, impediments!inner(archived_at)").is("impediments.archived_at", null),
+    supabase.from("cue_situations").select("situation_id, cues!inner(name, archived_at)").is("cues.archived_at", null),
+    supabase.from("impediment_situations").select("situation_id, impediments!inner(name, archived_at)").is("impediments.archived_at", null),
   ]);
   if (rows.error) throw new Error(`situations: ${rows.error.message}`);
   if (usage.error) throw new Error(`library_item_usage: ${usage.error.message}`);
-  if (joins.error) throw new Error(`situation attachments: ${joins.error.message}`);
+  if (cueJoins.error) throw new Error(`situation attachments: ${cueJoins.error.message}`);
+  if (impJoins.error) throw new Error(`situation attachments: ${impJoins.error.message}`);
   const byId = new Map(usage.data.map((u) => [u.item_id, { used: Boolean(u.used), active: Boolean(u.active) }]));
-  const attached = new Map<string, number>();
-  for (const j of joins.data as { situation_id: string }[]) attached.set(j.situation_id, (attached.get(j.situation_id) ?? 0) + 1);
+  const attachedTo = new Map<string, string[]>();
+  const add = (situationId: string, name: string) => attachedTo.set(situationId, [...(attachedTo.get(situationId) ?? []), name]);
+  for (const j of cueJoins.data as { situation_id: string; cues: { name: string } | null }[]) add(j.situation_id, j.cues?.name ?? "");
+  for (const j of impJoins.data as { situation_id: string; impediments: { name: string } | null }[]) add(j.situation_id, j.impediments?.name ?? "");
   return rows.data.map((r) => ({
     id: r.id,
-    kind: r.kind as ItemKind,
     name: r.name,
     scope: r.scope as ItemScope,
     rank: r.rank,
     archived_at: r.archived_at,
     used: byId.get(r.id)?.used ?? false,
     active: byId.get(r.id)?.active ?? false,
-    attached: attached.get(r.id) ?? 0,
+    attached: attachedTo.get(r.id)?.length ?? 0,
+    attachedTo: (attachedTo.get(r.id) ?? []).filter(Boolean).sort((a, b) => a.localeCompare(b)),
   }));
 }
 
-/** F15: live situations of both kinds, for the pickers (rule 24: archived never appear here). */
-export async function loadActiveSituations(supabase: Client): Promise<{ cues: SituationItem[]; impediments: SituationItem[] }> {
-  const [cues, impediments] = await Promise.all([loadSituations(supabase, "cue"), loadSituations(supabase, "impediment")]);
-  return { cues: cues.filter((s) => s.archived_at === null), impediments: impediments.filter((s) => s.archived_at === null) };
+/** F15 / F17: the live situations, for the pickers (rule 24: archived never appear here). */
+export async function loadActiveSituations(supabase: Client): Promise<SituationItem[]> {
+  return (await loadSituations(supabase)).filter((s) => s.archived_at === null);
 }
 
-export async function loadLibraryCounts(supabase: Client): Promise<{ cues: number; impediments: number; cueSituations: number; impedimentSituations: number }> {
-  const [c, i, sc, si] = await Promise.all([
+export async function loadLibraryCounts(supabase: Client): Promise<{ cues: number; impediments: number; situations: number }> {
+  const [c, i, s] = await Promise.all([
     supabase.from("cues").select("id", { count: "exact", head: true }).is("archived_at", null),
     supabase.from("impediments").select("id", { count: "exact", head: true }).is("archived_at", null),
-    supabase.from("situations").select("id", { count: "exact", head: true }).eq("kind", "cue").is("archived_at", null),
-    supabase.from("situations").select("id", { count: "exact", head: true }).eq("kind", "impediment").is("archived_at", null),
+    supabase.from("situations").select("id", { count: "exact", head: true }).is("archived_at", null),
   ]);
   if (c.error) throw new Error(`cues: ${c.error.message}`);
   if (i.error) throw new Error(`impediments: ${i.error.message}`);
-  if (sc.error) throw new Error(`situations: ${sc.error.message}`);
-  if (si.error) throw new Error(`situations: ${si.error.message}`);
-  return { cues: c.count ?? 0, impediments: i.count ?? 0, cueSituations: sc.count ?? 0, impedimentSituations: si.count ?? 0 };
+  if (s.error) throw new Error(`situations: ${s.error.message}`);
+  return { cues: c.count ?? 0, impediments: i.count ?? 0, situations: s.count ?? 0 };
 }
 
 export type SprintItems = {
@@ -493,7 +490,6 @@ export async function loadDayOfferedItems(supabase: Client, dayId: string): Prom
     id: r.item_id,
     kind: r.kind as ItemKind,
     name: r.name,
-    explanation: r.explanation,
     scope: "global" as ItemScope,
     rank: r.rank,
     archived_at: null,

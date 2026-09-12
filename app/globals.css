@@ -4089,3 +4089,129 @@ body:has(dialog[open]) {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* F17: one-box capture — the box, its tools, the status line and the parts under it. */
+.capture {
+  margin-top: 8px;
+}
+
+.capture-box {
+  border-radius: 14px;
+  line-height: 1.55;
+  resize: vertical;
+  width: 100%;
+}
+
+.capture-compact .capture-box {
+  border-radius: 12px;
+  padding: 10px 13px;
+}
+
+.capture-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.capture-tools .dictate {
+  margin-top: 0;
+}
+
+.capture-hand {
+  font-size: 12.5px;
+}
+
+.capture-status {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.capture-status-warn {
+  color: var(--accent-ink);
+}
+
+.capture-parts {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.capture-compact .capture-parts {
+  margin-top: 8px;
+  gap: 6px;
+}
+
+.capture-parts-title {
+  font-size: 10.5px;
+}
+
+.capture-part {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  align-items: center;
+}
+
+.capture-part-long {
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.capture-list {
+  display: grid;
+  gap: 6px;
+}
+
+.capture-list-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px 12px;
+  align-items: center;
+}
+
+.capture-add {
+  justify-self: start;
+  font-size: 12.5px;
+  color: var(--accent-ink);
+}
+
+.capture-rerecord {
+  justify-self: start;
+}
+
+@media (max-width: 480px) {
+  .capture-part,
+  .capture-list-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .capture-list-row {
+    grid-template-columns: 1fr auto;
+  }
+  .capture-list-row label {
+    grid-column: 1 / -1;
+  }
+}
+
+/* F17: the band advice under a confidence pick. */
+.v-advice {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+.v-advice[data-band="low"] {
+  color: var(--accent-ink);
+}
+
+/* A part wraps and grows with its words instead of scrolling sideways on a phone. */
+.capture-part-text {
+  line-height: 1.5;
+  resize: none;
+  field-sizing: content;
+  min-height: 42px;
+}

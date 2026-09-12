@@ -2390,6 +2390,373 @@ state at plan time: one active vision (meaning and baseline filled), one impedim
   are not all saved."; the Sprints sidebar sub-line is "Vision not finished"; a mockup
   page was not built — the real screens were captured instead, the look being the F9 one.
 
+### F17 — One-box capture: the parser, one situations library, delete, the cue note and why gone
+*Specified 2026-09-12 by `/interview` (feature mode, escalated to DESIGN → SPECIFY: a new
+external service, an entity-model change, a destructive migration; Part 1 untouched).
+Plan of record `~/.claude/plans/i-want-to-make-wondrous-pebble.md`; the fifteen calls are
+in `docs/DECISIONS.md` (same date). Three features F17 → F18 → F19, each green and
+evaluated before the next.*
+
+- **Behavior.** Vision step 2, the impediment and cue editors and the Situations tab each
+  take **one box**: speak (Dictate) or type, the words are sorted into the fields
+  ("Parsed as"), each part can be corrected, Save stores them through the existing
+  paths. A missing part refuses the save and names it. Situations are **one library**
+  with Delete on every row: the sheet lists what it applies to; it is removed from them
+  and deleted, or archived instead when a closed day asked about it, or refused when an
+  item in an active sprint would be left without one. A situation list ("getting up
+  early, going to bed late") becomes rows at once, on the tab and inside every APPLIES
+  TO picker. Both confidence pickers show the band advice. The cue NOTE and "Why this
+  sprint matters" leave the UI and the database.
+- **Acceptance criteria.**
+  - **Migration `0021_one_situations_library.sql`** (one transaction, forward-only; the
+    header names every rebuilt function with its source): a notice with the counts of
+    sprints holding a `why` and cues holding a note; both composite FKs dropped →
+    `situation_kind` dropped from both join tables → plain FK `situation_id →
+    situations(id)` → `situations_id_kind_key` dropped → index `(user_id, rank)` →
+    ranks renumbered `row_number() over (partition by user_id order by
+    (kind = 'impediment') desc, rank, created_at, id)` (impediment situations first,
+    each list in its old order; the rule is a comment in the migration) → `kind` dropped
+    → `situations_before_insert` (0019) without the kind filter; `situations_delete`
+    policy dropped and the DELETE grant revoked (every delete goes through
+    `delete_situation`); `cues_before_update` (0009) and `library_item_before_insert`
+    (0020) rebuilt without the note trim, `day_offered_items` dropped and recreated
+    (0020) without `explanation`, `cues.explanation` dropped; the 22-arg `start_sprint`
+    dropped and the **20-arg** form created from 0020 without `p_why` / `p_intentions`
+    (day-1 `p_intention` kept), `sprints.why` dropped; `set_item_situations` (0019)
+    without `and kind = p_kind`, `move_item` (0019) without `v_kind`;
+    `create_situations(p_names text[], p_scope text default 'global') returns uuid[]`
+    (trim, drop blanks, case-insensitive dedupe within the input, reuse a live same-name
+    row, insert the rest at `max(rank) + ordinality` under a row lock, ids in input
+    order; `not_authenticated`, `invalid_scope`); `delete_situation(p_id uuid) returns
+    jsonb` (own row `for update` else `item_not_found`; `affected_sprints_check(
+    'situation', id, null)` non-empty → `{ok:false, failing}` in the `archive_item`
+    shape; any situation observation row → `archived_at = coalesce(archived_at, now())`,
+    attachments kept, `{ok:true, outcome:'archived'}`; else join rows and the row
+    deleted, `{ok:true, outcome:'deleted'}`). Assertion block (`-- assert:begin/end`):
+    `situations` columns exactly `archived_at, created_at, id, name, rank, scope,
+    updated_at, user_id`; no `situation_kind`; `sprints.why`, `cues.explanation`,
+    `impediments.explanation` absent; the 0020 `visions` column list carried forward; no
+    `(user_id, rank)` duplicate; exactly one `start_sprint`, with 20 arguments; both new
+    functions present; `situations_delete` absent. `tests/db/vision.test.ts` runs this
+    block standalone: provoked with `cues.explanation` re-added, a duplicate rank and a
+    `kind` column, each throws.
+  - **Migration `0022_parse_log.sql`:** `parse_log(id, user_id → auth.users cascade,
+    kind text check, created_at)`, RLS enabled with no policies, indexed on
+    `(user_id, created_at)`; `parse_permit(p_kind text) returns text` (definer,
+    authenticated + service_role): `'rate_limited'` at the 11th call within a minute or
+    the 201st within a day, else inserts a row, prunes the caller's rows older than two
+    days and returns null. Test: the 11th call in a minute and the 201st in a day refused
+    (seeded rows), rows older than two days gone after a permitted call, `parse_log`
+    unreadable by the authenticated role.
+  - **`scripts/rehearse-0021.mjs`** (pattern: rehearse-0020): reset to 0020; user A
+    through the 0020 functions — a 3-of-3 vision, one impediment with two impediment
+    situations, one cue with a note and two cue situations (ranks collide across kinds),
+    a 22-arg sprint with a `why`, a day-1 close observing one situation; user B with
+    loose situations. `migration up`; assert the column sets, A's ranks exactly 1..4
+    with the impediment pair first, attachment counts unchanged, the sprint present
+    without `why`, `day_offered_items` rows without an `explanation` key, the 20-arg
+    `start_sprint` starts a sprint for A, `delete_situation` → `archived` for the
+    observed situation, `deleted` for a loose one of B's, `{ok:false}` with
+    `no_situations` for the member's last live one. `db reset` after. The release
+    rehearses the same on the restored hosted dump before the gate.
+  - **DB tests** (`tests/db/`): ranks per user only (two back-to-back inserts → 1, 2) ·
+    `set_item_situations` accepts one situation on a cue and an impediment at once,
+    still `situation_not_found` for a stranger's and `situation_archived` · the plain FK
+    refuses an unknown `situation_id` for the postgres role · `delete_situation`: loose
+    → `deleted` and the row gone; attached to an unused item → `deleted` and both join
+    tables empty for it; observed on a closed day → `archived`, row present, attachments
+    kept; a member's last live one → `{ok:false, failing:[{reason:'no_situations'}]}`
+    and nothing changed; a stranger's → `item_not_found`; a direct DELETE as
+    authenticated → `42501` · `create_situations`: order preserved, ranks contiguous
+    after existing rows, blanks dropped, a case-insensitive duplicate of a live row
+    returns its id, an archived same-name row not reused, `[]` → `[]`, anon →
+    `not_authenticated` · `day_offered_items` rows carry no `explanation` key ·
+    `start_sprint` stores no `why`; a started sprint has `sprint_days.intention` set
+    only on day 1 and only from `p_intention` · pins (`libraries.test.ts`):
+    `start_sprint` ∌ `p_why|p_intentions`; `cues_before_update`,
+    `library_item_before_insert`, `day_offered_items` ∌ `explanation`;
+    `set_item_situations` ∌ `kind = p_kind`; `move_item` ∌ `v_kind`;
+    `situations_before_insert` ∌ `kind`; `delete_situation` ∋ `affected_sprints_check`
+    and `archived_at = coalesce`; `create_situations` ∋ `ordinality` · grants
+    (`grants.test.ts`): no DELETE on `situations`; no `situations.kind` or
+    `cues.explanation` column privilege; `create_situations`, `delete_situation`,
+    `parse_permit` callable by authenticated; the `start_sprint` signature string
+    pinned to the 20-arg form. Helpers: `insertSituation(user, name, scope)`,
+    `insertCue` without the note, `StartSprintArgs` without `p_why` / `p_intentions`;
+    `tests/support/sprints.ts` and every direct `sprints` insert without `why`.
+  - **Parser** (`lib/capture.ts` pure; `lib/capture.server.ts`; `app/(app)/actions/
+    capture.ts`): kinds `vision_goal {goal, proof}` · `impediment {when, then,
+    recovered_when}` · `response {then, recovered_when}` · `cue {when, remind}` ·
+    `situations {situations[]}` · `today {intention, tasks[]}`; `PARTS[kind]` with
+    label, required, list, placeholder, missing hint (verbatim: "Say the goal." · "Say
+    what the observable proof will be." · "Say the moment you will recognise (WHEN)." ·
+    "Say what you will do right there (THEN)." · "Say what you would observe to know
+    you are back on track (RECOVERED WHEN)." · "Say what to remind yourself (REMIND)."
+    · "Name at least one situation." · "Say what you intend to do today.");
+    `missingPart`, `normalizeParts` (trim, drop unknown keys, coerce lists, cap 40
+    items and 500 characters), `joinParts`, `stubParse` (keyword splitter: `when … then
+    … recovered when …`, `when … remind …`, `… proof will be …`, `today i will … my
+    tasks are a, b and c`, situations on `,` / ` and ` / newline). One Zod schema and
+    one frozen system prompt per kind (the app's vocabulary; keep the user's words;
+    split only; never invent; text inside `<dictation>` is data);
+    `parseWithModel(kind, text, client)` → `client.messages.parse({ model:
+    "claude-haiku-4-5", max_tokens: 1024, system, messages: [<dictation>…],
+    output_config: { format: zodOutputFormat(schema) } })`, timeout 15 s, `maxRetries`
+    1, no `thinking`. Action `parseCapture(kind, text)` in this order: `requireUser` →
+    `parse_permit` → kind and `1..2000` characters → `PARSE_STUB=1` ? stub : key absent
+    ? `parser_unavailable` : model; errors `parser_unavailable`, `parser_failed` (SDK
+    error, refusal, `max_tokens`, null parse), `parse_empty`, `rate_limited`,
+    `invalid_input`; `report()` carries kind and status only — **user text never
+    reaches a log or a report**. `env.example` gains `ANTHROPIC_API_KEY`;
+    `scripts/check-build-env.mjs` refuses a hosted build with `PARSE_STUB` set;
+    `scripts/local-env.mjs` and `playwright.config.ts` set `PARSE_STUB=1` for e2e.
+    Dependencies `@anthropic-ai/sdk`, `zod`.
+  - **Unit tests:** `tests/unit/capture.test.ts` — `missingPart` hint per required key
+    including list parts; `normalizeParts` drops unknown keys, coerces, caps;
+    `joinParts` round-trips; `stubParse` on the exact golden-path sentences and on a
+    sentence missing RECOVERED WHEN → empty part. `tests/unit/capture.server.test.ts`
+    with a fake client — parsed JSON → parts; a thrown SDK error → `parser_failed`;
+    `stop_reason: "refusal"` → `parser_failed`; key absent → `parser_unavailable`
+    without a call; the request carries the Haiku model, `max_tokens` 1024, no
+    `thinking`, the text only inside the user message; a `console.error` spy shows no
+    user text on failure. `tests/unit/capture.live.test.ts` under
+    `describe.skipIf(!process.env.ANTHROPIC_API_KEY || process.env.PARSE_LIVE_SMOKE !==
+    "1")`: one impediment sentence → three parts, one without RECOVERED WHEN →
+    `missing` names it. `tests/unit/confidence.test.ts`: bands at 0, 5, 6, 8, 9, 10.
+  - **`components/CaptureBox.tsx`** (`data-testid="capture-box"`, `data-kind`,
+    `data-phase` idle / parsing / parsed / failed / unavailable / manual): a textarea
+    (`aria-label` = the box label), a Dictate button (`Dictate.tsx` gains `onStop(text)`
+    → parse), a "Sort into parts" button (typed path; Ctrl/Cmd+Enter), status
+    `role="status"` "Reading your words…" while parsing with Save `aria-disabled`; the
+    preview (`capture-parts`) renders the kind's parts as labelled inputs keeping
+    today's accessible names (Goal, Proof, WHEN, THEN, RECOVERED WHEN, REMIND, Daily
+    intention, Task n, Situation n), list parts as rows with × and "Add another";
+    failed → "Could not sort it — fill the parts by hand.", unavailable → "Sorting is
+    unavailable — fill the parts by hand.", the box keeps its text and the parts stay
+    editable; the hint line is `missingPart`'s hint, Save `aria-disabled` with it and a
+    press focuses the first missing field; `mode="fields"` renders the inputs plus
+    **Re-record** (back to the box, prefilled by `joinParts`). Keyed per host (`key`
+    per step in a wizard, `.claude/rules/react-traps.md`). `SituationCapture` = the
+    compact `situations` box with **Add all** → `create_situations` → each new row
+    ticked, inside `SituationPicker` (which loses `kind` and the one-at-a-time "New
+    situation" field) and on the Situations tab.
+  - **Screens.** Vision step 2: Goal + Proof + their Dictates → `capture-box
+    [data-kind=vision_goal]` (`fields` mode when a goal exists), the chips and reason box
+    unchanged under it, `lib/confidence.ts` `confidenceAdvice(n)` rendered as
+    `confidence-advice` — `< 6` "This may be unrealistic. Consider a smaller goal or
+    more support." · `6–8` "Sweet spot: you are pushing yourself and it is still
+    attainable." · `> 8` "This looks easy. Stretch the goal." Impediments and Cues
+    pages: Add = capture mode, Edit = fields + Re-record, APPLIES TO as children; no
+    NOTE input, row, `data-part=note` or "NOTE" text; `ItemInput.explanation` gone.
+    `/vision/situations` (`SituationLibraryPage`, one copy set: "Situations", "The
+    situations your cues and impediments apply to.", empty "No situations yet."); the
+    old `cue-situations` / `impediment-situations` routes redirect; sidebar rows
+    Execution cues · Impediments · Situations with counts; the overview's library card
+    the same three; AddCard = `SituationCapture` + scope chips; usage line "Applied by
+    n items"; every row Edit · Delete; Delete → sheet (`Modal`, `data-testid=
+    "delete-situation"`) listing the items — "Removed from: A, B." or "It has day
+    history, so it will be archived instead." — Confirm → `deleteSituation` → one-line
+    status; a `no_situations` refusal names the item in the error bar. Data:
+    `loadSituations(supabase)` one list, `loadActiveSituations` one array,
+    `loadLibraryCounts → {cues, impediments, situations}`, `LibraryItem.explanation`
+    gone, `lib/errors.ts` copy for `parser_unavailable`, `parser_failed`,
+    `parse_empty`, `rate_limited`, the delete outcomes.
+  - **e2e** (`e2e/golden-path.spec.ts`, desktop + phone): step 2 through the box and
+    "Sort into parts" (stub) → the Goal / Proof preview holds the F16 assertions → `2 of
+    3`; the advice line at confidence 5; a cue typed without its REMIND → Save refused,
+    the hint reads the REMIND line, the `cues` count in the DB unchanged (an
+    impediment's THEN / RECOVERED WHEN stay optional at the library — F15 rule 6 bites at
+    the sprint; amended 2026-09-12 after eval-11 P2-1); the Cues page shows no NOTE; `/vision/situations` count line, Delete
+    on a situation in the active sprint → the refusal names the impediment, the row
+    remains; a loose situation → deleted; the picker's Add all ticks the rows; the
+    Dictate buttons present by label; seeds without `kind`, selected by name.
+  - **Visual** (Playwright, Dusk + Night × 390 + 1138): step 2 capture → parsed → advice
+    at 5 and 9; Impediments Add in the parsing state (`PARSE_STUB=slow`), the failed
+    state (`PARSE_STUB=fail`), Edit + Re-record; the Situations tab with both sheet
+    variants; the picker's capture. Mockup first: a throwaway `app/mockup/capture/`
+    page with hardcoded parts showing capture → parsing → parsed → missing part and the
+    delete sheet, captured into `docs/mockups/f17-capture/` and compared with the
+    references before the real screens change. `npm run verify` green from a fresh
+    reset.
+  - **Live mutations**, each turning a named test red and restored: the sprint gate
+    branch deleted from `delete_situation` · the observation check deleted (an observed
+    situation hard-deleted) · `ordinality` replaced by the trigger rank · `and kind =
+    p_kind` restored in `set_item_situations` · the duplicate-rank assertion branch
+    deleted · the missing-part refusal bypassed in `CaptureBox` · the per-minute cap
+    raised to 100 · `explanation` restored in `day_offered_items`.
+  - **Release** (RUNBOOK order): dump → rehearsal on the restored dump → gate (the
+    migration shown, the one hosted `why` named as erased) → the user's `db push
+    --linked` **and** the commit + `git push` in the same exchange → checks
+    (`migration list --linked`, `db diff --linked`, a service-role read, the deployed
+    spec); `ANTHROPIC_API_KEY` present on Vercel before the push, confirmed by the user
+    (the build checks the variable's name only, never its value).
+- **Non-goals.** Storing the transcript · merging same-name situations across the old
+  kinds · the wizard, the rail and Today (F18, F19) · voice on the review note · parsing
+  anything but the six field sets · a per-field re-parse · a model other than the one
+  constant.
+- **Risks.** (1) The renumbering yields an order the owner did not expect, or a duplicate
+  rank survives — one-sentence rule, the assertion refuses a duplicate, the rehearsal
+  asserts the exact order over colliding seeds. (2) The `start_sprint` signature flips
+  both ways across the push window — push and deploy in one exchange, the window
+  recorded in PROGRESS as F16's was. (3) Injected instructions, invented parts or runaway
+  spend — data-in-tags and "never invent", the preview before Save, the caps in
+  `parse_permit`, the model never on the write path.
+- **Evaluator.** Destructive migration on production rows (three column drops, the
+  situation kind merged) and a migration creating a user-data table (`parse_log`) →
+  one run.
+- **UI.** Primary action: type or speak, then correct the parts. Viewport: phone-first
+  (390 px by the Playwright phone project), desktop checked in Chrome. States: parsing ·
+  failed / unavailable / missing part · mic unsupported or blocked (as F16) · the delete
+  sheet. References: `docs/mockups/ui-v2/handoff_sprint_ui_v8/` (README, Libraries
+  artboard), `docs/mockups/f9-vision/`, the F16 setup as built. Mockup:
+  `app/mockup/capture/` captured to `docs/mockups/f17-capture/` (above).
+- **As built (2026-09-12).** Migrations `0021_one_situations_library.sql` and
+  `0022_parse_log.sql` as specified; `db reset` clean; types regenerated.
+  `scripts/rehearse-0021.mjs` 22 assertions green on legacy-shaped rows (colliding ranks
+  across the two kinds, a cue with a note, a 22-argument sprint with a `why`, a closed
+  day observing one situation): ranks 1..4 impediment-first, attachments kept, the
+  sprint and its observation row kept, one 20-argument `start_sprint`, the three
+  `delete_situation` outcomes. Eight live mutations, all red and restored: the sprint
+  gate deleted from `delete_situation` · its history check deleted · `create_situations`
+  giving every row the same rank · `set_item_situations` refusing a situation attached
+  to the other kind · `parse_permit`'s cap raised to 100 · the duplicate-rank assertion
+  branch deleted from 0021 · a constant exported from the `"use server"` action (the guard
+  test) · `missingPart` never refusing. `npm run verify` green: typecheck, lint, hooks
+  60/21+23/6+5, unit 203 (+3 live skipped), DB 325, e2e 12 + 6 skipped. Visual pass by
+  Playwright: 48 captures (`docs/mockups/f17-capture/`), Dusk + Night × 1138 + 390, no
+  horizontal overflow — step 2 fields / capture / parsing / parsed with the advice at 9
+  and 4, Impediments Add parsed and failed, Edit + Re-record, the Situations tab, both
+  delete sheets, the deleted outcome. eval-11: 0 P0, 0 P1, 4 P2 (P2-1 settled by the
+  amendment above; P2-2 to P2-4 in BACKLOG); working tree identical before dispatch and
+  at the report's open and close (md5). Build choices: the parts are growing textareas
+  (a THEN clipped inside an input on the phone); the compact situations box sorts on
+  Enter; a delete's outcome is announced at page level because the row unmounts; the
+  throwaway mockup page was not built — the real screens were captured, as F16 did; the
+  "failed" capture is the too-long-input path (`invalid_input`), the same phase and
+  status slot as `PARSE_STUB=fail`. **Not exercised:** the real model (no key in this
+  environment; the live smoke is double-gated), dictation with real audio, and the
+  Dictate-stop → sort path in a real browser — all owed to the owner's hand check once
+  `ANTHROPIC_API_KEY` is in `.env`. The hosted push erases one sprint's `why` (the
+  0021 notice prints the counts); the dump precedes it.
+
+### F18 — Five-step wizard, confidence and mantra copy, the rail's Edit menus
+*Specified 2026-09-12 with F17 (same interview, same plan of record). Built after F17 is
+green.*
+
+- **Behavior.** New sprint has five steps: Area & outcome · Measure & goal · Confidence &
+  mantra · Daily targets · Impediments & cues. Step 3 asks "How confident are you that
+  you will be able to achieve the Sprint goal?" and answers a pick with the band advice;
+  "Why this sprint matters" and the vision checkbox are gone; the mantra explains itself.
+  Step 4 is the plan alone. Step 5 lists existing impediments and cues by WHEN only;
+  Create new opens a one-box capture; Highest and Focus are chosen as today. On the
+  sprint page the Highest card and the Cues card each carry one Edit button that opens a
+  short menu.
+- **Acceptance criteria.**
+  - `components/NewSprintWizard.tsx` keeps state, hints, submit and footer; the steps
+    move to `components/wizard/StepArea.tsx`, `StepMeasure.tsx`, `StepConfidence.tsx`,
+    `StepTargets.tsx`, `StepItems.tsx`; `components/wizard/draft.ts` holds the Draft
+    type (no `why`, `intentions`, `aligned`) and a pure `stepHints` unit-tested in
+    `tests/unit/wizard.test.ts` (the ladder without why / aligned; step 4 the plan hints
+    only; step 5 the item hints; the blocked line "A sprint has to advance the vision;
+    finish its three steps first." — eval-10 P2-1 closed).
+  - Header "New sprint · Step n of 5"; no `#why`, no "Vision alignment" control, no
+    `intentions-toggle` or `intention-1`; step 3: the confidence question as the group
+    heading, `confidence-advice` under the chips at 4 / 7 / 9, Celebration, Mantra with
+    the hint "A quote, a saying, or anything that inspires you or lifts you up when you
+    are down."; step 4: Same / Custom and the PlanGrid only, the F3 plan hints; step 5:
+    rows read `WHEN {name}` only, a row lacking a response or a situation is
+    `aria-disabled` with "finish it on the Impediments page" / "Cues page", counts "n
+    of 3", the Highest radiogroup + ProofInputs and the Focus radiogroup as today,
+    **Create new** buttons (`aria-expanded`) reveal `capture-box[data-kind=impediment]`
+    / `[data-kind=cue]` with APPLIES TO, collapsed by default; a created item joins the
+    sprint as today.
+  - `startSprintAction` and `StartSprintInput` carry no `why` / `intentions`; a started
+    sprint has `sprint_days.intention` null on every day (DB read in e2e).
+  - The accessible names of the Goal / Proof / WHEN inputs follow one convention
+    across the three vision steps and the wizard (eval-10 P2-2 closed) — pinned in e2e
+    by `getByLabel`.
+  - Rail: `highest-impediment` has one `Edit` (`aria-haspopup="menu"`,
+    `aria-expanded`) opening `role="menu"` items "Change the Highest" (the existing
+    ItemPicker), "Fix the response" (inline `capture-box[data-kind=response]` whose Save
+    writes `proof_then` / `proof_recover` through `saveProofPoint`), "Add or remove"
+    (`Modal`, `data-testid="highest-members"`: rows with a HIGHEST tag, Remove per row →
+    `removeSprintItem`, "Add impediment" swaps the modal for the existing AddItemPicker
+    — never two dialogs); the card body keeps WHEN / THEN / RECOVERED WHEN / APPLIES TO
+    and a read-only Also-watching list; no "Change", "Edit response", "Add impediment"
+    or per-row Remove links remain on the card. Cues card `sprint-items`: one `Edit` →
+    "Change the focus" (ItemPicker single, "Set as focus" → `setFocusCue`) / "Add or
+    remove" (the members modal with a FOCUS tag, Remove, "Add cue"). Escape closes the
+    menu and focus returns to Edit. The close flow's "Set up tomorrow" block is
+    untouched.
+  - Look: the wizard card max-width 800 px, radius 22, padding as `.dialog`, a step
+    progress bar with the five names reusing the Vision setup's segments; single column
+    at 390 px with no horizontal overflow. Out of scope: a `<dialog>` overlay, area
+    cards, the picker restyle (done).
+  - e2e (desktop + phone): both wizard runs through five steps (Confidence 7 + advice,
+    the mantra hint, the plan on step 4, the items on step 5 with a Create new
+    expansion), the rail menu flows (add a cue, set the focus, add and remove an
+    impediment, fix the response), Escape / focus return; BACKLOG #43 and the eval-01
+    label-toggle item closed by construction. Visual: steps 3 and 5 (Create new
+    collapsed and expanded, a disabled row), the rail menu and the members modal, Dusk
+    + Night × 390 + 1138. `npm run verify` green.
+  - Live mutations: a hint dropped from `stepHints` (the unit test red) · the
+    `aria-disabled` row made tickable (e2e red) · `why` sent again in
+    `StartSprintInput` (typecheck red) · the menu's Escape handler removed (e2e red).
+- **Non-goals.** A `<dialog>` overlay wizard · area cards · the close flow's Set up
+  tomorrow block · any change to `start_sprint` (F17 rebuilt it) · a draft that
+  survives a reload.
+- **Risks.** (1) The split loses a hint — the `stepHints` test enumerates the ladder.
+  (2) The menu traps focus on a phone — Escape and focus return asserted in e2e. (3)
+  Removing the alignment checkbox lets Start fire one tap earlier — the database rules,
+  not the checkbox, guard every invariant.
+- **Evaluator.** none.
+- **UI.** As F17; references the v8 README §New Sprint dialog and the f8 rail. Mockup:
+  the step-5 and rail-menu states added to `app/mockup/capture/` and captured before
+  the screens change.
+
+### F19 — Today's entry as one box: the intention and the tasks
+*Specified 2026-09-12 with F17 (same interview, same plan of record). Built after F18 is
+green.*
+
+- **Behavior.** On a fresh day the Today card shows one box: "Today I will … My tasks
+  are …". Sorting gives the intention and a task list, each editable; Save writes the
+  intention and creates the tasks with checkboxes. Afterwards the intention line and the
+  task list work as today, plus Re-record: a new recording replaces the intention, keeps
+  the tasks already done, archives the undone ones and creates the new list.
+- **Acceptance criteria.**
+  - `capture-box[data-kind=today]` on a planning day with no intention and no live
+    tasks (placeholder "Today I will … My tasks are …"); preview fields "Daily
+    intention" and "Task n" (remove ×, Add another; tasks optional); Save →
+    `saveIntention` then `createTask` per task in order; a failure mid-list keeps the
+    created rows and offers Retry for the rest; `router.refresh()` after.
+  - Afterwards: the intention line (`data-testid="intention-line"`) + `TaskList` (edit
+    / check / remove unchanged, the draft row kept) + **Re-record**; its Save → the
+    intention replaced, every DONE task keeps its id and stays, each undone task gains
+    `archived_at` (`removeTask`), the new rows created in order; the button's line says
+    "Done tasks stay; the rest are replaced." The blur-saving `Intention` textarea is
+    gone. Locked (`intention-locked`) and closed states unchanged; no task cap;
+    `close_day` and the insight paths untouched (their tests unchanged).
+  - e2e (desktop + phone): the box flow with the stub sentence ("Today I will move the
+    $600 before lunch. My tasks are call the bank about the fee and move the $600.") →
+    the intention line and two task rows in the DB in order; tick one done, Re-record
+    with a new sentence → the done task's id unchanged, the other archived, the new
+    rows present; the F5 backfill and the close unchanged. Visual: the box, the saved
+    state, the Re-record state, Dusk + Night × 390 + 1138. `npm run verify` green.
+  - Live mutations: the done-kept rule removed (the e2e red) · the sequential create
+    made parallel with a forced failure (the Retry test red) · the box shown while an
+    intention exists (e2e red).
+- **Non-goals.** Parsing times or dates out of tasks · task ordering · the backfill's
+  intention · tomorrow's intention on its row (the F8 rejection stands) · a task cap.
+- **Risks.** (1) Re-record archives a task the user meant to keep — the rule is on the
+  button's line, and done tasks are never touched. (2) Sequential creates fail midway —
+  Retry covers the remainder, nothing is duplicated. (3) The box and the intention line
+  disagree after a refresh — the box shows only while both are empty, and Save
+  refreshes.
+- **Evaluator.** none.
+- **UI.** As F17; references `docs/mockups/today/` and the f8 journal. Mockup: the Today
+  box and its saved state added to `app/mockup/capture/` and captured before the screen
+  changes.
+
 ## 4. Explicit v1 non-goals
 AI-written insights or reviews · push notifications · native apps · offline mode ·
 custom Areas · circle roles/moderation · account deletion self-service · data import

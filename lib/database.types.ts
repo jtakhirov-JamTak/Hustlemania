@@ -40,7 +40,6 @@ export type Database = {
           cue_id: string
           id: string
           situation_id: string
-          situation_kind: string
           user_id: string
         }
         Insert: {
@@ -48,7 +47,6 @@ export type Database = {
           cue_id: string
           id?: string
           situation_id: string
-          situation_kind?: string
           user_id: string
         }
         Update: {
@@ -56,7 +54,6 @@ export type Database = {
           cue_id?: string
           id?: string
           situation_id?: string
-          situation_kind?: string
           user_id?: string
         }
         Relationships: [
@@ -68,11 +65,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "cue_situations_situation_id_situation_kind_fkey"
-            columns: ["situation_id", "situation_kind"]
+            foreignKeyName: "cue_situations_situation_id_fkey"
+            columns: ["situation_id"]
             isOneToOne: false
             referencedRelation: "situations"
-            referencedColumns: ["id", "kind"]
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -81,7 +78,6 @@ export type Database = {
           archived_at: string | null
           created_at: string
           cue_when: string | null
-          explanation: string | null
           id: string
           name: string
           rank: number
@@ -93,7 +89,6 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           cue_when?: string | null
-          explanation?: string | null
           id?: string
           name: string
           rank: number
@@ -105,7 +100,6 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           cue_when?: string | null
-          explanation?: string | null
           id?: string
           name?: string
           rank?: number
@@ -333,7 +327,6 @@ export type Database = {
           id: string
           impediment_id: string
           situation_id: string
-          situation_kind: string
           user_id: string
         }
         Insert: {
@@ -341,7 +334,6 @@ export type Database = {
           id?: string
           impediment_id: string
           situation_id: string
-          situation_kind?: string
           user_id: string
         }
         Update: {
@@ -349,7 +341,6 @@ export type Database = {
           id?: string
           impediment_id?: string
           situation_id?: string
-          situation_kind?: string
           user_id?: string
         }
         Relationships: [
@@ -361,11 +352,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "impediment_situations_situation_id_situation_kind_fkey"
-            columns: ["situation_id", "situation_kind"]
+            foreignKeyName: "impediment_situations_situation_id_fkey"
+            columns: ["situation_id"]
             isOneToOne: false
             referencedRelation: "situations"
-            referencedColumns: ["id", "kind"]
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -404,6 +395,27 @@ export type Database = {
           rank?: number
           scope?: string
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      parse_log: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
           user_id?: string
         }
         Relationships: []
@@ -540,7 +552,6 @@ export type Database = {
           archived_at: string | null
           created_at: string
           id: string
-          kind: string
           name: string
           rank: number
           scope: string
@@ -551,7 +562,6 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           id?: string
-          kind: string
           name: string
           rank: number
           scope?: string
@@ -562,7 +572,6 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           id?: string
-          kind?: string
           name?: string
           rank?: number
           scope?: string
@@ -771,7 +780,6 @@ export type Database = {
           usage_of_funds: Json
           user_id: string
           vision_id: string
-          why: string
         }
         Insert: {
           amount: number
@@ -795,7 +803,6 @@ export type Database = {
           usage_of_funds?: Json
           user_id: string
           vision_id: string
-          why: string
         }
         Update: {
           amount?: number
@@ -819,7 +826,6 @@ export type Database = {
           usage_of_funds?: Json
           user_id?: string
           vision_id?: string
-          why?: string
         }
         Relationships: [
           {
@@ -1080,11 +1086,14 @@ export type Database = {
         Returns: undefined
       }
       complete_sprint: { Args: { p_sprint_id: string }; Returns: undefined }
+      create_situations: {
+        Args: { p_names: string[]; p_scope?: string }
+        Returns: string[]
+      }
       day_offered_items: {
         Args: { p_sprint_day_id: string }
         Returns: {
           cue_when: string
-          explanation: string
           is_focus: boolean
           item_id: string
           kind: string
@@ -1095,6 +1104,7 @@ export type Database = {
           situations: Json
         }[]
       }
+      delete_situation: { Args: { p_id: string }; Returns: Json }
       end_sprint_early: { Args: { p_sprint_id: string }; Returns: undefined }
       finish_review: {
         Args: {
@@ -1251,6 +1261,7 @@ export type Database = {
         Args: { p_direction: string; p_item_id: string; p_kind: string }
         Returns: undefined
       }
+      parse_permit: { Args: { p_kind: string }; Returns: string }
       reminders_claim: {
         Args: { p_sprint_day_ids: string[] }
         Returns: string[]
@@ -1400,7 +1411,6 @@ export type Database = {
           p_highest_impediment_id: string
           p_impediment_ids: string[]
           p_intention?: string
-          p_intentions?: string[]
           p_mantra: string
           p_measurement: string
           p_outcome: string
@@ -1411,7 +1421,6 @@ export type Database = {
           p_tz: string
           p_unit: string
           p_usage_of_funds: Json
-          p_why: string
         }
         Returns: string
       }

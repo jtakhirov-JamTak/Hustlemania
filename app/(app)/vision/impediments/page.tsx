@@ -7,6 +7,6 @@ export const metadata: Metadata = { title: "Impediments" };
 
 export default async function ImpedimentsPage() {
   const supabase = await createClient();
-  const [items, situations] = await allOrThrow([loadLibrary(supabase, "impediment"), loadSituations(supabase, "impediment")]);
+  const [items, situations] = await allOrThrow([loadLibrary(supabase, "impediment"), loadSituations(supabase)]);
   return <LibraryPage kind="impediment" items={items} situations={situations} />;
 }

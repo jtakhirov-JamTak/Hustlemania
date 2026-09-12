@@ -87,13 +87,19 @@ test.describe("golden path", () => {
     // Step 2 (Goal): the goal, its proof, a confidence of 5 → the reason is required.
     await expect(page.getByTestId("vision-setup")).toHaveAttribute("data-step", "2");
     await expect(page.locator("[data-sidebar]").getByText("1 of 3")).toBeVisible();
-    await expect(page.getByText("Write the goal.")).toBeVisible();
+    await expect(page.getByText("Say the goal.")).toBeVisible();
     await noOverflow();
-    await page.getByRole("textbox", { name: "Goal", exact: true }).fill("In a year I run three times a week and sleep seven hours.");
-    await expect(page.getByText("Name the observable proof.")).toBeVisible();
-    await page.getByRole("textbox", { name: "Proof", exact: true }).fill("Three runs a week held for a quarter");
+    // F17: the goal and its proof are one box, sorted into two parts (the stub under PARSE_STUB=1).
+    await expect(page.getByRole("button", { name: "Dictate the goal" })).toBeVisible();
+    await page.getByRole("textbox", { name: "Goal and proof", exact: true }).fill("In a year I run three times a week and sleep seven hours. The observable proof will be three runs a week held for a quarter.");
+    await page.getByRole("button", { name: "Sort into parts" }).click();
+    await expect(page.getByTestId("capture-box")).toHaveAttribute("data-phase", "parsed");
+    await expect(page.getByRole("textbox", { name: "Goal", exact: true })).toHaveValue("In a year I run three times a week and sleep seven hours");
+    await expect(page.getByRole("textbox", { name: "Proof", exact: true })).toHaveValue("three runs a week held for a quarter");
     await expect(page.getByText("Pick a confidence from 0 to 10.")).toBeVisible();
     await page.getByRole("button", { name: "Confidence 5" }).click();
+    // F17: the band advice under the chips.
+    await expect(page.getByTestId("confidence-advice")).toHaveText("This may be unrealistic. Consider a smaller goal or more support.");
     await expect(page.getByText("Say the main reason your confidence is low.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Save & continue" })).toHaveAttribute("aria-disabled", "true");
     await page.getByRole("textbox", { name: "Main reason", exact: true }).fill("Travel weeks break the routine");
@@ -141,16 +147,20 @@ test.describe("golden path", () => {
     await expect(obstacleCard.getByTestId("usage-line")).toHaveText("Blocked · no situation");
     await obstacleCard.getByRole("button", { name: /^Edit / }).click();
     const obstacleEditor = obstacleCard.locator("form");
-    await expect(obstacleEditor.getByTestId("situations-empty")).toContainText("No impediment situations yet");
+    await expect(obstacleEditor.getByTestId("situations-empty")).toContainText("No situations yet");
     await expect(obstacleEditor.getByRole("button", { name: "Save" })).toHaveAttribute("aria-disabled", "true");
-    await obstacleEditor.getByLabel("New situation").fill("Starting late");
-    await obstacleEditor.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(obstacleEditor.getByText("Tick at least one situation.")).toBeVisible();
+    // F17: situations are said as a list into one box; Enter sorts it, "Add all" creates and ticks them.
+    await obstacleEditor.getByRole("textbox", { name: "Situations", exact: true }).fill("Starting late");
+    await obstacleEditor.getByRole("textbox", { name: "Situations", exact: true }).press("Enter");
+    await expect(obstacleEditor.getByRole("textbox", { name: "Situation 1" })).toHaveValue("Starting late");
+    await obstacleEditor.getByRole("button", { name: /^Add all/ }).click();
     await expect(obstacleEditor.getByRole("checkbox", { name: "Starting late" })).toHaveAttribute("aria-checked", "true");
     await expect(obstacleEditor.getByRole("button", { name: "Save" })).toHaveAttribute("aria-disabled", "false");
     await obstacleEditor.getByRole("button", { name: "Save" }).click();
     await expect(obstacleCard.locator("[data-part=applies-to]")).toHaveText("Starting late");
     await expect(obstacleCard).not.toHaveAttribute("data-blocked", "true");
-    await expect(page.locator("[data-sidebar]").getByText("Impediment situations")).toBeVisible();
+    await expect(page.locator("[data-sidebar]").getByText("Situations", { exact: true })).toBeVisible();
 
     // The Sprints sidebar now reads Ready on every area → create a sprint.
     await page.goto("/sprints/health");
@@ -172,7 +182,8 @@ test.describe("golden path", () => {
     // Step 3
     await noOverflow();
     await page.getByRole("button", { name: "Confidence 7" }).click();
-    await page.getByLabel("Why this sprint matters").fill("A cushion buys calm.");
+    // F17: "Why this sprint matters" is gone from the wizard and the database.
+    await expect(page.getByLabel("Why this sprint matters")).toHaveCount(0);
     await page.getByLabel(/Celebration/).fill("Dinner at the lake");
     await page.getByLabel(/Mantra/).fill("Boring money is the money that stays.");
     await page.getByRole("button", { name: "Continue" }).click();
@@ -201,9 +212,9 @@ test.describe("golden path", () => {
     await expect(page.getByTestId("plan-delta")).toHaveText("Balanced");
     await expect(page.getByText("The 14 targets must add up to the goal.")).toHaveCount(0);
 
-    // F3: pre-plan an intention for day 2.
-    await page.getByTestId("intentions-toggle").click();
-    await page.getByLabel(/^D2 /).fill("Move the second $600 before lunch.");
+    // F17: the days 2–14 pre-planning is gone; day 1's box stays.
+    await expect(page.getByTestId("intentions-toggle")).toHaveCount(0);
+    await expect(page.getByLabel(/^Day 1 intention/)).toBeVisible();
 
     // F2 / F15: the sprint cannot start without 1–3 impediments and a highest with THEN → RECOVERED WHEN; cues are optional.
     const start = page.getByRole("button", { name: "Start sprint" });
@@ -227,8 +238,9 @@ test.describe("golden path", () => {
     await impSetup.getByLabel("WHEN", { exact: true }).fill("Phone distraction");
     await expect(createImp).toBeDisabled();
     await expect(impSetup.getByText("WHEN and at least one situation are needed.")).toBeVisible();
-    await impSetup.getByLabel("New situation").fill("Phone on the desk");
-    await impSetup.getByRole("button", { name: "Add", exact: true }).click();
+    await impSetup.getByRole("textbox", { name: "Situations", exact: true }).fill("Phone on the desk");
+    await impSetup.getByRole("textbox", { name: "Situations", exact: true }).press("Enter");
+    await impSetup.getByRole("button", { name: /^Add all/ }).click();
     await expect(impSetup.getByRole("checkbox", { name: "Phone on the desk" })).toHaveAttribute("aria-checked", "true");
     await expect(createImp).toBeEnabled();
     await createImp.click();
@@ -255,8 +267,10 @@ test.describe("golden path", () => {
     await cueSetup.getByLabel("WHEN", { exact: true }).fill("I schedule anything");
     await expect(createCue).toBeDisabled();
     await expect(cueSetup.getByText("WHEN, REMIND and at least one situation are needed.")).toBeVisible();
-    await cueSetup.getByLabel("New situation").fill("Scheduling");
-    await cueSetup.getByRole("button", { name: "Add", exact: true }).click();
+    await cueSetup.getByRole("textbox", { name: "Situations", exact: true }).fill("Scheduling");
+    await cueSetup.getByRole("textbox", { name: "Situations", exact: true }).press("Enter");
+    await cueSetup.getByRole("button", { name: /^Add all/ }).click();
+    await expect(cueSetup.getByRole("checkbox", { name: "Scheduling" })).toHaveAttribute("aria-checked", "true");
     await expect(createCue).toBeEnabled();
     await createCue.click();
     await expect(cueSetup.getByRole("checkbox", { name: "Ask how much this pays" })).toHaveAttribute("aria-checked", "true");
@@ -335,7 +349,7 @@ test.describe("golden path", () => {
     await expect(focusRow.getByTestId("focus-tag")).toHaveText("FOCUS");
 
     // F3: the plan lives on the timeline's future rows. The sprint started custom; day 1
-    // is today, day 7 is the zero the wizard saved, and day 2's intention was pre-filled.
+    // is today, day 7 is the zero the wizard saved.
     const timeline = page.getByTestId("timeline");
     await rows.nth(2).getByRole("button", { name: /Rest of the sprint/ }).click();
     await expect(timeline.getByTestId("plan-target-7")).toHaveText("0");
@@ -344,7 +358,8 @@ test.describe("golden path", () => {
     await expect(timeline.locator('[data-day="8"]')).toHaveAttribute("data-kind", "future");
     const day2 = await admin.from("sprint_days").select("intention").eq("user_id", user.id).eq("day_index", 2).single();
     expect(day2.error).toBeNull();
-    expect(day2.data!.intention).toBe("Move the second $600 before lunch.");
+    // F17: no pre-planned intention reaches day 2; it is written on its own day.
+    expect(day2.data!.intention).toBeNull();
 
     // Edit the future plan from Tomorrow's row: day 1 has no input, Save waits for balance, then persists.
     await rows.nth(1).getByRole("button", { name: /Tomorrow/ }).click();
@@ -558,7 +573,7 @@ test.describe("golden path", () => {
     await expect(visionSprint).toContainText("Day 1 of 14");
     await page.getByRole("button", { name: "Review vision" }).click();
     const reviewCard = page.getByTestId("vision-review");
-    await expect(reviewCard).toContainText("Proof you named: Three runs a week held for a quarter. 1 sprint has run behind it.");
+    await expect(reviewCard).toContainText("Proof you named: three runs a week held for a quarter. 1 sprint has run behind it.");
     await reviewCard.getByLabel(/What shows it/).fill("Ran Monday and Wednesday.");
     await reviewCard.getByRole("button", { name: "Still true · mark reviewed" }).click();
     const reviewedStamp = `Reviewed ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
@@ -600,27 +615,67 @@ test.describe("golden path", () => {
     await page.getByRole("button", { name: /Show archived/ }).click();
     await expect(page.getByText("Nothing archived yet.")).toBeVisible();
 
-    // F15: the situations library — the one named inline is here, applied by its impediment,
-    // in an active sprint, so it can be archived only if the sprint keeps another one.
+    // F15 / F17: the one situations library — the three named inline are here; the
+    // obstacle's is applied by an impediment in an active sprint, so it can neither be
+    // archived nor deleted while the sprint would keep no other; the old routes redirect.
     await page.goto("/vision/impediment-situations");
+    await expect(page).toHaveURL(/\/vision\/situations$/);
     const situationsPage = page.getByTestId("situations-page");
-    await expect(situationsPage.getByTestId("library-count")).toHaveText("2 · 0 archived");
+    await expect(situationsPage.getByTestId("library-count")).toHaveText("3 · 0 archived");
     const startingLate = situationsPage.getByTestId("situation-item").filter({ hasText: "Starting late" });
-    await expect(startingLate.getByTestId("usage-line")).toHaveText("Applied by 1 impediment · in an active sprint");
+    await expect(startingLate.getByTestId("usage-line")).toHaveText("Applied by 1 item · in an active sprint");
     await startingLate.getByRole("button", { name: "Archive" }).click();
     await expect(startingLate.getByRole("alert")).toContainText("one of its items would be left without a situation");
+    await startingLate.getByRole("button", { name: "Delete Starting late" }).click();
+    await expect(page.getByTestId("delete-situation")).toBeVisible();
+    await expect(page.getByRole("dialog")).toContainText("Removed from: I notice myself delaying my first work block.");
+    await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(startingLate.getByRole("alert")).toContainText("Delete is blocked");
+    await expect(startingLate.getByRole("alert")).toContainText("one of its items would be left without a situation");
+    await expect(startingLate).toBeVisible();
     await noOverflow();
+    // A loose situation, said into the tab's box, is deleted outright.
+    const addSituations = situationsPage.getByTestId("library-add");
+    await addSituations.getByRole("textbox", { name: "Situations", exact: true }).fill("Temporary situation, another one");
+    await addSituations.getByRole("button", { name: "Sort into parts" }).click();
+    await expect(addSituations.getByRole("textbox", { name: "Situation 2" })).toHaveValue("another one");
+    await addSituations.getByRole("button", { name: "Remove situation 2" }).click();
+    await addSituations.getByRole("button", { name: "Add", exact: true }).click();
+    const temporarySituation = situationsPage.getByTestId("situation-item").filter({ hasText: "Temporary situation" });
+    await expect(temporarySituation.getByTestId("usage-line")).toHaveText("Unused");
+    await expect(situationsPage.getByTestId("library-count")).toHaveText("4 · 0 archived");
+    await temporarySituation.getByRole("button", { name: "Delete Temporary situation" }).click();
+    await expect(page.getByRole("dialog")).toContainText("It is not applied to any cue or impediment.");
+    await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(temporarySituation).toHaveCount(0);
+    await expect(situationsPage.getByTestId("library-count")).toHaveText("3 · 0 archived");
 
     // An unused cue can be deleted; a used one only archived (rule 19).
     await page.goto("/vision/cues");
     // F6 / F15: the library Add form needs WHEN, REMIND and a situation; the hint names them until they are filled.
     const addCue = page.getByTestId("library-add");
     const addButton = addCue.getByRole("button", { name: "Add", exact: true }).last();
-    await addCue.getByLabel("REMIND").fill("Temporary cue");
+    // F17: one box; the hint names the first missing part, then the situation; no NOTE anywhere.
+    await expect(addCue.getByText("NOTE", { exact: true })).toHaveCount(0);
+    await expect(addCue.getByText("Say the moment you will recognise (WHEN).")).toBeVisible();
+    // A sentence without the REMIND part: the sort leaves it blank, the hint names it, Save is refused and nothing is written.
+    const cuesBefore = await admin.from("cues").select("id", { count: "exact", head: true }).eq("user_id", user.id);
+    await addCue.getByRole("textbox", { name: "Execution cue", exact: true }).fill("When I open the calendar.");
+    await addCue.getByRole("button", { name: "Sort into parts" }).first().click();
+    await expect(addCue.getByLabel("WHEN", { exact: true })).toHaveValue("I open the calendar");
+    await expect(addCue.getByText("Say what to remind yourself (REMIND).")).toBeVisible();
     await expect(addButton).toHaveAttribute("aria-disabled", "true");
-    await expect(addCue.getByText("WHEN, REMIND and at least one situation are needed.")).toBeVisible();
-    await addCue.getByLabel("WHEN", { exact: true }).fill("I open the calendar");
+    // Enter in a part submits the form; the refused save lands the cursor on the missing part.
+    await addCue.getByLabel("WHEN", { exact: true }).press("Enter");
+    await expect(addCue.getByLabel("REMIND")).toBeFocused();
+    const cuesAfter = await admin.from("cues").select("id", { count: "exact", head: true }).eq("user_id", user.id);
+    expect(cuesAfter.count).toBe(cuesBefore.count);
+    await addCue.getByRole("textbox", { name: "Execution cue", exact: true }).fill("When I open the calendar, remind me to Temporary cue.");
+    await addCue.getByRole("button", { name: "Sort into parts" }).first().click();
+    await expect(addCue.getByLabel("WHEN", { exact: true })).toHaveValue("I open the calendar");
+    await expect(addCue.getByLabel("REMIND")).toHaveValue("Temporary cue");
     await expect(addButton).toHaveAttribute("aria-disabled", "true");
+    await expect(addCue.getByText("Tick at least one situation.")).toBeVisible();
     await addCue.getByRole("checkbox", { name: "Scheduling" }).click();
     await expect(addButton).toHaveAttribute("aria-disabled", "false");
     await addButton.click();
@@ -650,14 +705,14 @@ test.describe("golden path", () => {
     const sits = await admin
       .from("situations")
       .insert([
-        { user_id: user.id, kind: "cue", name: "Banking app" },
-        { user_id: user.id, kind: "impediment", name: "Impulse spend" },
+        { user_id: user.id, name: "Banking app", rank: 1 },
+        { user_id: user.id, name: "Impulse spend", rank: 2 },
       ])
-      .select("id, kind");
+      .select("id, name");
     if (sits.error) throw new Error(sits.error.message);
     const attach = await Promise.all([
-      admin.from("cue_situations").insert({ user_id: user.id, cue_id: seededCue.data.id, situation_id: sits.data.find((s) => s.kind === "cue")!.id }),
-      admin.from("impediment_situations").insert({ user_id: user.id, impediment_id: seededImp.data.id, situation_id: sits.data.find((s) => s.kind === "impediment")!.id }),
+      admin.from("cue_situations").insert({ user_id: user.id, cue_id: seededCue.data.id, situation_id: sits.data.find((s) => s.name === "Banking app")!.id }),
+      admin.from("impediment_situations").insert({ user_id: user.id, impediment_id: seededImp.data.id, situation_id: sits.data.find((s) => s.name === "Impulse spend")!.id }),
     ]);
     for (const a of attach) if (a.error) throw new Error(a.error.message);
     const addedAt = `${addDays(todayUtc, -2)}T00:00:00Z`;
@@ -753,13 +808,13 @@ test.describe("golden path", () => {
     const sits = await admin
       .from("situations")
       .insert([
-        { user_id: user.id, kind: "impediment", name: "A meeting runs past 6" },
-        { user_id: user.id, kind: "cue", name: "Coming home" },
+        { user_id: user.id, name: "A meeting runs past 6", rank: 1 },
+        { user_id: user.id, name: "Coming home", rank: 2 },
       ])
-      .select("id, kind");
+      .select("id, name");
     if (sits.error) throw new Error(sits.error.message);
-    const impSit = sits.data.find((s) => s.kind === "impediment")!.id;
-    const cueSit = sits.data.find((s) => s.kind === "cue")!.id;
+    const impSit = sits.data.find((s) => s.name === "A meeting runs past 6")!.id;
+    const cueSit = sits.data.find((s) => s.name === "Coming home")!.id;
     const attach = await Promise.all([
       admin.from("impediment_situations").insert({ user_id: user.id, impediment_id: imp.data.id, situation_id: impSit }),
       admin.from("cue_situations").insert({ user_id: user.id, cue_id: cue.data.id, situation_id: cueSit }),
@@ -876,7 +931,6 @@ test.describe("golden path", () => {
     await page.getByLabel(/Sprint goal/).fill("1400");
     await page.getByRole("button", { name: "Continue" }).click();
     await page.getByRole("button", { name: "Confidence 7" }).click();
-    await page.getByLabel("Why this sprint matters").fill("Because the streak is the point.");
     await page.getByLabel(/Celebration/).fill("New shoes");
     await page.getByLabel(/Mantra/).fill("Slow is still a run.");
     await page.getByRole("button", { name: "Continue" }).click();

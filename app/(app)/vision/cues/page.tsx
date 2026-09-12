@@ -7,6 +7,6 @@ export const metadata: Metadata = { title: "Execution cues" };
 
 export default async function CuesPage() {
   const supabase = await createClient();
-  const [items, situations] = await allOrThrow([loadLibrary(supabase, "cue"), loadSituations(supabase, "cue")]);
+  const [items, situations] = await allOrThrow([loadLibrary(supabase, "cue"), loadSituations(supabase)]);
   return <LibraryPage kind="cue" items={items} situations={situations} />;
 }

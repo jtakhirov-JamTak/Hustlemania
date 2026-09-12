@@ -4,10 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { saveVisionGoal, saveVisionPicture, setVisionObstacle } from "@/app/(app)/actions/vision";
+import { CaptureBox, focusMissingPart, type CapturePhase } from "@/components/CaptureBox";
 import { Dictate } from "@/components/Dictate";
 import { ErrorBar } from "@/components/ErrorBar";
 import { OptionRow } from "@/components/OptionRow";
 import { callAction } from "@/lib/callAction";
+import { missingPart, partText, type Parts } from "@/lib/capture";
+import { confidenceAdvice } from "@/lib/confidence";
 import type { ActiveVision, LibraryItem } from "@/lib/data";
 
 export type SetupStep = 1 | 2 | 3;
@@ -43,12 +46,15 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
   // Step 1
   const [picture, setPicture] = useState(v?.picture ?? "");
 
-  // Step 2
-  const [body, setBody] = useState(v?.body ?? "");
-  const [proof, setProof] = useState(v?.proof ?? "");
+  // Step 2 (F17: the goal and its proof are one box, sorted into two parts)
+  const [goalParts, setGoalParts] = useState<Parts>({ goal: v?.body ?? "", proof: v?.proof ?? "" });
+  const [goalPhase, setGoalPhase] = useState<CapturePhase>(v?.body ? "manual" : "idle");
+  const body = partText(goalParts, "goal");
+  const proof = partText(goalParts, "proof");
   const [confidence, setConfidence] = useState<number | null>(v?.confidence ?? null);
   const [reason, setReason] = useState(v?.confidence_reason ?? "");
   const lowConfidence = confidence !== null && confidence <= LOW_CONFIDENCE;
+  const advice = confidenceAdvice(confidence);
 
   // Step 3 (F15: WHEN is the obstacle's name; THEN and RECOVERED WHEN are its proof parts)
   const obstacle = active?.obstacle ?? null;
@@ -63,10 +69,10 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
         ? "Picture the day before moving on."
         : null
       : step === 2
-        ? !body.trim()
-          ? "Write the goal."
-          : !proof.trim()
-            ? "Name the observable proof."
+        ? goalPhase === "parsing"
+          ? "Reading your words…"
+          : (missingPart("vision_goal", goalParts)?.hint ?? null) !== null
+            ? missingPart("vision_goal", goalParts)!.hint
             : confidence === null
               ? "Pick a confidence from 0 to 10."
               : lowConfidence && !reason.trim()
@@ -78,7 +84,10 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
   const blocked = hint !== null || pending;
 
   function submit() {
-    if (blocked) return;
+    if (blocked) {
+      if (step === 2) focusMissingPart("vision", "vision_goal", goalParts);
+      return;
+    }
     setError(null);
     start(async () => {
       const res =
@@ -163,16 +172,11 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
 
         {step === 2 ? (
           <>
-            <label className="v-field-label" htmlFor="vision-goal">
-              In 12 months, I ___.
+            <label className="v-field-label" htmlFor="vision-box">
+              In 12 months, I ___. The observable proof will be ___.
             </label>
-            <textarea id="vision-goal" className="input v-textarea" rows={3} value={body} onChange={(e) => setBody(e.target.value)} placeholder="…" aria-label="Goal" />
-            <Dictate label="the goal" value={body} onChange={setBody} disabled={pending} />
-            <label className="v-field-label" htmlFor="vision-proof">
-              The observable proof will be ___.
-            </label>
-            <input id="vision-proof" className="input v-input" value={proof} onChange={(e) => setProof(e.target.value)} placeholder="Something you could point to: a number, a habit held for a quarter, a signed contract" aria-label="Proof" />
-            <Dictate label="the proof" value={proof} onChange={setProof} disabled={pending} />
+            <div className="v-note v-note-tight">Say both in one breath; they are sorted into the goal and its proof — something you could point to: a number, a habit held for a quarter, a signed contract.</div>
+            <CaptureBox key={step} kind="vision_goal" idPrefix="vision" mode={v?.body ? "fields" : "capture"} parts={goalParts} onParts={setGoalParts} onPhase={setGoalPhase} disabled={pending} />
             <div className="v-field-label" id="vision-confidence-label">
               Given your time, resources, and current approach, how likely are you to achieve this? 0–10
             </div>
@@ -190,6 +194,11 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
                 </button>
               ))}
             </div>
+            {advice ? (
+              <div className="v-advice" data-testid="confidence-advice" data-band={advice.band} aria-live="polite">
+                {advice.text}
+              </div>
+            ) : null}
             {lowConfidence ? (
               <>
                 <label className="v-field-label" htmlFor="vision-reason">

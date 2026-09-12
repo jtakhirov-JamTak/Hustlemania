@@ -79,8 +79,8 @@ describe("start_sprint", () => {
   it("the partial unique index also rejects a direct duplicate insert (rule 1, belt and braces)", async () => {
     const [{ id: visionId }] = await sql<{ id: string }[]>`select id from public.visions where user_id = ${u.id} and archived_at is null`;
     await expect(
-      sql`insert into public.sprints (user_id, vision_id, area, outcome, measurement, currency, amount, confidence, why, celebration, mantra, tz, start_date, end_date)
-          values (${u.id}, ${visionId}, 'wealth', 'dup', 'money', 'USD', 1, 5, 'w', 'c', 'm', ${TZ}, ${today}, ${today}::date + 13)`,
+      sql`insert into public.sprints (user_id, vision_id, area, outcome, measurement, currency, amount, confidence, celebration, mantra, tz, start_date, end_date)
+          values (${u.id}, ${visionId}, 'wealth', 'dup', 'money', 'USD', 1, 5, 'c', 'm', ${TZ}, ${today}, ${today}::date + 13)`,
     ).rejects.toThrow(/sprints_one_active_per_area/);
   });
 
