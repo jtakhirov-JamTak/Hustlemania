@@ -2633,10 +2633,13 @@ evaluated before the next.*
   Enter; a delete's outcome is announced at page level because the row unmounts; the
   throwaway mockup page was not built — the real screens were captured, as F16 did; the
   "failed" capture is the too-long-input path (`invalid_input`), the same phase and
-  status slot as `PARSE_STUB=fail`. **Not exercised:** the real model (no key in this
-  environment; the live smoke is double-gated), dictation with real audio, and the
-  Dictate-stop → sort path in a real browser — all owed to the owner's hand check once
-  `ANTHROPIC_API_KEY` is in `.env`. The hosted push erases one sprint's `why` (the
+  status slot as `PARSE_STUB=fail`. **Exercised after the release (2026-09-12 21:54Z):** the live smoke
+  (`PARSE_LIVE_SMOKE=1`, the owner's key in `.env`) passed 3 of 3 against
+  `claude-haiku-4-5` — an impediment sentence into its three parts, a missing RECOVERED
+  WHEN left empty rather than invented, a spoken situations list split into three.
+  **Not exercised:** dictation with real audio, and the Dictate-stop → sort path in a
+  real browser — owed to the owner's hand check on the deployed app once the key is on
+  Vercel. The hosted push erases one sprint's `why` (the
   0021 notice prints the counts); the dump precedes it.
 
 ### F18 — Five-step wizard, confidence and mantra copy, the rail's Edit menus

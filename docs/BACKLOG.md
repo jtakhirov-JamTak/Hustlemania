@@ -4,12 +4,11 @@
 
 ## Deferred from F17 (2026-09-12)
 
-- **The parser has not been exercised against the real model in this repo.** Every
-  suite runs the keyword stub (`PARSE_STUB=1`); the live smoke
-  (`tests/unit/capture.live.test.ts`) is double-gated on `ANTHROPIC_API_KEY` and
-  `PARSE_LIVE_SMOKE=1`. Run it once the key is in `.env`, and try one spoken sentence
-  per kind in the app: the prompts in `lib/capture.server.ts` are untested against
-  speech-to-text phrasing.
+- **One spoken sentence per kind against the real model in the app is still owed.**
+  The live smoke (`tests/unit/capture.live.test.ts`, `PARSE_LIVE_SMOKE=1`) passed 3 of
+  3 on 2026-09-12 with typed sentences; the prompts in `lib/capture.server.ts` are
+  untested against speech-to-text phrasing (no punctuation, run-on words). Try each
+  kind by voice on the deployed app once the key is on Vercel.
 - **The delete sheet's "It has day history" line is an approximation.** It shows when
   the situation is attached to an item that was ever a sprint member (`used`); the
   function decides on observation rows and the outcome line says which. A closed day
