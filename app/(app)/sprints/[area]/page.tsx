@@ -38,7 +38,7 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
   // Everything that does not depend on the active sprint starts with it (#26): the
   // library, the streaks and the kit used to wait a round trip for a read they never
   // needed; the overview and the finished list are cached and the layout reads them too.
-  const [active, fullLibrary, streaks, kit, { vision }, finished, situations] = await allOrThrow([
+  const [active, fullLibrary, streaks, kit, { visionReady: vision }, finished, situations] = await allOrThrow([
     loadActiveSprint(supabase, area),
     loadActiveLibrary(supabase),
     loadStreaks(supabase),
@@ -85,7 +85,7 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
         <p className="lede lede-narrow">
           {vision
             ? "Pick one numeric goal that moves the vision, lock it for 14 days, and close every day with an honest actual."
-            : "A sprint has to advance the vision. Write it first; it takes three short steps."}
+            : "A sprint has to advance the vision. Finish it first; it takes three short steps."}
         </p>
         <div className="poster-actions">
           <Link href={vision ? `/sprints/new?area=${area}` : "/vision"} className="btn btn-primary btn-link">

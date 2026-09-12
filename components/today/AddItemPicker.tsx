@@ -63,7 +63,7 @@ export function AddItemPicker({
       options={all.map((c) => ({
         id: c.id,
         label: c.name,
-        sub: blockerLine(c) ?? [kind === "cue" ? cueSummary(c) : proofSummary(c), appliesTo(c) && `applies to: ${appliesTo(c)}`].filter(Boolean).join(" · ") ?? c.explanation,
+        sub: blockerLine(c) ?? [kind === "cue" ? cueSummary(c) : proofSummary(c), appliesTo(c) && `applies to: ${appliesTo(c)}`].filter(Boolean).join(" · "),
         tag: c.scope === "global" ? "Global" : null,
         disabled: joinBlocker(c) !== null,
       }))}
@@ -87,7 +87,7 @@ export function AddItemPicker({
           },
         },
         onCreate: async (name, when) => {
-          const res = await callAction(() => createItem(kind, { name, explanation: "", scope: "global", cueWhen: kind === "cue" ? when : undefined, situationIds: ticked }));
+          const res = await callAction(() => createItem(kind, { name, scope: "global", cueWhen: kind === "cue" ? when : undefined, situationIds: ticked }));
           if (res.error || !res.id) return res.error ?? "That did not save.";
           setCreated((c) => [
             ...c,

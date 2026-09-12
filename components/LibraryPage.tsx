@@ -38,20 +38,20 @@ const COPY: Record<
   },
   impediment: {
     title: "Impediments",
-    blurb: "A moment you will recognise (WHEN), what it does to your day, the THEN → RECOVERED WHEN response that answers it — and the situations it applies to.",
+    blurb: "A moment you will recognise (WHEN), the THEN → RECOVERED WHEN response that answers it — and the situations it applies to.",
     example: "e.g. WHEN I notice delaying → THEN a 10-minute timer on the smallest task · RECOVERED WHEN the timer is running within 10 minutes · applies to: Starting late.",
     guidance:
-      "Name the moment you will recognise (WHEN), what it does to your day, a response that is specific and feasible right there (THEN), and what you would observe, within a time window, to know you are back on track (RECOVERED WHEN). Then tick the situations it applies to — one response usually covers several.",
+      "Name the moment you will recognise (WHEN), a response that is specific and feasible right there (THEN), and what you would observe, within a time window, to know you are back on track (RECOVERED WHEN). Then tick the situations it applies to — one response usually covers several.",
     examples: (
       <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
         <li>
-          <em>Missing skill</em> — WHEN I catch myself opening email before the deck · INTERFERES I open email instead · THEN write the three worst slides in 15 minutes · RECOVERED WHEN three slides exist before noon · applies to: I don&apos;t know how to start the pitch deck.
+          <em>Missing skill</em> — WHEN I catch myself opening email before the deck · THEN write the three worst slides in 15 minutes · RECOVERED WHEN three slides exist before noon · applies to: I don&apos;t know how to start the pitch deck.
         </li>
         <li>
-          <em>Practical constraint</em> — WHEN it is 5 pm and I am still at my desk · INTERFERES sessions get skipped · THEN 20 minutes of bodyweight work at home · RECOVERED WHEN the session is logged by 9 pm · applies to: The gym closes before I finish work.
+          <em>Practical constraint</em> — WHEN it is 5 pm and I am still at my desk · THEN 20 minutes of bodyweight work at home · RECOVERED WHEN the session is logged by 9 pm · applies to: The gym closes before I finish work.
         </li>
         <li>
-          <em>Avoidance / forgetting</em> — WHEN I notice delaying · INTERFERES the first block slips to noon · THEN a 10-minute timer on the smallest task · RECOVERED WHEN the timer is running within 10 minutes · applies to: Starting late, Late night.
+          <em>Avoidance / forgetting</em> — WHEN I notice delaying · THEN a 10-minute timer on the smallest task · RECOVERED WHEN the timer is running within 10 minutes · applies to: Starting late, Late night.
         </li>
       </ul>
     ),
@@ -65,7 +65,6 @@ const COPY: Record<
 
 const PLACEHOLDER = {
   cueWhen: "I schedule anything",
-  interferes: "the first block slips to noon",
   then: "I start a 10-minute timer on the smallest executable task",
   recover: "The timer is running within 10 minutes",
 };
@@ -83,7 +82,7 @@ function fieldsOf(item: LibraryItem): Fields {
   return {
     when: item.kind === "cue" ? (item.cue_when ?? "") : "",
     name: item.name,
-    note: item.explanation ?? "",
+    note: item.kind === "cue" ? (item.explanation ?? "") : "",
     then: item.proof_then ?? "",
     recover: item.proof_recover ?? "",
     situationIds: item.situations.map((s) => s.id),
@@ -93,7 +92,7 @@ function fieldsOf(item: LibraryItem): Fields {
 function toInput(kind: ItemKind, f: Fields, scope: ItemScope): ItemInput {
   return kind === "cue"
     ? { name: f.name, explanation: f.note, scope, cueWhen: f.when, situationIds: f.situationIds }
-    : { name: f.name, explanation: f.note, scope, proofThen: f.then, proofRecover: f.recover, situationIds: f.situationIds };
+    : { name: f.name, scope, proofThen: f.then, proofRecover: f.recover, situationIds: f.situationIds };
 }
 
 /** What gates Add / Save: a cue needs WHEN and REMIND, an impediment its WHEN; both need at least one situation (F15). */
@@ -275,7 +274,6 @@ function Editor({
         ) : (
           <>
             <Part id={`${idPrefix}-name`} label="WHEN" value={f.name} onChange={setF("name")} placeholder={copy.namePlaceholder} strong />
-            <Part id={`${idPrefix}-note`} label="INTERFERES" value={f.note} onChange={setF("note")} placeholder={PLACEHOLDER.interferes} />
             <Part id={`${idPrefix}-then`} label="THEN" value={f.then} onChange={setF("then")} placeholder={PLACEHOLDER.then} />
             <Part id={`${idPrefix}-recover`} label="RECOVERED WHEN" value={f.recover} onChange={setF("recover")} placeholder={PLACEHOLDER.recover} />
           </>
@@ -384,7 +382,6 @@ function ViewParts({ item }: { item: LibraryItem }) {
         ]
       : [
           ["WHEN", item.name, "", true],
-          ["INTERFERES", item.explanation, "what it does to your day"],
           ["THEN", item.proof_then, "not set"],
           ["RECOVERED", item.proof_recover, "not set"],
           ["APPLIES TO", applies, "no situation yet — add one under Edit; it cannot join a sprint until then"],

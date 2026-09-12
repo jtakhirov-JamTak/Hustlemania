@@ -2219,6 +2219,177 @@ sprint impediment at start / add, Highest-only in the validity check.*
   one response usually covers several." Examples reordered WHEN → INTERFERES → THEN →
   RECOVERED WHEN → applies to.
 
+### F16 — Vision v3: picture the year, the one-year goal with confidence, the obstacle plan; dictation on every setup box
+*Specified 2026-09-12 by `/interview` (feature mode; the plan of record is
+`~/.claude/plans/i-want-to-make-fancy-squirrel.md`, approved the same day and built in the
+same session). Eight calls, the user's: step 1 Morning / Midday / Evening is **one saved
+textarea** · **all three steps unlock sprints** (reverses the 2026-09-08 "step 1 unlocks"
+call) · the deadline input goes, `deadline` is set to twelve months from the first goal
+save · voice is the **Web Speech API** (mic button per box, hidden where unsupported; the
+phone keyboard mic remains) · the "main reason" box shows at confidence ≤ 6 and is
+required then · the overview's three cards mirror the three steps · voice on the Vision
+setup only, as a reusable control · UI: primary action **dictate the answers**, both
+viewports phone-first, the F9 look reused, states empty / error / voice unsupported or
+denied / listening. Fields not in the new script leave the UI and the database at the
+user's explicit call: `visions.meaning`, `visions.baseline`, and `impediments.explanation`
+(INTERFERES) everywhere it appears. Impediments and cues are otherwise untouched. Hosted
+state at plan time: one active vision (meaning and baseline filled), one impediment
+(explanation filled), one active sprint — three text values the push erases.*
+
+- **Behavior.** The three annual steps become **Picture · Goal · Obstacle**. Step 1,
+  "Visualize one year from today": "Close your eyes. Picture a realistic day one year
+  from today." with three prompts — Morning (what took effort this morning and what made
+  it easier), Midday (what hard moment happened and how you handled it differently),
+  Evening (what you followed through on that the old you would have avoided) — "Picture
+  specific actions.", and one textarea. Step 2, "Define your one-year goal": "In 12
+  months, I ___." · "The observable proof will be ___." · "Given your time, resources,
+  and current approach, how likely are you to achieve this?" 0–10 · at 6 or below, "If
+  confidence is low, what is the main reason? Adjust your approach, support, or goal
+  scope to address it." Step 3, "Plan for your main obstacle": "What most often pulls you
+  off that course?" — choose an existing global impediment or name one, then WHEN (what
+  cue will I notice) · THEN (what specific action will I take) · RECOVERED WHEN (what
+  observable sign shows I am back on course), with the worked example and "Rehearse
+  once: Picture the next time this happens. Notice your WHEN cue, then mentally perform
+  your THEN response." Every text box on the setup carries a Dictate button. Sprints
+  unlock only at 3 of 3; the overview shows three cards, one per step.
+- **Acceptance criteria.**
+  - **Migration `0020_vision_v3.sql`** (forward-only, one transaction, applied by `db
+    reset`): drops `save_vision(text,date,text,text,text)`,
+    `set_vision_obstacle(uuid,text,text)`, `set_vision_rule(text,text,text)`; `visions`
+    gains `picture text`, `confidence smallint` (`visions_confidence_check`, 0–10),
+    `confidence_reason text` (`visions_confidence_reason_check`: null or `confidence <=
+    6`); `body` and `deadline` become nullable, `visions_body_check` restated as null or
+    non-blank; `meaning` and `baseline` dropped; `library_item_before_insert` trims
+    `explanation` only for cues, `impediments_before_update` no longer touches it,
+    `day_offered_items` keeps its return type and returns `null` explanation for
+    impediments; then `impediments.explanation` dropped (its grant goes with it;
+    `cues.explanation` stays). An assertion block (`-- assert:begin/end`) refuses to
+    commit unless the `visions` column set is exactly `archived_at, body, confidence,
+    confidence_reason, created_at, deadline, id, obstacle_id, picture, proof, updated_at,
+    user_id`, `impediments.explanation` is gone, `cues.explanation` remains, no vision row
+    has both `body` and `picture` null, and no reason exists above confidence 6. Test:
+    each branch provoked in a rolled-back transaction throws.
+  - **Write path** (SECURITY DEFINER, `auth.uid()`, `set search_path = ''`, execute
+    granted to `authenticated` and `service_role` only):
+    - `save_vision_picture(p_picture) → uuid`: blank → `vision_picture_required`; upserts
+      the active row on `visions_one_active_per_user`, touching only `picture` (edit keeps
+      `id` and `created_at`).
+    - `save_vision_goal(p_body, p_proof, p_confidence, p_reason) → uuid`: needs the active
+      row (`no_active_vision`); `vision_body_required`, `vision_proof_required`,
+      `confidence_out_of_range` (null, < 0, > 10), `confidence_reason_required` (≤ 6 and
+      blank); a reason above 6 is stored as null; `deadline` becomes `current_date + 12
+      months` only when null. Tests: each rejection leaves the row unchanged; the
+      deadline is set once and survives a second goal save.
+    - `set_vision_obstacle(p_impediment_id, p_when, p_then, p_recover) → uuid` (no
+      defaults): `no_active_vision`; any blank part → `rule_incomplete` before any write;
+      a pick must be the caller's, unarchived and global (`item_not_found`,
+      `item_archived`, `obstacle_not_global`) and is renamed to WHEN with THEN and
+      RECOVERED WHEN written; no pick inserts a global impediment with the three parts;
+      sets `obstacle_id`. Tests: the rename; the insert; blank parts write nothing with
+      and without a pick; the shared-row highest case still passes the F6 trigger.
+    - `start_sprint` (same signature, rebuilt from 0019): after `no_active_vision`,
+      raises `vision_incomplete` unless `picture`, `body`, `obstacle_id` and the
+      obstacle's `proof_then` and `proof_recover` are all present. Test: rejected after
+      step 1, after step 2, starts after step 3, rejected again once the proof is blanked.
+    - `replace_vision`, `review_vision`, the `vision_obstacle` guards: unchanged.
+  - **Grants and pins:** `tests/db/grants.test.ts` loses the two `impediments /
+    explanation` privilege rows and pins the callable set with `save_vision_picture`,
+    `save_vision_goal`, `set_vision_obstacle` and without `save_vision`,
+    `set_vision_rule`; `tests/db/libraries.test.ts` pins one marker per rebuilt body and
+    the `day_offered_items` row shape (cue note kept, impediment explanation null).
+  - **Reads** (`lib/data.ts`): `visionSteps` counts picture, goal (`body`) and a complete
+    obstacle rule; `visionReady` = 3; `loadOverview` carries the obstacle parts so the
+    Sprints sidebar reads `Locked · Vision not finished` and the wizard says "A sprint has
+    to advance the vision; finish its three steps first." until then; `loadVision` no
+    longer selects `explanation`.
+  - **Setup** (testid `vision-setup`, `data-step` 1–3; kicker, meta, title, segments and
+    footer as F9; step names Picture · Goal · Obstacle): step 1 textarea `aria-label`
+    "Picture", hint "Picture the day before moving on."; step 2 textarea "Goal", input
+    labelled "The observable proof will be", chips `aria-label` "Confidence n" with
+    `aria-pressed`, textarea "Main reason" shown only at ≤ 6, hint ladder "Write the
+    goal." → "Name the observable proof." → "Pick a confidence from 0 to 10." → "Say the
+    main reason your confidence is low."; step 3 radio rows of global impediments
+    (picking fills the three inputs; "Name a new one" clears the pick), inputs "When" ·
+    "THEN" · "RECOVERED WHEN", the example block, the Rehearse once block, hint "WHEN,
+    THEN and the recovery criterion are all required."; `?step=2` and `?step=3` fall back
+    to step 1 while no vision row exists; a failed save shows the error bar with Retry
+    and keeps every input.
+  - **Dictate** (`components/Dictate.tsx`, `lib/dictation.ts`): a 44px accent button
+    `aria-label` "Dictate {label}" with `aria-pressed` on every setup box; rendered only
+    after mount and only when `SpeechRecognition` or `webkitSpeechRecognition` exists;
+    continuous with interim results merged into the box (`mergeTranscript`, unit-tested:
+    single space join, interim separate from final, empty base); "Listening…" while
+    active; one box listens at a time; `not-allowed` shows "Microphone blocked in this
+    browser. Allow it or type." Exercised once in Chrome on this machine; iOS
+    home-screen behaviour **not verified**.
+  - **Overview:** kicker "One year from today"; meta `Saved · By {deadline} · Reviewed`
+    (no "By" while the deadline is null); headline the goal or "Goal not written yet";
+    cards `card-picture` (text; empty "Picture a day one year from today."),
+    `card-goal` (goal, `Proof: …`, `Confidence n/10`, reason; empty "Write the goal."),
+    `card-obstacle` (`WHEN … → THEN …`, `Recovered when …`; empty "What most often pulls
+    you off that course?"); `card-rule` is gone; the review note's "days to the
+    deadline" only with a deadline; sidebar `n of 3`.
+  - **Libraries:** the impediment card and editor read WHEN · THEN · RECOVERED · APPLIES
+    TO; the INTERFERES row, input, placeholder and example fragments are gone; the cue
+    NOTE stays. `actions/library.ts` stops sending `explanation` for impediments.
+  - **e2e** (`e2e/golden-path.spec.ts`): Picture → `1 of 3`; goal, proof, confidence 5 →
+    the reason hint, reason → `2 of 3` with the Sprints sidebar still `Locked`; WHEN /
+    THEN / RECOVERED WHEN → `3 of 3`, `Ready`; the Dictate buttons present by label; the
+    16px guard covers the new boxes; `[data-part=interferes]` no longer asserted.
+  - **Live mutations** (each turns a named test red, then restored): the
+    `vision_incomplete` block deleted · the deadline set unconditionally · the reason
+    raise removed · the pick branch without the rename · the trigger trim moved back
+    above the cue branch · `i.explanation` in the impediment branch · the
+    `impediments.explanation` assertion branch deleted.
+  - `scripts/rehearse-0020.mjs`: reset to 0019, seed a 3-of-3 legacy user through the old
+    functions, a step-1-only user and an impediment with an explanation, `migration up`,
+    assert the column set, kept body / proof / deadline / obstacle_id, `picture` null,
+    `vision_incomplete` for both users, `day_offered_items` callable.
+  - Visual: Chrome at desktop in Dusk and Night for steps 1–3 and the overview; the
+    Playwright phone project at 390px with the overflow check. `npm run verify` green
+    from a fresh reset.
+- **Non-goals.** Server transcription · voice outside the setup (BACKLOG: review note,
+  library editors) · a user-set deadline · editing an archived vision · a device check of
+  dictation in the installed iOS app (BACKLOG) · any change to cues, situations or the
+  impediment fields other than INTERFERES.
+- **Risks.** (1) `db push` erases three hosted text values — the dump precedes the push
+  and the production gate shows the migration. (2) Seeded test users gain one extra
+  global impediment from the completed vision — no suite pins absolute impediment
+  ranks; any count assertion that breaks is fixed test-side. (3) Dictation unsupported in
+  the installed iOS app — the keyboard mic remains; recorded as unverified.
+- **Evaluator.** Destructive migration on production rows (three column drops) → one
+  run (`docs/evals/eval-10.md`).
+- **UI.** Primary action: dictate the answers. Viewport: both, phone-first (390px by the
+  Playwright phone project; Chrome at desktop). States: empty, error (inputs preserved),
+  voice unsupported / denied, listening. References: `docs/mockups/f9-vision/` and the v8
+  README §Vision tab; the look is reused, fields and copy change. Mockup: the F9 mockup
+  source rebuilt with the new steps at `app/mockup/vision/`, captured at 390 and desktop
+  in both palettes, moved to `docs/mockups/f16-vision/`.
+- **As built (2026-09-12).** Migration `0020_vision_v3.sql` as specified; `db reset` clean;
+  types regenerated. `scripts/rehearse-0020.mjs` eleven assertions green on legacy-shaped
+  rows (a 3-of-3 F9 user with meaning / baseline / INTERFERES, a text-only user): rows
+  kept, columns gone, both users `vision_incomplete` until the picture is saved, then a
+  sprint starts and `day_offered_items` answers with a null explanation for the
+  impediment. Seven live mutations, all red and restored: the gate block · the deadline
+  set unconditionally · the reason raise removed · the pick without the rename · the
+  trigger trim moved back above the cue branch (caught by the seed helper's own insert:
+  `record "new" has no field "explanation"`) · `i.name` as the impediment's explanation ·
+  the assertion branch deleted. `npm run verify` green from a fresh reset: typecheck,
+  lint, hooks 60/21+23/6+5, unit 171, DB 318, e2e 12 + 6 skipped. Visual pass by
+  Playwright: 20 captures, Dusk + Night × 1138 px + 390 px, no horizontal overflow —
+  steps 1–3, the overview, and step 2 at confidence 8 (reason box hidden). Chrome on this
+  machine: the Dictate button renders (support detected) and a refused microphone shows
+  "Microphone blocked in this browser. Allow it or type."; the **listening path with real
+  audio was not exercised** — the automated tab cannot grant the microphone — so it is
+  verified only as far as the state machine and stays owed to a hand check. The one
+  hosted vision reads 2 of 3 and `Locked` until its owner saves the picture. Build
+  choices inside the entry: the three step-3 inputs are stacked (label, one-line prompt,
+  input, Dictate) instead of the two-column `proof-grid`, phone-first; the Dictate button
+  sits under its box, accent-filled, 44px, "Listening… tap to stop" while active; the
+  wizard's blocked line reads "A sprint has to advance the vision, and its three steps
+  are not all saved."; the Sprints sidebar sub-line is "Vision not finished"; a mockup
+  page was not built — the real screens were captured instead, the look being the F9 one.
+
 ## 4. Explicit v1 non-goals
 AI-written insights or reviews · push notifications · native apps · offline mode ·
 custom Areas · circle roles/moderation · account deletion self-service · data import

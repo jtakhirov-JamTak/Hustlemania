@@ -19,8 +19,8 @@ import { addDays } from "../lib/sprintDay";
 const admin = adminClient(localSupabaseUrl("seed"));
 const EMAIL = "f15-visual@example.com";
 
-const LATE = { name: "I notice myself delaying my first work block", explanation: "the first hour is gone", then: "I start a 10-minute timer on the smallest executable task", recover: "The timer is running within 10 minutes" };
-const PHONE = { name: "I reach for the phone between tasks", explanation: null, then: "Phone goes in the drawer", recover: "The drawer is shut and the next task is open" };
+const LATE = { name: "I notice myself delaying my first work block", then: "I start a 10-minute timer on the smallest executable task", recover: "The timer is running within 10 minutes" };
+const PHONE = { name: "I reach for the phone between tasks", then: "Phone goes in the drawer", recover: "The drawer is shut and the next task is open" };
 const OUTREACH = { name: "Ask how much this pays", when: "I schedule anything" };
 const INBOX = { name: "Inbox closed till noon", when: "the day starts" };
 
@@ -77,8 +77,8 @@ async function library(userId: string) {
     await admin
       .from("impediments")
       .insert([
-        { user_id: userId, name: LATE.name, explanation: LATE.explanation, scope: "global", rank: 1, proof_then: LATE.then, proof_recover: LATE.recover },
-        { user_id: userId, name: PHONE.name, explanation: PHONE.explanation, scope: "global", rank: 2, proof_then: PHONE.then, proof_recover: PHONE.recover },
+        { user_id: userId, name: LATE.name, scope: "global", rank: 1, proof_then: LATE.then, proof_recover: LATE.recover },
+        { user_id: userId, name: PHONE.name, scope: "global", rank: 2, proof_then: PHONE.then, proof_recover: PHONE.recover },
       ])
       .select("id, name"),
     "impediments",

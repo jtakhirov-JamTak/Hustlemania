@@ -373,7 +373,6 @@ export type Database = {
         Row: {
           archived_at: string | null
           created_at: string
-          explanation: string | null
           id: string
           name: string
           proof_recover: string | null
@@ -386,7 +385,6 @@ export type Database = {
         Insert: {
           archived_at?: string | null
           created_at?: string
-          explanation?: string | null
           id?: string
           name: string
           proof_recover?: string | null
@@ -399,7 +397,6 @@ export type Database = {
         Update: {
           archived_at?: string | null
           created_at?: string
-          explanation?: string | null
           id?: string
           name?: string
           proof_recover?: string | null
@@ -920,39 +917,42 @@ export type Database = {
       visions: {
         Row: {
           archived_at: string | null
-          baseline: string | null
-          body: string
+          body: string | null
+          confidence: number | null
+          confidence_reason: string | null
           created_at: string
-          deadline: string
+          deadline: string | null
           id: string
-          meaning: string | null
           obstacle_id: string | null
+          picture: string | null
           proof: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           archived_at?: string | null
-          baseline?: string | null
-          body: string
+          body?: string | null
+          confidence?: number | null
+          confidence_reason?: string | null
           created_at?: string
-          deadline: string
+          deadline?: string | null
           id?: string
-          meaning?: string | null
           obstacle_id?: string | null
+          picture?: string | null
           proof?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           archived_at?: string | null
-          baseline?: string | null
-          body?: string
+          body?: string | null
+          confidence?: number | null
+          confidence_reason?: string | null
           created_at?: string
-          deadline?: string
+          deadline?: string | null
           id?: string
-          meaning?: string | null
           obstacle_id?: string | null
+          picture?: string | null
           proof?: string | null
           updated_at?: string
           user_id?: string
@@ -1292,16 +1292,16 @@ export type Database = {
         Args: { p_sprint_id: string; p_targets: number[] }
         Returns: undefined
       }
-      save_vision: {
+      save_vision_goal: {
         Args: {
-          p_baseline?: string
           p_body: string
-          p_deadline: string
-          p_meaning?: string
+          p_confidence: number
           p_proof: string
+          p_reason: string
         }
         Returns: string
       }
+      save_vision_picture: { Args: { p_picture: string }; Returns: string }
       set_focus_cue: {
         Args: { p_cue_id: string; p_sprint_id: string }
         Returns: undefined
@@ -1325,15 +1325,12 @@ export type Database = {
       }
       set_vision_obstacle: {
         Args: {
-          p_explanation?: string
           p_impediment_id: string
-          p_name?: string
+          p_recover: string
+          p_then: string
+          p_when: string
         }
         Returns: string
-      }
-      set_vision_rule: {
-        Args: { p_recover: string; p_then: string; p_when: string }
-        Returns: undefined
       }
       sprint_best_streak: { Args: { p_sprint_id: string }; Returns: number }
       sprint_for_closure: {

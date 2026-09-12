@@ -12,7 +12,8 @@ import { createClient, requireUser } from "@/lib/supabase/server";
 export type ItemInput = {
   /** A cue's REMIND; an impediment's WHEN (F15). */
   name: string;
-  explanation: string;
+  /** A cue's optional NOTE. Impediments have no free-text note (F16 dropped INTERFERES). */
+  explanation?: string;
   scope: ItemScope;
   /** F6: a cue's WHEN. Required by every UI path that creates or edits a cue (D5: nullable in the DB). */
   cueWhen?: string;
@@ -60,7 +61,6 @@ export async function createItem(kind: ItemKind, input: ItemInput): Promise<Resu
             user_id: user.id,
             rank,
             name,
-            explanation: blank(input.explanation),
             scope: input.scope,
             proof_then: blank(input.proofThen),
             proof_recover: blank(input.proofRecover),
@@ -94,7 +94,6 @@ export async function updateItem(kind: ItemKind, id: string, input: Omit<ItemInp
           .from("impediments")
           .update({
             name,
-            explanation: blank(input.explanation),
             proof_then: blank(input.proofThen),
             proof_recover: blank(input.proofRecover),
           })

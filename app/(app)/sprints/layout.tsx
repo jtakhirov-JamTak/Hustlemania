@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/server";
  */
 export default async function SprintsLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
-  const [{ vision, areas }, finished] = await allOrThrow([loadOverview(supabase), loadFinishedSprints(supabase)]);
+  const [{ visionReady, areas }, finished] = await allOrThrow([loadOverview(supabase), loadFinishedSprints(supabase)]);
   const now = new Date();
 
   const items: SideItem[] = areas.map((a) => {
@@ -26,8 +26,8 @@ export default async function SprintsLayout({ children }: { children: React.Reac
     if (unreviewed) {
       return { href: `/sprints/${a.key}`, label: a.name, meta: "Ended", metaAccent: true, sub: "Needs review" };
     }
-    if (vision) return { href: `/sprints/${a.key}`, label: a.name, meta: "Ready", sub: "No active sprint" };
-    return { href: `/sprints/${a.key}`, label: a.name, meta: "Locked", sub: "Vision not written yet" };
+    if (visionReady) return { href: `/sprints/${a.key}`, label: a.name, meta: "Ready", sub: "No active sprint" };
+    return { href: `/sprints/${a.key}`, label: a.name, meta: "Locked", sub: "Vision not finished" };
   });
 
   return (

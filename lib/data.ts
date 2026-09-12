@@ -79,8 +79,8 @@ export type AreaOverview = {
   sprint: Sprint | null;
 };
 
-/** F9: the account's one active vision plus the active sprint per area. */
-export type Overview = { vision: Vision | null; areas: AreaOverview[] };
+/** F9: the account's one active vision plus the active sprint per area. F16: `visionReady` is the sprint gate (all three steps saved). */
+export type Overview = { vision: Vision | null; visionReady: boolean; areas: AreaOverview[] };
 
 /**
  * The active vision and the active sprint per area, for sidebars and empty states.
@@ -89,23 +89,32 @@ export type Overview = { vision: Vision | null; areas: AreaOverview[] };
  */
 export const loadOverview = cache(async (supabase: Client): Promise<Overview> => {
   const [visions, sprints] = await Promise.all([
-    supabase.from("visions").select("*").is("archived_at", null).maybeSingle(),
+    supabase.from("visions").select("*, obstacle:impediments(id, name, proof_then, proof_recover)").is("archived_at", null).maybeSingle(),
     supabase.from("sprints").select("*").eq("status", "active"),
   ]);
   if (visions.error) throw new Error(`visions: ${visions.error.message}`);
   if (sprints.error) throw new Error(`sprints: ${sprints.error.message}`);
+  let vision: Vision | null = null;
+  let ready = false;
+  if (visions.data) {
+    const { obstacle, ...rest } = visions.data;
+    vision = rest;
+    ready = visionReady({ vision: rest, obstacle: obstacle ?? null, latestReview: null, sprintCount: 0 });
+  }
   return {
-    vision: visions.data,
+    vision,
+    visionReady: ready,
     areas: AREAS.map((a) => ({ key: a.key, name: a.name, sprint: sprints.data.find((s) => s.area === a.key) ?? null })),
   };
 });
 
 /** The vision's main obstacle: a global impediment, with its guiding rule (WHEN is its name; THEN and RECOVERED WHEN the proof parts). */
-export type VisionObstacle = Pick<Impediment, "id" | "name" | "explanation" | "proof_then" | "proof_recover">;
+export type VisionObstacle = Pick<Impediment, "id" | "name" | "proof_then" | "proof_recover">;
 
 export type VisionReview = { verdict: string; created_at: string };
 
-export type PreviousVision = { id: string; body: string; created_at: string; archived_at: string; sprintCount: number };
+/** F16: an archived vision may have been replaced before its goal was written. */
+export type PreviousVision = { id: string; body: string | null; picture: string | null; created_at: string; archived_at: string; sprintCount: number };
 
 export type ActiveVision = {
   vision: Vision;
@@ -116,11 +125,16 @@ export type ActiveVision = {
 
 export type VisionView = { active: ActiveVision | null; previous: PreviousVision[] };
 
-/** How many of the three annual steps the vision has: text, obstacle, complete rule. */
+/** F16: how many of the three annual steps are saved — the picture, the goal, an obstacle with its complete rule. */
 export function visionSteps(v: ActiveVision | null): 0 | 1 | 2 | 3 {
   if (!v) return 0;
-  if (!v.obstacle) return 1;
-  return proofComplete(v.obstacle) ? 3 : 2;
+  const done = [Boolean(v.vision.picture), Boolean(v.vision.body), Boolean(v.obstacle && proofComplete(v.obstacle))].filter(Boolean).length;
+  return done as 0 | 1 | 2 | 3;
+}
+
+/** F16: sprints unlock only when all three steps are saved (`start_sprint` raises `vision_incomplete` otherwise). */
+export function visionReady(v: ActiveVision | null): boolean {
+  return visionSteps(v) === 3;
 }
 
 /**
@@ -132,7 +146,7 @@ export const loadVision = cache(async (supabase: Client): Promise<VisionView> =>
   const [visions, sprints] = await Promise.all([
     supabase
       .from("visions")
-      .select("*, obstacle:impediments(id, name, explanation, proof_then, proof_recover)")
+      .select("*, obstacle:impediments(id, name, proof_then, proof_recover)")
       .order("archived_at", { ascending: false, nullsFirst: true }),
     supabase.from("sprints").select("vision_id"),
   ]);
@@ -150,7 +164,7 @@ export const loadVision = cache(async (supabase: Client): Promise<VisionView> =>
   }
   const previous: PreviousVision[] = visions.data
     .filter((v) => v.archived_at !== null)
-    .map((v) => ({ id: v.id, body: v.body, created_at: v.created_at, archived_at: v.archived_at!, sprintCount: counts.get(v.id) ?? 0 }));
+    .map((v) => ({ id: v.id, body: v.body, picture: v.picture, created_at: v.created_at, archived_at: v.archived_at!, sprintCount: counts.get(v.id) ?? 0 }));
   if (!activeRow) return { active: null, previous };
   const { obstacle, ...vision } = activeRow;
   return { active: { vision, obstacle: obstacle ?? null, latestReview, sprintCount: counts.get(vision.id) ?? 0 }, previous };
@@ -341,7 +355,8 @@ function toItem(kind: ItemKind, row: CueRowWithSituations | ImpedimentRowWithSit
     id: row.id,
     kind,
     name: row.name,
-    explanation: row.explanation,
+    // F16: only a cue carries a free-text note; impediments lost INTERFERES.
+    explanation: "explanation" in row ? row.explanation : null,
     scope: row.scope as ItemScope,
     rank: row.rank,
     archived_at: row.archived_at,

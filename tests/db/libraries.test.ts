@@ -86,8 +86,9 @@ describe("F2 RLS isolation", () => {
     for (const t of TABLES) {
       const res = await a.client.from(t).select("id");
       expect(res.error, t).toBeNull();
-      // seedItems gives the cue and the impediment one situation each.
-      expect(res.data, t).toHaveLength(t === "situations" ? 2 : 1);
+      // seedItems gives the cue and the impediment one situation each; insertVision (F16)
+      // adds the vision's obstacle, a second impediment with no situation.
+      expect(res.data, t).toHaveLength(t === "situations" ? 2 : t === "impediments" ? 2 : 1);
     }
   });
 
@@ -577,7 +578,7 @@ describe("close_day with day observations (F7)", () => {
     u = await createTestUser("lib-close");
     today = await dbTodayIn(KTZ);
     await insertVision(u);
-    cueA = await insertCue(u, "Cue A", "global", null, { situation: "Calendar open" });
+    cueA = await insertCue(u, "Cue A", "global", "  why it matters  ", { situation: "Calendar open" });
     cueRemoved = await insertCue(u, "Cue removed today");
     impHighest = await insertImpediment(u, "Highest", { ...PROOF, situation: "Starting late" });
     impRemoved = await insertImpediment(u, "Removed today", PROOF);
@@ -607,7 +608,7 @@ describe("close_day with day observations (F7)", () => {
     await deleteTestUser(u);
   });
 
-  type Offered = { kind: string; item_id: string; name: string; cue_when: string | null; proof_recover: string | null; is_focus: boolean; situations: { id: string; name: string; rank: number }[] };
+  type Offered = { kind: string; item_id: string; name: string; explanation: string | null; cue_when: string | null; proof_recover: string | null; is_focus: boolean; situations: { id: string; name: string; rank: number }[] };
 
   it("offers the items whose membership overlapped the day, later removal notwithstanding, with the F6 columns, the focus flag and each item's live situations (F15)", async () => {
     const res = await u.client.rpc("day_offered_items", { p_sprint_day_id: day1 });
@@ -615,9 +616,11 @@ describe("close_day with day observations (F7)", () => {
     const rows = res.data as Offered[];
     const ids = rows.map((r) => `${r.kind}:${r.item_id}`).sort();
     expect(ids).toEqual([`cue:${cueA}`, `cue:${cueRemoved}`, `impediment:${impHighest}`, `impediment:${impRemoved}`].sort());
-    expect(rows.find((r) => r.item_id === cueA)).toMatchObject({ cue_when: "I open the calendar", is_focus: true, proof_recover: null });
+    // F16: a cue's explanation (its NOTE) is still offered, trimmed; an impediment's is null — the column is gone.
+    expect(rows.find((r) => r.item_id === cueA)).toMatchObject({ cue_when: "I open the calendar", is_focus: true, proof_recover: null, explanation: "why it matters" });
     expect(rows.find((r) => r.item_id === cueRemoved)).toMatchObject({ is_focus: false });
-    expect(rows.find((r) => r.item_id === impHighest)).toMatchObject({ proof_recover: PROOF.proofRecover, is_focus: false, cue_when: null });
+    expect(rows.find((r) => r.item_id === impHighest)).toMatchObject({ proof_recover: PROOF.proofRecover, is_focus: false, cue_when: null, explanation: null });
+    expect(Object.keys(rows[0])).toContain("explanation");
     expect(rows.find((r) => r.item_id === impHighest)!.situations.map((s) => s.name)).toEqual(["Starting late"]);
     expect(rows.find((r) => r.item_id === cueA)!.situations.map((s) => s.name)).toEqual(["Calendar open"]);
     expect(Object.keys(rows[0])).not.toContain("proof_when");
@@ -1147,13 +1150,26 @@ describe("F6 libraries v2", () => {
     expect(src("affected_sprints_check")).toMatch(/'situation'/);
     expect(src("close_day")).toMatch(/situations_required/);
     expect(src("day_offered_items")).toMatch(/situations/);
-    expect(src("set_vision_rule")).toMatch(/set name = v_when/);
+    expect(src("set_vision_obstacle")).toMatch(/set name = v_when/);
     expect(src("set_item_situations")).toMatch(/no_situations/);
-    for (const name of ["start_sprint", "sprint_invalid_reason", "set_highest_impediment", "library_item_before_insert", "impediments_before_update", "close_day", "day_offered_items", "set_vision_rule"]) {
+    for (const name of ["start_sprint", "sprint_invalid_reason", "set_highest_impediment", "library_item_before_insert", "impediments_before_update", "close_day", "day_offered_items", "set_vision_obstacle"]) {
       expect(src(name), `${name}: proof_when`).not.toMatch(/proof_when/);
     }
     // The 0012 lock is untouched: the legacy day columns stay guarded.
     expect(src("sprint_days_immutable_after_close")).toMatch(/new\.proof_when/);
+    // 0020 (F16): the sprint gate, the explanation trim kept for cues only, the atomic
+    // obstacle + rule, the step functions; the old three entry points are gone.
+    expect(src("start_sprint")).toMatch(/vision_incomplete/);
+    const insertSrc = src("library_item_before_insert");
+    expect(insertSrc.indexOf("new.explanation")).toBeGreaterThan(insertSrc.indexOf("tg_table_name = 'cues'"));
+    expect(src("impediments_before_update")).not.toMatch(/explanation/);
+    expect(src("day_offered_items")).toMatch(/null::text as explanation/);
+    expect(src("day_offered_items")).not.toMatch(/i\.explanation/);
+    expect(src("save_vision_goal")).toMatch(/interval '12 months'/);
+    expect(src("save_vision_picture")).toMatch(/vision_picture_required/);
+    expect(src("set_vision_obstacle")).toMatch(/rule_incomplete/);
+    expect(src("set_vision_obstacle")).toMatch(/obstacle_not_global/);
+    expect(fns.filter((f) => ["save_vision", "set_vision_rule"].includes(f.proname))).toEqual([]);
   });
 
   it("cue_when is trimmed and blank becomes null on insert and update; a cue may be saved without one (D5)", async () => {

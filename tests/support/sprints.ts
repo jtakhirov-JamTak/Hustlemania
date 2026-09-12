@@ -6,7 +6,7 @@ async function activeVision(admin: AdminClient, userId: string): Promise<string>
   const existing = await admin.from("visions").select("id").eq("user_id", userId).is("archived_at", null).maybeSingle();
   if (existing.error) throw new Error(existing.error.message);
   if (existing.data) return existing.data.id;
-  const created = await admin.from("visions").insert({ user_id: userId, body: "A seeded vision", deadline: "2099-01-01", proof: "Seeded proof" }).select("id").single();
+  const created = await admin.from("visions").insert({ user_id: userId, picture: "A seeded picture", body: "A seeded vision", deadline: "2099-01-01", proof: "Seeded proof", confidence: 8 }).select("id").single();
   if (created.error) throw new Error(created.error.message);
   return created.data.id;
 }

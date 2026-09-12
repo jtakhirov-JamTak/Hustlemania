@@ -2,6 +2,26 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## Deferred from F16 (2026-09-12)
+
+- **Dictate on the review note and the library editors.** F16 put the mic on the seven
+  Vision setup boxes only; `components/Dictate.tsx` is one line per box to extend.
+- **Dictation inside the installed iOS app is unverified.** Web Speech works in iOS
+  Safari; past iOS versions refused it in home-screen (standalone) mode. Try it on a
+  phone after the release; if it fails there, the button hides itself and the keyboard
+  mic remains.
+- **The legacy vision's step count.** The one hosted vision from before F16 reads
+  `2 of 3` and `Locked` until its owner saves the picture (DECISIONS 2026-09-12 F16).
+  Nothing to do unless a second legacy row ever appears.
+- **Wizard blocked-line copy** (eval-10 P2-1): the SPEC quotes "A sprint has to advance
+  the vision; finish its three steps first."; the wizard says "…and its three steps are
+  not all saved. Write the vision first; it takes three short steps." Same behaviour;
+  align the sentence when the wizard is next touched.
+- **Accessible names on the Goal and Obstacle steps** (eval-10 P2-2): the proof input's
+  name is "Proof" and the WHEN input's is "WHEN" while the SPEC writes the visible label
+  text and "When". Sighted users see the SPEC wording; only `getByLabel` by the long
+  text misses. Pick one convention across the three steps.
+
 ## Deferred from F15 (2026-09-11)
 
 - **Drop the six legacy day columns** (`sprint_days.proof_when`, `proof_then`,

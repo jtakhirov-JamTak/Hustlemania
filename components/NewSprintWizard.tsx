@@ -215,7 +215,7 @@ export function NewSprintWizard({
   const usageValid = d.measurement !== "money" || usageRows.every((u) => u.label.trim() && Number(u.amount) > 0);
 
   const stepHint: (string | null)[] = [
-    !vision ? "Write the vision first." : !d.area ? "Choose an area without an active sprint." : !d.outcome.trim() ? "Describe the outcome." : null,
+    !vision ? "Finish the vision first." : !d.area ? "Choose an area without an active sprint." : !d.outcome.trim() ? "Describe the outcome." : null,
     !amountValid
       ? "Enter a whole-number goal above zero."
       : d.measurement === "money" && !/^[A-Za-z]{3}$/.test(d.currency)
@@ -289,7 +289,7 @@ export function NewSprintWizard({
     if (!name || (kind === "cue" && !cueWhen) || situationIds.length === 0) return;
     setCreating(kind);
     setError(null);
-    const res = await callAction(() => createItem(kind, { name, explanation: "", scope: "global", cueWhen: kind === "cue" ? cueWhen : undefined, situationIds }));
+    const res = await callAction(() => createItem(kind, { name, scope: "global", cueWhen: kind === "cue" ? cueWhen : undefined, situationIds }));
     setCreating(null);
     if (res.error || !res.id) {
       setError(res.error ?? "That did not save. Your input is still here — try again.");
@@ -354,7 +354,7 @@ export function NewSprintWizard({
               </div>
             ) : (
               <p className="wz-blocked" data-testid="wizard-blocked">
-                A sprint has to advance the vision, and none is written yet.{" "}
+                A sprint has to advance the vision, and its three steps are not all saved.{" "}
                 <Link href="/vision" className="wz-strong">
                   Write the vision
                 </Link>{" "}
@@ -575,7 +575,7 @@ export function NewSprintWizard({
                       on={d.impedimentIds.includes(i.id)}
                       disabled={noSituation || (!d.impedimentIds.includes(i.id) && d.impedimentIds.length >= 3)}
                       label={i.name}
-                      sub={noSituation ? "No situation yet — add one on the Impediments page" : [proofSummary(i), appliesTo(i) && `applies to: ${appliesTo(i)}`].filter(Boolean).join(" · ") || i.explanation}
+                      sub={noSituation ? "No situation yet — add one on the Impediments page" : [proofSummary(i), appliesTo(i) && `applies to: ${appliesTo(i)}`].filter(Boolean).join(" · ") || null}
                       tag={i.scope === "global" ? "Global" : null}
                       onPick={() => toggleImpediment(i.id)}
                     />

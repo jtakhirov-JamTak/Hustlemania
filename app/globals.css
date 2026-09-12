@@ -3975,3 +3975,117 @@ body:has(dialog[open]) {
   color: var(--muted);
   white-space: nowrap;
 }
+
+/* F16: the Dictate button under a setup text box; one per box, accent-filled because
+   dictating is the primary action on the Vision setup. Listening: panel background,
+   accent ring, pulsing red dot. */
+.dictate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.dictate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dictate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dictate-on {
+  background: var(--panel);
+  color: var(--accent-ink);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
+.dictate-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.dictate-on .dictate-dot {
+  background: var(--under);
+  animation: dictate-pulse 1s ease-in-out infinite;
+}
+
+@keyframes dictate-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dictate-on .dictate-dot {
+    animation: none;
+  }
+}
+
+.dictate-note {
+  font-size: 12.5px;
+  color: var(--under);
+}
+
+/* F16: the 0–10 confidence chips on the Goal step and the example / rehearse blocks. */
+.v-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.v-chip-n {
+  min-width: 44px;
+  min-height: 40px;
+  justify-content: center;
+}
+
+.v-prompts {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.55;
+  display: grid;
+  gap: 6px;
+}
+
+.v-example {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--faint);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.v-example strong {
+  color: var(--ink);
+}
+
+.v-mini-body-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

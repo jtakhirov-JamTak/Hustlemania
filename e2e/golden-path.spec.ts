@@ -58,12 +58,12 @@ test.describe("golden path", () => {
     await expect(page.locator("[data-sidebar]").getByText("Locked")).toHaveCount(3);
     // U1: /sprints lands on the first Area, so that chip is selected and shows its sub line; a chip
     // that is not selected keeps its sub line off screen (clip, not display:none) on every width.
-    await expect(page.locator("[data-sidebar] .side-link-on").getByText("Vision not written yet")).toBeVisible();
-    await expect(page.locator("[data-sidebar] .side-link:not(.side-link-on)").getByText("Vision not written yet").first()).toHaveCSS("clip", "rect(0px, 0px, 0px, 0px)");
+    await expect(page.locator("[data-sidebar] .side-link-on").getByText("Vision not finished")).toBeVisible();
+    await expect(page.locator("[data-sidebar] .side-link:not(.side-link-on)").getByText("Vision not finished").first()).toHaveCSS("clip", "rect(0px, 0px, 0px, 0px)");
     await page.getByRole("link", { name: "Write the vision" }).click();
     await expect(page).toHaveURL(/\/vision$/);
 
-    // F9 step 1: the sidebar reads 0 of 3; a past deadline shows the hint and does not submit.
+    // F16 step 1 (Picture): the sidebar reads 0 of 3; a blank picture shows the hint and does not submit.
     const visionSetup = page.getByTestId("vision-setup");
     await expect(visionSetup).toHaveAttribute("data-step", "1");
     await expect(page.locator("[data-sidebar]").getByText("0 of 3")).toBeVisible();
@@ -72,48 +72,59 @@ test.describe("golden path", () => {
     await sideSub("Not written yet");
     await noOverflow();
     const saveVision = page.getByRole("button", { name: "Save & continue" });
-    await expect(page.getByText("The vision unlocks every sprint.")).toBeVisible();
-    // By role: the sidebar is now a landmark also named "Vision" (nav aria-label).
-    await page.getByRole("textbox", { name: "Vision", exact: true }).fill("In a year I run three times a week and sleep seven hours.");
-    await page.getByLabel("By when?").fill("2020-01-01");
-    await expect(page.getByText("The deadline must be in the future.")).toBeVisible();
+    await expect(page.getByText("Picture the day before moving on.")).toBeVisible();
     await expect(saveVision).toHaveAttribute("aria-disabled", "true");
+    // Chromium recognises speech, so the box carries its Dictate button (the API itself is not exercised headless).
+    await expect(page.getByRole("button", { name: "Dictate the picture" })).toBeVisible();
     // Submitting the form (Enter in a field) is a no-op while the hint stands.
-    await page.getByLabel("What would prove it happened?").press("Enter");
+    const picture = page.getByRole("textbox", { name: "Picture", exact: true });
+    await picture.press("Enter");
     await expect(visionSetup).toHaveAttribute("data-step", "1");
-    const nextYear = addDays(localDateIn("UTC", new Date()), 365);
-    await page.getByLabel("By when?").fill(nextYear);
-    await expect(page.getByText("Name what would prove it happened.")).toBeVisible();
-    await page.getByLabel("What would prove it happened?").fill("Three runs a week held for a quarter");
+    await picture.fill("Morning run before the kids wake; midday I say no to a one-off; evening the draft is sent.");
     await expect(saveVision).toHaveAttribute("aria-disabled", "false");
     await saveVision.click();
 
-    // Step 2: the vision alone unlocks the sprints; create the obstacle on the spot.
+    // Step 2 (Goal): the goal, its proof, a confidence of 5 → the reason is required.
     await expect(page.getByTestId("vision-setup")).toHaveAttribute("data-step", "2");
     await expect(page.locator("[data-sidebar]").getByText("1 of 3")).toBeVisible();
-    await expect(page.getByText("Pick or name one obstacle.")).toBeVisible();
+    await expect(page.getByText("Write the goal.")).toBeVisible();
     await noOverflow();
-    // F15: the obstacle is named by its WHEN — the moment you will recognise it.
-    await page.getByLabel("When", { exact: true }).fill("I notice myself delaying my first work block");
-    await page.getByLabel("Interferes").fill("what it does to your day");
+    await page.getByRole("textbox", { name: "Goal", exact: true }).fill("In a year I run three times a week and sleep seven hours.");
+    await expect(page.getByText("Name the observable proof.")).toBeVisible();
+    await page.getByRole("textbox", { name: "Proof", exact: true }).fill("Three runs a week held for a quarter");
+    await expect(page.getByText("Pick a confidence from 0 to 10.")).toBeVisible();
+    await page.getByRole("button", { name: "Confidence 5" }).click();
+    await expect(page.getByText("Say the main reason your confidence is low.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save & continue" })).toHaveAttribute("aria-disabled", "true");
+    await page.getByRole("textbox", { name: "Main reason", exact: true }).fill("Travel weeks break the routine");
+    await expect(page.getByRole("button", { name: "Dictate the reason" })).toBeVisible();
     await page.getByRole("button", { name: "Save & continue" }).click();
-
-    // Step 3: the rule (THEN → RECOVERED WHEN), saved onto the impediment; WHEN is its name.
     await expect(page.getByTestId("vision-setup")).toHaveAttribute("data-step", "3");
-    await expect(page.getByText("THEN and the recovery criterion are both required.")).toBeVisible();
-    await expect(page.getByLabel("WHEN", { exact: true })).toHaveCount(0);
+
+    // Two of three steps do not unlock a sprint: the Sprints sidebar still reads Locked.
+    await page.goto("/sprints");
+    await expect(page.locator("[data-sidebar]").getByText("Locked")).toHaveCount(3);
+    await expect(page.locator("[data-sidebar] .side-link-on").getByText("Vision not finished")).toBeVisible();
+    await page.goto("/vision?step=3");
+
+    // Step 3 (Obstacle): name the obstacle and write WHEN → THEN → RECOVERED WHEN in one step.
+    await expect(page.getByTestId("vision-setup")).toHaveAttribute("data-step", "3");
+    await expect(page.locator("[data-sidebar]").getByText("2 of 3")).toBeVisible();
+    await expect(page.getByText("WHEN, THEN and the recovery criterion are all required.")).toBeVisible();
     await noOverflow();
+    await page.getByLabel("WHEN", { exact: true }).fill("I notice myself delaying my first work block");
     await page.getByLabel("THEN", { exact: true }).fill("I start a 10-minute timer on the smallest executable task");
-    await page.getByLabel("RECOVERED WHEN").fill("The timer is running within 10 minutes");
+    await page.getByLabel("RECOVERED WHEN", { exact: true }).fill("The timer is running within 10 minutes");
     await page.getByRole("button", { name: "Save", exact: true }).click();
 
-    // Overview: 3 of 3, the obstacle card, no sprints yet.
+    // Overview: 3 of 3, the three cards, no sprints yet.
     const overview = page.getByTestId("vision-overview");
     await expect(overview).toBeVisible();
     await expect(page.getByTestId("vision-steps")).toHaveText("3 of 3 steps");
     await noOverflow();
-    await expect(page.getByTestId("card-obstacle")).toContainText("I notice myself delaying my first work block");
-    await expect(page.getByTestId("card-rule")).toContainText("WHEN I notice myself delaying my first work block → THEN I start a 10-minute timer on the smallest executable task");
+    await expect(page.getByTestId("card-picture")).toContainText("Morning run before the kids wake");
+    await expect(page.getByTestId("card-goal")).toContainText("Confidence 5/10");
+    await expect(page.getByTestId("card-obstacle")).toContainText("WHEN I notice myself delaying my first work block → THEN I start a 10-minute timer on the smallest executable task");
     await expect(page.getByTestId("card-sprints")).toContainText("No sprints yet.");
     await expect(page.getByTestId("vision-meta")).toContainText("Not reviewed yet");
     await expect(page.locator("[data-sidebar]").getByText("3 of 3")).toBeVisible();
@@ -576,7 +587,8 @@ test.describe("golden path", () => {
     // F6 / F15: the card shows the labelled parts (WHEN is the name), APPLIES TO, and the three-state usage line.
     await expect(item.getByText("In an active sprint")).toBeVisible();
     await expect(item.locator("[data-part=when]")).toHaveText("I notice myself delaying my first work block");
-    await expect(item.locator("[data-part=interferes]")).toHaveText("what it does to your day");
+    // F16: INTERFERES is gone from the card.
+    await expect(item.locator("[data-part=interferes]")).toHaveCount(0);
     await expect(item.locator("[data-part=recovered]")).toHaveText("The timer is running within 10 minutes");
     await expect(item.locator("[data-part=applies-to]")).toHaveText("Starting late");
     await expect(page.getByTestId("library-count")).toHaveText("2 · 0 archived");

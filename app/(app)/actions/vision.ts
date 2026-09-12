@@ -5,56 +5,59 @@ import { failed, type Result } from "@/lib/actionResult";
 import { friendlyError } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/server";
 
-// F9: every vision write is a SECURITY DEFINER function; identity comes from the session.
+// F9 / F16: every vision write is a SECURITY DEFINER function; identity comes from the session.
 
-export type VisionInput = { body: string; deadline: string; proof: string; meaning: string; baseline: string };
-
-/** Step 1: inserts the account's vision or edits it in place. Returns the vision id. */
-export async function saveVision(input: VisionInput): Promise<Result<{ id: string }>> {
-  if (!input.body.trim()) return { error: friendlyError("vision_body_required") };
-  if (!input.proof.trim()) return { error: friendlyError("vision_proof_required") };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.deadline)) return { error: friendlyError("vision_deadline_past") };
+/** Step 1: the picture of a day one year from today. Inserts the account's vision or edits the picture in place. Returns the vision id. */
+export async function saveVisionPicture(picture: string): Promise<Result<{ id: string }>> {
+  if (!picture.trim()) return { error: friendlyError("vision_picture_required") };
   const supabase = await createClient();
-  const res = await supabase.rpc("save_vision", {
-    p_body: input.body.trim(),
-    p_deadline: input.deadline,
-    p_proof: input.proof.trim(),
-    p_meaning: input.meaning.trim() || undefined,
-    p_baseline: input.baseline.trim() || undefined,
-  });
-  if (res.error) return failed("saveVision", res.error);
+  const res = await supabase.rpc("save_vision_picture", { p_picture: picture.trim() });
+  if (res.error) return failed("saveVisionPicture", res.error);
   revalidatePath("/", "layout");
   return { id: res.data };
 }
 
-export type ObstacleInput = { impedimentId: string | null; name: string; explanation: string };
+export type GoalInput = { body: string; proof: string; confidence: number | null; reason: string };
 
-/** Step 2: picks a global impediment or creates one, and links it as the main obstacle. Returns the impediment id. */
+/** Step 2: the one-year goal, its observable proof, the 0–10 confidence and, at 6 or below, the main reason. The deadline is set by the database on the first save. */
+export async function saveVisionGoal(input: GoalInput): Promise<Result<{ id: string }>> {
+  if (!input.body.trim()) return { error: friendlyError("vision_body_required") };
+  if (!input.proof.trim()) return { error: friendlyError("vision_proof_required") };
+  if (input.confidence === null || !Number.isInteger(input.confidence) || input.confidence < 0 || input.confidence > 10) return { error: friendlyError("confidence_out_of_range") };
+  if (input.confidence <= 6 && !input.reason.trim()) return { error: friendlyError("confidence_reason_required") };
+  const supabase = await createClient();
+  const res = await supabase.rpc("save_vision_goal", {
+    p_body: input.body.trim(),
+    p_proof: input.proof.trim(),
+    p_confidence: input.confidence,
+    // Sent explicitly as null: an omitted key changes the call signature and PostgREST finds no function.
+    p_reason: (input.confidence <= 6 ? input.reason.trim() : null) as unknown as string,
+  });
+  if (res.error) return failed("saveVisionGoal", res.error);
+  revalidatePath("/", "layout");
+  return { id: res.data };
+}
+
+export type ObstacleInput = { impedimentId: string | null; when: string; then: string; recover: string };
+
+/**
+ * Step 3: picks a global impediment (renamed to WHEN) or creates one, writes THEN and
+ * RECOVERED WHEN onto it, and links it as the main obstacle — one call. Returns the
+ * impediment id.
+ */
 export async function setVisionObstacle(input: ObstacleInput): Promise<Result<{ id: string }>> {
-  const name = input.name.trim();
-  if ((input.impedimentId === null) === (name === "")) return { error: friendlyError("obstacle_pick_or_name") };
+  if (!input.when.trim() || !input.then.trim() || !input.recover.trim()) return { error: friendlyError("rule_incomplete") };
   const supabase = await createClient();
   const res = await supabase.rpc("set_vision_obstacle", {
     // Sent explicitly as null: an omitted key changes the call signature and PostgREST finds no function.
     p_impediment_id: (input.impedimentId ?? null) as unknown as string,
-    p_name: name || undefined,
-    p_explanation: input.explanation.trim() || undefined,
+    p_when: input.when.trim(),
+    p_then: input.then.trim(),
+    p_recover: input.recover.trim(),
   });
   if (res.error) return failed("setVisionObstacle", res.error, { picked: input.impedimentId !== null });
   revalidatePath("/", "layout");
   return { id: res.data };
-}
-
-export type RuleInput = { when: string; then: string; recover: string };
-
-/** Step 3: writes WHEN · THEN · RECOVERED WHEN onto the obstacle impediment. */
-export async function setVisionRule(input: RuleInput): Promise<Result> {
-  if (!input.when.trim() || !input.then.trim() || !input.recover.trim()) return { error: friendlyError("rule_incomplete") };
-  const supabase = await createClient();
-  const res = await supabase.rpc("set_vision_rule", { p_when: input.when.trim(), p_then: input.then.trim(), p_recover: input.recover.trim() });
-  if (res.error) return failed("setVisionRule", res.error);
-  revalidatePath("/", "layout");
-  return {};
 }
 
 /** Replace: archives the active vision. Sprints keep their reference; the obstacle stays in the library. */

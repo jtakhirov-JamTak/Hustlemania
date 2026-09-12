@@ -6,6 +6,55 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-12 — F16 vision v3: three steps that each save something, all three unlock sprints, INTERFERES and the optional prompts deleted
+
+`/interview` in feature mode (`docs/SPEC.md` F16; plan of record
+`~/.claude/plans/i-want-to-make-fancy-squirrel.md`). One approval, built in the same
+session. Eight calls, the user's:
+
+1. **Step 1 is one saved textarea** under the Morning / Midday / Evening prompts
+   (`visions.picture`), not three columns and not a read-only screen.
+2. **All three steps unlock sprints.** Reverses the 2026-09-08 call that the vision row
+   alone satisfies rule 2. `start_sprint` raises `vision_incomplete` until picture, goal
+   and a complete obstacle rule exist; the one hosted legacy vision reads 2 of 3 and
+   `Locked` until its owner fills in step 1. The running sprint is not affected.
+3. **The deadline is not typed.** `visions.deadline` is set to twelve months from the
+   first goal save and never by the user; the overview keeps `By {date}`.
+4. **Voice is the Web Speech API** — free, no server, a mic button per box hidden where
+   the API is missing; the phone keyboard mic remains everywhere. Server transcription
+   (paid, audio leaves the device) rejected. Behaviour in the installed iOS app is not
+   verified here.
+5. **The "main reason" box appears at confidence ≤ 6 and is required then**; above 6 it
+   is hidden and stored as null (a table check backs it).
+6. **The overview's three cards mirror the three steps**; the separate Guiding rule card
+   goes.
+7. **Voice on the Vision setup only**, as a reusable control; the review note and the
+   library editors are BACKLOG.
+8. **Explicit deletes.** `visions.meaning`, `visions.baseline` and
+   `impediments.explanation` (INTERFERES) are dropped from the UI and the database — the
+   user's stated call, made twice, so the global "archive, never delete" rule yields to
+   it. Hosted values lost by the push: one of each. The pre-push dump is the only copy.
+
+**Rejected.** Keeping the columns and only hiding the fields (the user asked for the
+database too) · three saved boxes for step 1 · the deadline dropped entirely (the review
+card keeps its time anchor) · a fresh design round (the F9 look is reused; only fields and
+copy change).
+
+**Build-time calls (2026-09-12).** `save_vision_goal` drops a reason above 6 instead of
+refusing it (the box is hidden there; a stale value must not block the save) and the
+table check `visions_confidence_reason_check` backs the rule. `day_offered_items` keeps
+its return type (the impediment branch selects `null::text`), so no drop / re-grant and
+the Day Close shape stays. The seed helper `insertVision` completes all three steps and
+so gives every seeded user one extra global impediment ("Vision obstacle") — the RLS
+row-count test now expects two impediments. Step 3 stacks its three inputs with a
+Dictate under each rather than the two-column grid: phone-first, and the primary action
+is dictation. No mockup page: the real screens were captured (20, both palettes and
+widths) since the F9 look is reused. The listening state of dictation was not exercised
+in this session — Chrome refused the microphone to the automated tab, which proved only
+the denied path — and the SPEC records it as owed to a hand check.
+
+---
+
 ## 2026-09-12 — F15 release: code before schema, then a full wipe instead of the owner-only delete
 
 **What happened.** "Commit and push" deployed the F15 app to hustlemania.app through the

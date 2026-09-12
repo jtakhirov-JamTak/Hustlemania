@@ -17,9 +17,10 @@ import { daysBetween } from "@/lib/sprintDay";
 const DATE: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
 
 /**
- * F9: the saved vision — headline, meta, Edit · Review vision · Replace, `n of 3 steps`,
- * the three cards, the Library card and "Sprints behind this vision", previous visions
- * folded underneath. Review opens a card; both verdicts write a dated row.
+ * F9 / F16: the saved vision — the goal as headline, meta, Edit · Review vision · Replace,
+ * `n of 3 steps`, three cards that mirror the three steps (Picture · One-year goal · Main
+ * obstacle), the Library card and "Sprints behind this vision", previous visions folded
+ * underneath. Review opens a card; both verdicts write a dated row.
  */
 export function VisionOverview({
   active,
@@ -42,8 +43,9 @@ export function VisionOverview({
   const steps = visionSteps(active);
   // Device date after mount only (#16): the server would render its own zone's day count.
   const device = useDeviceToday();
-  const daysLeft = device ? daysBetween(device.today, vision.deadline) : null;
-  const deadlineText = formatIsoDate(vision.deadline, DATE);
+  // F16: the deadline is set by the first goal save; a picture-only vision has none yet.
+  const daysLeft = device && vision.deadline ? daysBetween(device.today, vision.deadline) : null;
+  const deadlineText = vision.deadline ? formatIsoDate(vision.deadline, DATE) : null;
   const ruleComplete = Boolean(obstacle && obstacle.proof_then && obstacle.proof_recover);
 
   function send(verdict: Verdict) {
@@ -79,13 +81,14 @@ export function VisionOverview({
   return (
     <div data-testid="vision-overview">
       <div className="v-head">
-        <div className="label-accent">One to two years from now</div>
+        <div className="label-accent">One year from today</div>
         <span className="v-head-meta" data-testid="vision-meta">
-          Saved {stampDate(vision.updated_at)} · {daysLeft !== null && daysLeft < 0 ? <span className="v-under">Deadline passed {deadlineText}</span> : `By ${deadlineText}`} ·{" "}
+          Saved {stampDate(vision.updated_at)}
+          {deadlineText ? <> · {daysLeft !== null && daysLeft < 0 ? <span className="v-under">Deadline passed {deadlineText}</span> : `By ${deadlineText}`}</> : null} ·{" "}
           {latestReview ? `Reviewed ${stampDate(latestReview.created_at)}` : "Not reviewed yet"}
         </span>
       </div>
-      <h1 className="v-vision">{vision.body}</h1>
+      <h1 className="v-vision">{vision.body ?? "Goal not written yet"}</h1>
       <div className="v-actions">
         <Link href="/vision?step=1" className="btn btn-secondary btn-link">
           Edit
@@ -137,39 +140,48 @@ export function VisionOverview({
       ) : null}
 
       <div className="v-cards">
-        <div className="card v-mini" data-testid="card-vision">
+        <div className="card v-mini" data-testid="card-picture">
           <div className="v-mini-head">
-            <span className="label-accent">Vision</span>
+            <span className="label-accent">Picture</span>
             <Link href="/vision?step=1" className="v-mini-action">
-              Edit
+              {vision.picture ? "Edit" : "Add"}
             </Link>
           </div>
-          <div className="v-mini-body">{vision.body}</div>
-          <div className="v-mini-sub">{vision.proof ? `Proof: ${vision.proof}` : "No success evidence yet"}</div>
+          {vision.picture ? (
+            <div className="v-mini-body v-mini-body-clamp">{vision.picture}</div>
+          ) : (
+            <Link href="/vision?step=1" className="v-mini-empty">
+              Picture a day one year from today.
+            </Link>
+          )}
+        </div>
+        <div className="card v-mini" data-testid="card-goal">
+          <div className="v-mini-head">
+            <span className="label-accent">One-year goal</span>
+            <Link href="/vision?step=2" className="v-mini-action">
+              {vision.body ? "Edit" : "Add"}
+            </Link>
+          </div>
+          {vision.body ? (
+            <>
+              <div className="v-mini-body">{vision.body}</div>
+              <div className="v-mini-sub">
+                {vision.proof ? `Proof: ${vision.proof}` : "No success evidence yet"}
+                {vision.confidence !== null ? ` · Confidence ${vision.confidence}/10` : ""}
+                {vision.confidence_reason ? ` · ${vision.confidence_reason}` : ""}
+              </div>
+            </>
+          ) : (
+            <Link href="/vision?step=2" className="v-mini-empty">
+              Write the goal.
+            </Link>
+          )}
         </div>
         <div className="card v-mini" data-testid="card-obstacle">
           <div className="v-mini-head">
             <span className="label-accent">Main obstacle</span>
-            <Link href="/vision?step=2" className="v-mini-action">
-              {obstacle ? "Edit" : "Add"}
-            </Link>
-          </div>
-          {obstacle ? (
-            <>
-              <div className="v-mini-body">{obstacle.name}</div>
-              <div className="v-mini-sub">{obstacle.explanation ?? "Global impediment · every sprint can watch it"}</div>
-            </>
-          ) : (
-            <Link href="/vision?step=2" className="v-mini-empty">
-              What most often pulls you off course?
-            </Link>
-          )}
-        </div>
-        <div className="card v-mini" data-testid="card-rule">
-          <div className="v-mini-head">
-            <span className="label-accent">Guiding rule</span>
-            <Link href={obstacle ? "/vision?step=3" : "/vision?step=2"} className="v-mini-action">
-              {ruleComplete ? "Edit" : "Add"}
+            <Link href="/vision?step=3" className="v-mini-action">
+              {obstacle && ruleComplete ? "Edit" : "Add"}
             </Link>
           </div>
           {obstacle && ruleComplete ? (
@@ -180,8 +192,8 @@ export function VisionOverview({
               <div className="v-mini-sub">Recovered when {obstacle.proof_recover}</div>
             </>
           ) : (
-            <Link href={obstacle ? "/vision?step=3" : "/vision?step=2"} className="v-mini-empty">
-              {obstacle ? `One move, every time ${obstacle.name} shows up.` : "Name the obstacle first."}
+            <Link href="/vision?step=3" className="v-mini-empty">
+              {obstacle ? `One move, every time ${obstacle.name} shows up.` : "What most often pulls you off that course?"}
             </Link>
           )}
         </div>
@@ -234,7 +246,7 @@ export function VisionOverview({
           {showPrevious
             ? previous.map((p) => (
                 <div key={p.id} className="v-prev" data-testid="previous-vision">
-                  {p.body}
+                  {p.body ?? p.picture ?? "No goal was written."}
                   <span className="v-prev-meta">
                     {monthYear(p.created_at)} – {monthYear(p.archived_at)} · replaced {stampDate(p.archived_at)} · {p.sprintCount}{" "}
                     {p.sprintCount === 1 ? "sprint" : "sprints"} ran behind it

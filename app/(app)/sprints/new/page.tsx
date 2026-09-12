@@ -19,11 +19,11 @@ export default async function NewSprintPage({ searchParams }: { searchParams: Pr
   // last review without a round trip.
   const kits: Partial<Record<AreaKey, AreaKit | null>> = Object.fromEntries(AREAS.map((a, i) => [a.key, kitList[i] as AreaKit | null]));
 
-  // F9: one vision unlocks every Area; the only gate left per Area is an active sprint.
+  // F9 / F16: one vision, all three steps saved, unlocks every Area; the only gate left per Area is an active sprint.
   const areas = overview.areas.map((a) => ({ key: a.key, name: a.name, hasSprint: Boolean(a.sprint) }));
-  const available = overview.vision ? areas.filter((a) => !a.hasSprint) : [];
+  const available = overview.visionReady ? areas.filter((a) => !a.hasSprint) : [];
   const initial: AreaKey | null =
     area && isAreaKey(area) && available.some((a) => a.key === area) ? area : (available[0]?.key ?? null);
 
-  return <NewSprintWizard areas={areas} initialArea={initial} library={library} situations={situations} vision={overview.vision?.body ?? null} kits={kits} />;
+  return <NewSprintWizard areas={areas} initialArea={initial} library={library} situations={situations} vision={overview.visionReady ? (overview.vision?.body ?? null) : null} kits={kits} />;
 }

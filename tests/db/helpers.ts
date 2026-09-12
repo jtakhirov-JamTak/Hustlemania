@@ -48,11 +48,31 @@ export async function dbTodayIn(tz: string): Promise<string> {
   return row.d;
 }
 
-/** F9: the account's one vision, written through save_vision (there is no direct INSERT grant). Idempotent: a second call edits in place. */
-export async function insertVision(user: TestUser, body = "A 1-year vision") {
-  const res = await user.client.rpc("save_vision", { p_body: body, p_deadline: "2099-01-01", p_proof: "Proof it happened" });
-  if (res.error) throw new Error(res.error.message);
-  return res.data as string;
+/**
+ * F16: the account's one vision, written through the three step functions (there is no
+ * direct INSERT grant). Complete by default — picture, goal and an obstacle with its rule
+ * — because a sprint needs all three steps; the obstacle is one extra global impediment
+ * per seeded user ("Vision obstacle", no situation, never a sprint member). Idempotent:
+ * a second call edits the picture and goal in place and keeps the existing obstacle.
+ * `complete: false` stops after the picture.
+ */
+export async function insertVision(user: TestUser, body = "A 1-year vision", opts: { complete?: boolean } = {}) {
+  const picture = await user.client.rpc("save_vision_picture", { p_picture: "A day one year from now" });
+  if (picture.error) throw new Error(picture.error.message);
+  if (opts.complete === false) return picture.data as string;
+  const goal = await user.client.rpc("save_vision_goal", { p_body: body, p_proof: "Proof it happened", p_confidence: 8, p_reason: null as unknown as string });
+  if (goal.error) throw new Error(goal.error.message);
+  const [row] = await sql<{ obstacle_id: string | null }[]>`select obstacle_id from public.visions where id = ${goal.data as string}`;
+  if (row.obstacle_id === null) {
+    const obstacle = await user.client.rpc("set_vision_obstacle", {
+      p_impediment_id: null as unknown as string,
+      p_when: "Vision obstacle",
+      p_then: "I start the timer",
+      p_recover: "The timer is running",
+    });
+    if (obstacle.error) throw new Error(obstacle.error.message);
+  }
+  return goal.data as string;
 }
 
 export type ItemKind = "cue" | "impediment";
@@ -104,13 +124,13 @@ export async function insertCue(
 }
 
 /**
- * An impediment: WHEN (`name`) → INTERFERES → THEN → RECOVERED WHEN. By default it gets
- * one situation named after it; pass `situation: false` to leave it bare.
+ * An impediment: WHEN (`name`) → THEN → RECOVERED WHEN (F16: no INTERFERES). By default it
+ * gets one situation named after it; pass `situation: false` to leave it bare.
  */
 export async function insertImpediment(
   user: TestUser,
   name: string,
-  opts: { scope?: string; proofThen?: string | null; proofRecover?: string | null; explanation?: string | null; situation?: boolean | string } = {},
+  opts: { scope?: string; proofThen?: string | null; proofRecover?: string | null; situation?: boolean | string } = {},
 ): Promise<string> {
   const res = await user.client
     .from("impediments")
@@ -118,7 +138,6 @@ export async function insertImpediment(
       user_id: user.id,
       name,
       scope: opts.scope ?? "global",
-      explanation: opts.explanation ?? null,
       proof_then: opts.proofThen ?? null,
       proof_recover: opts.proofRecover ?? null,
     })

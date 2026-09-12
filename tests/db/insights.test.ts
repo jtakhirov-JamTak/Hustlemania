@@ -80,7 +80,6 @@ describe("F10 single-sprint insight calculations", () => {
 
     ids = {
       H: await insertImpediment(u, "A one-off request lands", {
-        explanation: "Retainer outreach slips",
         proofThen: PROOF_THEN,
         proofRecover: PROOF_RECOVER,
         situation: "Saying yes to one-off projects",
