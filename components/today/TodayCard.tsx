@@ -6,10 +6,11 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { closeDayAction, saveIntention } from "@/app/(app)/actions/day";
 import { removeSprintItem } from "@/app/(app)/actions/library";
 import { AddItemPicker, candidatesFor } from "@/components/today/AddItemPicker";
-import { answersHint, closeInput, DayQuestions, EMPTY_ANSWERS, highestOf, type DayAnswers } from "@/components/today/DayQuestions";
+import { DayQuestions } from "@/components/today/DayQuestions";
 import { TaskList } from "@/components/today/TaskList";
 import { callAction } from "@/lib/callAction";
-import type { ItemKind, LibraryItem, OfferedItems, SprintDay, SprintItems, Task } from "@/lib/data";
+import type { ItemKind, LibraryItem, OfferedItems, SituationItem, SprintDay, SprintItems, Task } from "@/lib/data";
+import { answersHint, closeInput, EMPTY_ANSWERS, type DayAnswers } from "@/lib/dayAnswers";
 import { daySummaryLine, quietItems, type DayObservations } from "@/lib/daySummary";
 import { formatNumber, toBaseUnits, unitLabel, type Measured } from "@/lib/format";
 
@@ -30,6 +31,7 @@ export function TodayCard({
   observations,
   items,
   library,
+  situations,
   canClose,
   cannotCloseReason,
   dayOneAhead,
@@ -46,6 +48,8 @@ export function TodayCard({
   observations: DayObservations;
   items: SprintItems;
   library: { cues: LibraryItem[]; impediments: LibraryItem[] };
+  /** F15: the live situations per kind, for "Set up tomorrow"'s inline creates. */
+  situations: { cues: SituationItem[]; impediments: SituationItem[] };
   canClose: boolean;
   cannotCloseReason?: string;
   /** The sprint starts tomorrow: this is Day 1 shown ahead of time. */
@@ -133,6 +137,7 @@ export function TodayCard({
           observations={observations}
           items={items}
           library={library}
+          situations={situations}
           setupTomorrow={justClosed && nextTarget !== null}
           announce={justClosed}
           onDone={() => setJustClosed(false)}
@@ -240,14 +245,13 @@ function Reviewing({
         ? null
         : toBaseUnits(measured.measurement, { whole: Number(whole) });
   const actualValid = value !== null && Number.isInteger(value) && value >= 0 && (measured.measurement !== "hours" || Number(minutes || 0) < 60);
-  const highest = highestOf(offered, highestId);
-  const hint = !actualValid ? "Enter today's actual — zero is truthful" : answersHint(answers, highest);
+  const hint = !actualValid ? "Enter today's actual — zero is truthful" : answersHint(answers, offered);
   const blocked = Boolean(hint) || pending || error?.closed === true;
 
   function submit() {
     if (blocked || value === null) return;
     start(async () => {
-      const res = await callAction(() => closeDayAction(day.id, sprintId, closeInput(answers, offered, highest, value, notes)));
+      const res = await callAction(() => closeDayAction(day.id, sprintId, closeInput(answers, offered, value, notes)));
       if (res.error !== undefined) {
         setError({ text: res.error, closed: res.closed === true });
         return;
@@ -287,7 +291,7 @@ function Reviewing({
       )}
 
       <div className="t-prompt mt-14">What happened on Day {day.day_index}? None and Unsure are truthful answers.</div>
-      <DayQuestions offered={offered} highest={highest} answers={answers} onChange={setAnswers} />
+      <DayQuestions offered={offered} highestId={highestId} answers={answers} onChange={setAnswers} />
 
       <div className="t-rule">
         <div className="t-prompt">{day.intention?.trim() ? day.intention : "Tasks"}</div>
@@ -337,6 +341,7 @@ function Closed({
   observations,
   items,
   library,
+  situations,
   setupTomorrow,
   announce,
   onDone,
@@ -349,6 +354,7 @@ function Closed({
   observations: DayObservations;
   items: SprintItems;
   library: { cues: LibraryItem[]; impediments: LibraryItem[] };
+  situations: { cues: SituationItem[]; impediments: SituationItem[] };
   setupTomorrow: boolean;
   /** The close just happened here: the result takes focus so it is announced (SC 4.1.3). */
   announce: boolean;
@@ -364,7 +370,7 @@ function Closed({
   useEffect(() => {
     if (announce) result.current?.focus();
   }, [announce]);
-  const summary = daySummaryLine(day, observations);
+  const summary = daySummaryLine(observations);
   const quiet = quietItems(observations);
   // Only items still in the sprint can be pruned; a removed one drops out on refresh.
   const quietImps = quiet.impediments.map((q) => items.impediments.find((i) => i.id === q.id)).filter((i): i is SprintItems["impediments"][number] => Boolean(i));
@@ -436,7 +442,7 @@ function Closed({
               {quietCues.map((c) => (
                 <div key={c.id} className="t-tomorrow-item" data-testid="quiet-cue">
                   <span>{c.name}</span>
-                  <button type="button" className="j-link j-link-muted" disabled={pending || items.cues.length <= 1} onClick={() => remove("cue", c.id)} aria-label={`Remove ${c.name}`}>
+                  <button type="button" className="j-link j-link-muted" disabled={pending} onClick={() => remove("cue", c.id)} aria-label={`Remove ${c.name}`}>
                     Remove
                   </button>
                 </div>
@@ -445,7 +451,7 @@ function Closed({
           ) : null}
           {quietImps.length === 0 && quietCues.length === 0 ? <div className="t-tomorrow-section">Everything in the sprint earned its place today.</div> : null}
           <div className="t-tomorrow-adds">
-            {items.impediments.length < 5 ? (
+            {items.impediments.length < 3 ? (
               <button type="button" className="j-link" onClick={() => setAdding("impediment")}>
                 Add impediment
               </button>
@@ -456,7 +462,15 @@ function Closed({
               </button>
             ) : null}
           </div>
-          {adding ? <AddItemPicker kind={adding} sprintId={sprintId} candidates={candidatesFor(adding, library, adding === "cue" ? items.cues : items.impediments)} onClose={() => setAdding(null)} /> : null}
+          {adding ? (
+            <AddItemPicker
+              kind={adding}
+              sprintId={sprintId}
+              candidates={candidatesFor(adding, library, adding === "cue" ? items.cues : items.impediments)}
+              situations={adding === "cue" ? situations.cues : situations.impediments}
+              onClose={() => setAdding(null)}
+            />
+          ) : null}
         </div>
       ) : null}
 

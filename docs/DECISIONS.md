@@ -6,6 +6,62 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-11 — F15 situations: the response is the item, situations hang off it
+
+`/interview` in feature mode, escalated to DESIGN → SPECIFY because the change rewrites the
+entity model F2, F6, F7, F10 and F11 are built on (Part 1 untouched). Two approvals: the
+direction, then the spec. Nine calls, the user's:
+
+1. **Situations are reusable library entities, one list per kind.** Not a free-text field
+   on the item (cannot be asked about at the close) and not one shared library ("why would
+   an impediment be the same as an execution cue?").
+2. **Impediment = WHEN (its name) → INTERFERES → THEN → RECOVERED WHEN → situations; cue =
+   WHEN → REMIND → situations.** The SITUATION field goes; WHEN carries the identity.
+3. **1–3 impediments, 0–3 cues; every member ≥1 situation; Highest kept (auto when one);
+   focus required only while the sprint has cues.** The user: "you only require one
+   impediment per sprint; you don't even require a cue."
+4. **The close asks per impediment "did it show up", which situations, and "recovered?"
+   per ticked situation (blank allowed); per cue "used" and which situations.** The
+   response-ran and cost questions are dropped — recovery is the one answer that matters.
+5. **Per-item cards adapted and a per-situation breakdown now**, not later.
+6. **Owner's clean restart, others converted.** First "you can delete my existing data";
+   at the direction gate "others have data; delete only mine". So the migration converts
+   every user's rows in place and deletes nothing; `scripts/delete-user-rows.sql` is a
+   per-user script the owner runs by hand after a fresh dump.
+7. **Editor is the primary screen; both viewports, desktop-first; existing mockups
+   extended in-stack.**
+8. **Rule 6 on every sprint impediment** (recommended, accepted): the close asks
+   "recovered?" for every one, so every one needs a written criterion. Enforced at
+   `start_sprint` / `add_sprint_item`; the validity check stays Highest-only so a legacy
+   sprint with an unfinished non-highest is never locked out of archive / scope.
+9. Direction: one `situations` table with `kind` plus two join tables with a composite FK
+   (a cue situation on an impediment impossible at DDL level); `name` carries WHEN and
+   `proof_when` is dropped; a situation observation row per offered situation.
+
+Three structural decisions inside the build:
+
+- **The six legacy day columns stay** (`proof_when/then/recover`, `response`, `recovered`,
+  `impact`): never written again, out of `sprint_days_effective`, still locked by the 0012
+  trigger. Global rule: data with history value is not deleted. BACKLOG: drop them once
+  no hosted row carries a value.
+- **A converted situation keeps its item's id.** One uuid in two tables is harmless, and it
+  makes the conversion traceable with no mapping table: `situation_id = impediment_id`.
+- **The conversion runs with the old triggers in place**, disabling only the observation
+  rows' immutability trigger for the one snapshot copy — the smoke test found that the
+  copy tripped `day_closed`, which is exactly what the trigger is for.
+
+**Rejected.** A shared situation library. One free-text "applies when" field (the no-build
+option: gives the grouping, not decisions 4–5). Per-situation response-ran and cost
+questions. Keeping 1–5 impediments. Dropping the Highest and the focus (postmortem
+verdict, kit promote and the Today card hang off them). A `clean_restart_required` guard
+that refuses existing rows (friends have rows). A group-level None / Unsure pill (each
+item answers for itself now).
+
+**Re-open if** a user asks for a situation to belong to both libraries, or the phone close
+proves too long in practice (then a "None showed up" shortcut is the first thing to add).
+
+---
+
 ## 2026-09-10 — F14 pre-release: GitHub → Vercel, vercel.app origin, Pro backups, owner only, no Lighthouse
 
 Feature-mode `/interview` for F14. Eight calls, the user's unless noted:

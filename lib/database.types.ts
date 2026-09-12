@@ -34,6 +34,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      cue_situations: {
+        Row: {
+          created_at: string
+          cue_id: string
+          id: string
+          situation_id: string
+          situation_kind: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          cue_id: string
+          id?: string
+          situation_id: string
+          situation_kind?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          cue_id?: string
+          id?: string
+          situation_id?: string
+          situation_kind?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cue_situations_cue_id_fkey"
+            columns: ["cue_id"]
+            isOneToOne: false
+            referencedRelation: "cues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cue_situations_situation_id_situation_kind_fkey"
+            columns: ["situation_id", "situation_kind"]
+            isOneToOne: false
+            referencedRelation: "situations"
+            referencedColumns: ["id", "kind"]
+          },
+        ]
+      }
       cues: {
         Row: {
           archived_at: string | null
@@ -131,6 +173,51 @@ export type Database = {
           },
         ]
       }
+      day_cue_situation_observations: {
+        Row: {
+          applied: boolean
+          created_at: string
+          id: string
+          name: string
+          observation_id: string
+          situation_id: string
+          user_id: string
+        }
+        Insert: {
+          applied?: boolean
+          created_at?: string
+          id?: string
+          name: string
+          observation_id: string
+          situation_id: string
+          user_id: string
+        }
+        Update: {
+          applied?: boolean
+          created_at?: string
+          id?: string
+          name?: string
+          observation_id?: string
+          situation_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "day_cue_situation_observations_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "day_cue_observations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "day_cue_situation_observations_situation_id_fkey"
+            columns: ["situation_id"]
+            isOneToOne: false
+            referencedRelation: "situations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       day_impediment_observations: {
         Row: {
           created_at: string
@@ -138,6 +225,8 @@ export type Database = {
           impediment_id: string
           name: string
           occurred: string
+          proof_recover: string | null
+          proof_then: string | null
           sprint_day_id: string
           user_id: string
           was_highest: boolean
@@ -148,6 +237,8 @@ export type Database = {
           impediment_id: string
           name: string
           occurred: string
+          proof_recover?: string | null
+          proof_then?: string | null
           sprint_day_id: string
           user_id: string
           was_highest?: boolean
@@ -158,6 +249,8 @@ export type Database = {
           impediment_id?: string
           name?: string
           occurred?: string
+          proof_recover?: string | null
+          proof_then?: string | null
           sprint_day_id?: string
           user_id?: string
           was_highest?: boolean
@@ -186,6 +279,96 @@ export type Database = {
           },
         ]
       }
+      day_impediment_situation_observations: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          observation_id: string
+          occurred: boolean
+          recovered: string | null
+          situation_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          observation_id: string
+          occurred?: boolean
+          recovered?: string | null
+          situation_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          observation_id?: string
+          occurred?: boolean
+          recovered?: string | null
+          situation_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "day_impediment_situation_observations_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "day_impediment_observations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "day_impediment_situation_observations_situation_id_fkey"
+            columns: ["situation_id"]
+            isOneToOne: false
+            referencedRelation: "situations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      impediment_situations: {
+        Row: {
+          created_at: string
+          id: string
+          impediment_id: string
+          situation_id: string
+          situation_kind: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          impediment_id: string
+          situation_id: string
+          situation_kind?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          impediment_id?: string
+          situation_id?: string
+          situation_kind?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "impediment_situations_impediment_id_fkey"
+            columns: ["impediment_id"]
+            isOneToOne: false
+            referencedRelation: "impediments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "impediment_situations_situation_id_situation_kind_fkey"
+            columns: ["situation_id", "situation_kind"]
+            isOneToOne: false
+            referencedRelation: "situations"
+            referencedColumns: ["id", "kind"]
+          },
+        ]
+      }
       impediments: {
         Row: {
           archived_at: string | null
@@ -195,7 +378,6 @@ export type Database = {
           name: string
           proof_recover: string | null
           proof_then: string | null
-          proof_when: string | null
           rank: number
           scope: string
           updated_at: string
@@ -209,7 +391,6 @@ export type Database = {
           name: string
           proof_recover?: string | null
           proof_then?: string | null
-          proof_when?: string | null
           rank: number
           scope?: string
           updated_at?: string
@@ -223,7 +404,6 @@ export type Database = {
           name?: string
           proof_recover?: string | null
           proof_then?: string | null
-          proof_when?: string | null
           rank?: number
           scope?: string
           updated_at?: string
@@ -357,6 +537,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      situations: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          id: string
+          kind: string
+          name: string
+          rank: number
+          scope: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          name: string
+          rank: number
+          scope?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          name?: string
+          rank?: number
+          scope?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       sprint_cues: {
         Row: {
@@ -771,12 +987,6 @@ export type Database = {
           day_index: number | null
           highest_impediment_id: string | null
           id: string | null
-          impact: string | null
-          proof_recover: string | null
-          proof_then: string | null
-          proof_when: string | null
-          recovered: string | null
-          response: string | null
           sprint_id: string | null
           target: number | null
           user_id: string | null
@@ -789,12 +999,6 @@ export type Database = {
           day_index?: number | null
           highest_impediment_id?: string | null
           id?: string | null
-          impact?: string | null
-          proof_recover?: string | null
-          proof_then?: string | null
-          proof_when?: string | null
-          recovered?: string | null
-          response?: string | null
           sprint_id?: string | null
           target?: number | null
           user_id?: string | null
@@ -807,12 +1011,6 @@ export type Database = {
           day_index?: number | null
           highest_impediment_id?: string | null
           id?: string | null
-          impact?: string | null
-          proof_recover?: string | null
-          proof_then?: string | null
-          proof_when?: string | null
-          recovered?: string | null
-          response?: string | null
           sprint_id?: string | null
           target?: number | null
           user_id?: string | null
@@ -871,11 +1069,8 @@ export type Database = {
         Args: {
           p_actual: number
           p_cues?: Json
-          p_impact?: string
           p_impediments?: Json
           p_notes?: string
-          p_recovered?: string
-          p_response?: string
           p_sprint_day_id: string
         }
         Returns: number
@@ -896,8 +1091,8 @@ export type Database = {
           name: string
           proof_recover: string
           proof_then: string
-          proof_when: string
           rank: number
+          situations: Json
         }[]
       }
       end_sprint_early: { Args: { p_sprint_id: string }; Returns: undefined }
@@ -951,9 +1146,6 @@ export type Database = {
           absent_days: number
           delta_pts: number
           enough: boolean
-          felt_a_lot: number
-          felt_nothing: number
-          felt_some: number
           is_highest: boolean
           item_id: string
           logged_days: number
@@ -970,9 +1162,6 @@ export type Database = {
           absent_days: number
           delta_pts: number
           enough: boolean
-          felt_a_lot: number
-          felt_nothing: number
-          felt_some: number
           is_highest: boolean
           item_id: string
           logged_days: number
@@ -985,74 +1174,72 @@ export type Database = {
         }[]
       }
       insight_min_days: { Args: never; Returns: number }
-      insight_response_followthrough: {
-        Args: { p_sprint_id: string }
-        Returns: {
-          answered: number
-          didnt: number
-          enough: boolean
-          item_id: string
-          name: string
-          occurrences: number
-          partially: number
-          proof_then: string
-          ran: number
-          rate: number
-          unsure: number
-        }[]
-      }
-      insight_response_followthrough_many: {
-        Args: { p_sprint_ids: string[] }
-        Returns: {
-          answered: number
-          didnt: number
-          enough: boolean
-          item_id: string
-          name: string
-          occurrences: number
-          partially: number
-          proof_then: string
-          ran: number
-          rate: number
-          sprint_id: string
-          unsure: number
-        }[]
-      }
       insight_response_recovery: {
         Args: { p_sprint_id: string }
         Returns: {
           answered: number
+          didnt: number
           enough: boolean
+          is_highest: boolean
           item_id: string
-          median_not: number
-          median_recovered: number
           name: string
-          outcome_enough: boolean
+          occurrences: number
           proof_recover: string
+          proof_then: string
           rate: number
-          with_recovered: number
-          with_response: number
-          without_recovered: number
-          without_response: number
+          recovered: number
+          verdict_occurrences: number
         }[]
       }
       insight_response_recovery_many: {
         Args: { p_sprint_ids: string[] }
         Returns: {
           answered: number
+          didnt: number
+          enough: boolean
+          is_highest: boolean
+          item_id: string
+          name: string
+          occurrences: number
+          proof_recover: string
+          proof_then: string
+          rate: number
+          recovered: number
+          sprint_id: string
+          verdict_occurrences: number
+        }[]
+      }
+      insight_situations: {
+        Args: { p_sprint_id: string }
+        Returns: {
+          asked_days: number
           enough: boolean
           item_id: string
-          median_not: number
-          median_recovered: number
-          name: string
-          outcome_enough: boolean
-          proof_recover: string
+          item_name: string
+          kind: string
+          occurrences: number
           rate: number
+          recovered_answered: number
+          recovered_yes: number
+          situation_id: string
+          situation_name: string
+        }[]
+      }
+      insight_situations_many: {
+        Args: { p_sprint_ids: string[] }
+        Returns: {
+          asked_days: number
+          enough: boolean
+          item_id: string
+          item_name: string
+          kind: string
+          occurrences: number
+          rate: number
+          recovered_answered: number
+          recovered_yes: number
+          situation_id: string
+          situation_name: string
           sprint_id: string
-          with_recovered: number
-          with_response: number
-          without_recovered: number
-          without_response: number
         }[]
       }
       insight_sprint_owned: {
@@ -1124,7 +1311,6 @@ export type Database = {
           p_impediment_id: string
           p_proof_recover?: string
           p_proof_then?: string
-          p_proof_when?: string
           p_sprint_id: string
         }
         Returns: undefined
@@ -1132,6 +1318,10 @@ export type Database = {
       set_item_scope: {
         Args: { p_item_id: string; p_kind: string; p_scope: string }
         Returns: Json
+      }
+      set_item_situations: {
+        Args: { p_item_id: string; p_kind: string; p_situation_ids: string[] }
+        Returns: undefined
       }
       set_vision_obstacle: {
         Args: {
@@ -1219,7 +1409,6 @@ export type Database = {
           p_outcome: string
           p_proof_recover?: string
           p_proof_then?: string
-          p_proof_when?: string
           p_start_date: string
           p_targets?: number[]
           p_tz: string

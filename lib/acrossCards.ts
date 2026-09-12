@@ -1,9 +1,9 @@
 import type { Grouped, Scope, SprintRef } from "@/lib/across";
 import { areaName } from "@/lib/areas";
-import type { CueRow, FollowThroughRow, ImpactRow, RecoveryRow } from "@/lib/data";
+import type { CueRow, ImpactRow, RecoveryRow, SituationRow } from "@/lib/data";
 import { formatIsoDate } from "@/lib/dates";
 import type { InsightRow } from "@/components/insights/InsightCard";
-import { cueRows, followThroughRows, impactRows, MIN_DAYS, recoveryRows } from "@/lib/insightCards";
+import { breakdownLines, cueRows, impactRows, recoveryRows } from "@/lib/insightCards";
 
 /**
  * Across sprints (F11): the grouped rows dressed for the shared insight card.
@@ -58,19 +58,23 @@ const byHelp = (a: { row: { delta_pts: number | null; enough: boolean } }, b: { 
 
 const helpRank = (delta: number | null, enough: boolean) => (enough && delta !== null ? -delta : 999);
 
-export function acrossImpactRows(groups: Grouped<ImpactRow>[], scope: Scope): InsightRow[] {
-  return [...groups].sort(bySeverity).map((g) => decorate(impactRows([g.row])[0], g, scope));
+/**
+ * F15: the situation lines for one grouped item — each situation's own quoted row, from
+ * the groups that share the item and the Area. A situation group quotes its own newest
+ * qualifying sprint, so its line can come from a different sprint than the card's bars;
+ * that is the same rule every card follows, and the line does not restate the bars.
+ */
+function breakdownFor(situations: Grouped<SituationRow>[], itemId: string, area: string, kind: "cue" | "impediment"): InsightRow["breakdown"] {
+  const rows = situations.filter((g) => g.area === area && g.row.item_id === itemId).map((g) => g.row);
+  return breakdownLines(rows, itemId, kind);
 }
 
-export function acrossCueRows(groups: Grouped<CueRow>[], scope: Scope): InsightRow[] {
-  return [...groups].sort(byHelp).map((g) => decorate(cueRows([g.row])[0], g, scope));
+export function acrossImpactRows(groups: Grouped<ImpactRow>[], scope: Scope, situations: Grouped<SituationRow>[] = []): InsightRow[] {
+  return [...groups].sort(bySeverity).map((g) => ({ ...decorate(impactRows([g.row])[0], g, scope), breakdown: breakdownFor(situations, g.row.item_id, g.area, "impediment") }));
 }
 
-export function acrossFollowRows(groups: Grouped<FollowThroughRow>[], scope: Scope): InsightRow[] {
-  return groups.flatMap((g) => {
-    const built = followThroughRows([g.row]);
-    return built.length ? [decorate(built[0], g, scope)] : [];
-  });
+export function acrossCueRows(groups: Grouped<CueRow>[], scope: Scope, situations: Grouped<SituationRow>[] = []): InsightRow[] {
+  return [...groups].sort(byHelp).map((g) => ({ ...decorate(cueRows([g.row])[0], g, scope), breakdown: breakdownFor(situations, g.row.item_id, g.area, "cue") }));
 }
 
 export function acrossRecoveryRows(groups: Grouped<RecoveryRow>[], scope: Scope): InsightRow[] {
@@ -83,11 +87,10 @@ export function acrossRecoveryRows(groups: Grouped<RecoveryRow>[], scope: Scope)
 /** The deltas that earn a sentence in the Suggested kit. */
 const HURT = -10;
 const HELPED = 10;
-const RAN_LOW = 50;
+const RECOVERS_LOW = 50;
 
 export type KitInput = {
   impact: Grouped<ImpactRow>[];
-  follow: Grouped<FollowThroughRow>[];
   recovery: Grouped<RecoveryRow>[];
   cues: Grouped<CueRow>[];
   closedDays: number;
@@ -98,32 +101,26 @@ export type KitInput = {
  * a row the reader can see above it. No sentence comes from a row whose sample is short —
  * advice from two days would be the one thing this page must not do.
  */
-export function suggestedKit({ impact, follow, recovery, cues, closedDays }: KitInput): string {
+export function suggestedKit({ impact, recovery, cues, closedDays }: KitInput): string {
   if (closedDays === 0) return "Nothing to suggest yet — close a few days first.";
 
   const worst = [...impact].sort(bySeverity).find((g) => g.row.enough && g.row.delta_pts !== null && g.row.delta_pts <= HURT);
-  const ft = follow.find((g) => g.row.enough && g.row.rate !== null);
-  // The recovery figure belongs to the SAME response the follow-through sentence names:
-  // same item, same Area (FIX_LOG 2026-09-09) and the same sprint — each group quotes its
-  // own most recent qualifying sprint, so two groups of one item can quote two sprints
-  // (FIX_LOG 2026-09-11). The clause is recovery on the occurrences the response ran, not
-  // the row's overall rate, and it needs MIN_DAYS such occurrences to speak at all.
-  const rc = ft
-    ? recovery.find(
-        (g) => g.row.enough && g.row.item_id === ft.row.item_id && g.area === ft.area && g.from?.id === ft.from?.id && g.row.with_response >= MIN_DAYS,
-      )
-    : undefined;
-  const ranRecovered = rc ? Math.round((rc.row.with_recovered * 100) / rc.row.with_response) : null;
+  // The recovery sentence names the same impediment as the impact sentence when that
+  // row qualifies (same item, same Area), else the first qualifying recovery row. The
+  // rate is the row's own: recovered over answered recoveries, F15.
+  const rc =
+    (worst && recovery.find((g) => g.row.enough && g.row.rate !== null && g.row.item_id === worst.row.item_id && g.area === worst.area)) ??
+    recovery.find((g) => g.row.enough && g.row.rate !== null);
   const best = [...cues].sort(byHelp).find((g) => g.row.enough && g.row.delta_pts !== null && g.row.delta_pts >= HELPED);
 
-  if (!worst && !ft && !best) return "Not enough logged days yet. Each comparison needs 3 days on each side.";
+  if (!worst && !rc && !best) return "Not enough logged days yet. Each comparison needs 3 days on each side.";
 
   const sentences = [
     worst ? `Keep ${worst.row.name} as the highest impediment; days it shows up run ${Math.abs(worst.row.delta_pts as number)} points lower.` : "",
-    ft
-      ? (ft.row.rate as number) < RAN_LOW
-        ? `The response for ${ft.row.name} ran on only ${ft.row.rate}% of occurrences — make the THEN smaller.`
-        : `The response for ${ft.row.name} runs ${ft.row.rate}% of the time${ranRecovered !== null ? ` and recovers ${ranRecovered}% of the times it ran.` : "."}`
+    rc
+      ? (rc.row.rate as number) < RECOVERS_LOW
+        ? `You recover from ${rc.row.name} only ${rc.row.rate}% of the time — make the THEN smaller.`
+        : `You recover from ${rc.row.name} ${rc.row.rate}% of the time.`
       : "",
     best ? `Keep ${best.row.name} — +${best.row.delta_pts} points on the days it's used.` : "",
   ];
@@ -139,7 +136,7 @@ export function suggestedKit({ impact, follow, recovery, cues, closedDays }: Kit
 export const HOW_TO_READ =
   "Each card compares median daily attainment (actual ÷ target) on days with and without the item, using only closed days " +
   "where that question was answered. Unsure days count toward coverage, not the comparison. A comparison needs 3 days on " +
-  "each side; follow-through and recovery need 3 answered occurrences. The bars come from the most recent sprint that " +
+  "each side; recovery and each situation line need 3 answered recoveries. The bars come from the most recent sprint that " +
   "clears that bar — the note says in how many sprints the pattern repeated. Three days is not reliability, and none of " +
   "this shows a cause.";
 

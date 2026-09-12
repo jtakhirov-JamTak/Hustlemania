@@ -8,7 +8,7 @@ import { areaName, type AreaKey } from "@/lib/areas";
 import { callAction } from "@/lib/callAction";
 import { COMPLETION_LABEL, type Postmortem as PostmortemData, type ReviewDecision, type ReviewStats } from "@/lib/data";
 import { formatIsoDate, stampDate } from "@/lib/dates";
-import { coverageLine, cueRows, effectiveClosedDays, followThroughRows, impactRows, recoveryRows } from "@/lib/insightCards";
+import { breakdownLines, coverageLine, cueRows, effectiveClosedDays, impactRows, recoveryRows } from "@/lib/insightCards";
 import { kitFrom } from "@/lib/kit";
 import { formatAmount, formatNumber, type Measured } from "@/lib/format";
 
@@ -104,7 +104,8 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
     });
   }
 
-  const highest = data.followThrough[0] ?? null;
+  // F15: one recovery row per impediment; the highest's row carries the verdict's numbers.
+  const highestRec = data.recovery.find((r) => r.is_highest) ?? null;
   const highestItem = items.impediments.find((i) => i.is_highest) ?? null;
   const closed = summary?.closed_days ?? 0;
   // The coverage lines count only the days that could be logged, as the Across page does.
@@ -114,7 +115,9 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
   const impactUnsure = Math.max(0, ...impact.map((r) => r.unsure_days));
   const cueLogged = Math.max(0, ...data.cues.map((r) => r.logged_days));
   const cueUnsure = Math.max(0, ...data.cues.map((r) => r.unsure_days));
-  const recovery = data.recovery[0] ?? null;
+  const occurrences = data.recovery.reduce((a, r) => a + r.occurrences, 0);
+  const answered = data.recovery.reduce((a, r) => a + r.answered, 0);
+  const withBreakdown = (rows: ReturnType<typeof impactRows>, kind: "cue" | "impediment") => rows.map((r) => ({ ...r, breakdown: breakdownLines(data.situations, r.key, kind) }));
 
   return (
     <div className="pm" data-testid="postmortem">
@@ -159,25 +162,16 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
             coverage={coverageLine(impactLogged, loggable, impactUnsure)}
             question="Median daily attainment on days an obstacle was present vs absent."
             empty={impact.length === 0 ? "No impediments were logged on a closed day." : null}
-            rows={impactRows(impact)}
-          />
-          <InsightCard
-            testId="card-followthrough"
-            tone="response"
-            title="Response follow-through"
-            coverage={highest ? `${highest.occurrences} occurrences · ${highest.answered} answered` : "0 occurrences"}
-            question="When the highest impediment showed up, did the WHEN → THEN response run?"
-            empty={verdictApplies ? null : "The highest impediment never showed up on a logged day."}
-            rows={followThroughRows(data.followThrough)}
+            rows={withBreakdown(impactRows(impact), "impediment")}
           />
           <InsightCard
             testId="card-recovery"
             tone="response"
             title="Response recovery"
-            coverage={recovery ? `${recovery.answered} answered · ${recovery.with_response} with the response` : "0 responses"}
-            question="Was the recovery criterion met, with the response vs without it?"
-            empty={verdictApplies ? null : "No recovery question was ever asked."}
-            rows={recoveryRows(data.recovery)}
+            coverage={`${occurrences} occurrence${occurrences === 1 ? "" : "s"} · ${answered} answered`}
+            question="When an impediment showed up, was the recovery criterion met?"
+            empty={occurrences === 0 ? "No impediment showed up on a logged day." : null}
+            rows={withBreakdown(recoveryRows(data.recovery), "impediment")}
           />
           <InsightCard
             testId="card-cues"
@@ -186,26 +180,24 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
             coverage={coverageLine(cueLogged, loggable, cueUnsure)}
             question="Median daily attainment on days a cue was used vs not used."
             empty={data.cues.length === 0 ? "No cues were logged on a closed day." : null}
-            rows={cueRows(data.cues)}
+            rows={withBreakdown(cueRows(data.cues), "cue")}
           />
         </div>
 
         <section className="card pm-card" data-testid="proof-card">
           <div className="pm-proof-head">
-            <h2 className="t-kicker">Proof point on the highest impediment</h2>
+            <h2 className="t-kicker">Response on the highest impediment</h2>
             <span className="pm-proof-name">{highestItem?.name ?? "not set"}</span>
           </div>
           <div className="pm-rule">
-            <strong>WHEN</strong> {highestItem?.proof_when ?? "not set"} → <strong>THEN</strong> {highestItem?.proof_then ?? "not set"}
+            <strong>WHEN</strong> {highestItem?.name ?? "not set"} → <strong>THEN</strong> {highestItem?.proof_then ?? "not set"}
           </div>
           <div className="pm-rule-sub">
             <strong>RECOVERED WHEN</strong> {highestItem?.proof_recover ?? "not set"}
           </div>
           <div className="pm-obs" data-testid="proof-observation">
-            {verdictApplies && highest
-              ? `Showed up on ${highest.occurrences} logged day${highest.occurrences === 1 ? "" : "s"} · response ran ${highest.ran} of ${
-                  highest.answered
-                } answered${recovery ? ` · recovered ${recovery.with_recovered + recovery.without_recovered} of ${recovery.answered} answered` : ""}.`
+            {verdictApplies && highestRec
+              ? `Showed up on ${highestRec.occurrences} logged day${highestRec.occurrences === 1 ? "" : "s"} · recovered ${highestRec.recovered} of ${highestRec.answered} answered.`
               : "It never showed up on a logged day. No verdict is asked."}
           </div>
           {verdictApplies ? (
@@ -359,7 +351,7 @@ export function Postmortem({ data, stats }: { data: PostmortemData; stats: Revie
           <div className="kit-kicker">Next {areaName(area)} sprint starts with</div>
           <div className="kit-label">Highest impediment</div>
           <div className="kit-highest">{kit.highest ?? "None chosen"}</div>
-          <div className="kit-note">{kit.highest ? "Carries its WHEN → THEN unless you change it" : "Pick one when the sprint is created"}</div>
+          <div className="kit-note">{kit.highest ? "Carries its THEN → RECOVERED WHEN unless you change it" : "Pick one when the sprint is created"}</div>
           <div className="kit-label">Also watching</div>
           <div className="kit-list">{kit.watching.length ? kit.watching.join("\n") : "—"}</div>
           <div className="kit-label">Cues</div>

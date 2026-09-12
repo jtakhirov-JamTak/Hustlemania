@@ -9,6 +9,7 @@ import {
   insertImpediment,
   insertSprintRows,
   rpc,
+  situationsOf,
   sql,
   type TestUser,
 } from "./helpers";
@@ -23,25 +24,27 @@ afterAll(async () => {
  * One 14-day sprint with a day matrix chosen so every figure below is computable by
  * hand. Target is 100 a day (goal 1,400), and `attainment` is Actual ÷ Target.
  *
- *  day  actual  attain   H        B           F        C            resp  recov  impact
- *   1     50     0.50    yes      no          no       yes          yes   yes    a_lot
- *   2     60     0.60    yes      no          no       yes          yes   no     some
- *   3     70     0.70    yes      yes         no       no           no    no     a_lot
- *   4     80     0.80    yes      yes         yes      no           no    yes    some
- *   5    200     2.00    no       no          yes      yes          –     –      –
- *   6    150     1.50    no       no          yes      yes          –     –      –
- *   7    130     1.30    no       yes         yes      no           –     –      –
- *   8    120     1.20    no       no          yes      yes          –     –      –
- *   9     90     0.90    unsure   no          unsure   yes          –     –      –
- *  10    110     1.10    unansw.  unanswered  yes      unanswered   –     –      –
- *  11      0     n/a     no       –           no       –            –     –      –     target 0
- *  12      –                                                                           cancelled
- *  13–14   –                                                                           missed
+ *  day  actual  attain   H        B           F        C            recov (H's situation)
+ *   1     50     0.50    yes      no          no       yes          yes
+ *   2     60     0.60    yes      no          no       yes          no
+ *   3     70     0.70    yes      yes         no       no           no
+ *   4     80     0.80    yes      yes         yes      no           yes
+ *   5    200     2.00    no       no          yes      yes          –
+ *   6    150     1.50    no       no          yes      yes          –
+ *   7    130     1.30    no       yes         yes      no           –
+ *   8    120     1.20    no       no          yes      yes          –
+ *   9     90     0.90    unsure   no          unsure   yes          –
+ *  10    110     1.10    unansw.  unanswered  yes      unanswered   –
+ *  11      0     n/a     no       –           no       –            –     target 0
+ *  12      –                                                              cancelled
+ *  13–14   –                                                              missed
  *
  * D is a fourth item present on only two days: it is the n = 3 boundary.
  * Day 11 has a zero target, so its attainment is undefined — the view's `target > 0`
  * filter is what keeps it out, and dropping that filter makes every query below error.
  * Day 12 is cancelled: it must never appear as a missed day.
+ * F15: every item carries one situation; an occurrence is that situation showing up,
+ * and H's recovery is answered per situation on the four days it showed up.
  */
 type Answer = "yes" | "no" | "unsure" | "unanswered";
 
@@ -55,9 +58,9 @@ const CUE: Record<string, Answer[]> = {
   C: ["yes", "yes", "no", "no", "yes", "yes", "no", "yes", "yes", "unanswered"],
 };
 const ACTUALS = [50, 60, 70, 80, 200, 150, 130, 120, 90, 110, 0];
-const RESPONSE = ["yes", "yes", "no", "no"] as const;
 const RECOVERED = ["yes", "no", "no", "yes"] as const;
-const IMPACT = ["a_lot", "some", "a_lot", "some"] as const;
+const PROOF_THEN = "I reply with the retainer offer within the hour";
+const PROOF_RECOVER = "I am back on the outreach list within 15 minutes";
 
 describe("F10 single-sprint insight calculations", () => {
   let u: TestUser;
@@ -76,17 +79,20 @@ describe("F10 single-sprint insight calculations", () => {
     const dayIds = seeded.dayIds;
 
     ids = {
-      H: await insertImpediment(u, "Saying yes to one-off projects", {
+      H: await insertImpediment(u, "A one-off request lands", {
         explanation: "Retainer outreach slips",
-        proofWhen: "a one-off request lands",
-        proofThen: "I reply with the retainer offer within the hour",
-        proofRecover: "I am back on the outreach list within 15 minutes",
+        proofThen: PROOF_THEN,
+        proofRecover: PROOF_RECOVER,
+        situation: "Saying yes to one-off projects",
       }),
       B: await insertImpediment(u, "Phone distraction"),
       D: await insertImpediment(u, "Starting late"),
       F: await insertCue(u, "Ask how much this pays"),
       C: await insertCue(u, "Outreach block at 9"),
     };
+    const sit: Record<string, string> = {};
+    for (const k of ["H", "B", "D"]) sit[k] = (await situationsOf("impediment", ids[k]))[0];
+    for (const k of ["F", "C"]) sit[k] = (await situationsOf("cue", ids[k]))[0];
 
     const members = await admin.from("sprint_impediments").insert(
       (["H", "B", "D"] as const).map((k) => ({ sprint_id: sprintId, user_id: u.id, impediment_id: ids[k], is_highest: k === "H" })),
@@ -104,15 +110,7 @@ describe("F10 single-sprint insight calculations", () => {
         closed_at: new Date().toISOString(),
         closed_on_time: true,
         highest_impediment_id: ids.H,
-        proof_when: "a one-off request lands",
-        proof_then: "I reply with the retainer offer within the hour",
-        proof_recover: "I am back on the outreach list within 15 minutes",
       };
-      if (i < RESPONSE.length) {
-        patch.response = RESPONSE[i];
-        patch.recovered = RECOVERED[i];
-        patch.impact = IMPACT[i];
-      }
       const res = await admin.from("sprint_days").update(patch).eq("id", dayIds[i]);
       if (res.error) throw new Error(res.error.message);
     }
@@ -127,10 +125,29 @@ describe("F10 single-sprint insight calculations", () => {
         name: k,
         occurred,
         was_highest: k === "H",
+        proof_then: k === "H" ? PROOF_THEN : null,
+        proof_recover: k === "H" ? PROOF_RECOVER : null,
       })),
     );
-    const io = await admin.from("day_impediment_observations").insert(impRows);
+    const io = await admin.from("day_impediment_observations").insert(impRows).select("id, impediment_id, sprint_day_id, occurred");
     if (io.error) throw new Error(io.error.message);
+    // One situation row per observation row (what close_day writes): occurred follows the
+    // item's answer; H's recovery is the day's answer on the four days it showed up.
+    const impSit = io.data.map((o) => {
+      const k = (Object.keys(ids) as string[]).find((key) => ids[key] === o.impediment_id)!;
+      const dayIndex = dayIds.indexOf(o.sprint_day_id);
+      const showed = o.occurred === "yes";
+      return {
+        observation_id: o.id,
+        user_id: u.id,
+        situation_id: sit[k],
+        name: `S-${k}`,
+        occurred: showed,
+        recovered: k === "H" && showed && dayIndex < RECOVERED.length ? RECOVERED[dayIndex] : null,
+      };
+    });
+    const is = await admin.from("day_impediment_situation_observations").insert(impSit);
+    if (is.error) throw new Error(is.error.message);
 
     const cueRows = Object.entries(CUE).flatMap(([k, answers]) =>
       answers.map((used, i) => ({
@@ -142,8 +159,14 @@ describe("F10 single-sprint insight calculations", () => {
         was_focus: k === "F",
       })),
     );
-    const co = await admin.from("day_cue_observations").insert(cueRows);
+    const co = await admin.from("day_cue_observations").insert(cueRows).select("id, cue_id, used");
     if (co.error) throw new Error(co.error.message);
+    const cueSit = co.data.map((o) => {
+      const k = (Object.keys(ids) as string[]).find((key) => ids[key] === o.cue_id)!;
+      return { observation_id: o.id, user_id: u.id, situation_id: sit[k], name: `S-${k}`, applied: o.used === "yes" };
+    });
+    const cs = await admin.from("day_cue_situation_observations").insert(cueSit);
+    if (cs.error) throw new Error(cs.error.message);
   });
 
   afterAll(async () => {
@@ -161,9 +184,6 @@ describe("F10 single-sprint insight calculations", () => {
     median_absent: string | null;
     delta_pts: number | null;
     enough: boolean;
-    felt_a_lot: number;
-    felt_some: number;
-    felt_nothing: number;
   };
 
   it("the effective-days view holds exactly the closed, uncancelled, positive-target days", async () => {
@@ -197,14 +217,9 @@ describe("F10 single-sprint insight calculations", () => {
     expect(d.delta_pts).toBeNull();
   });
 
-  it("impediment impact: the perceived-impact tally is the highest's own, not every row's", async () => {
+  it("impediment impact: no perceived-impact tally remains (F15 dropped the cost question)", async () => {
     const rows = await rpc<ImpactRow[]>(u, "insight_impediment_impact", { p_sprint_id: sprintId });
-    const by = Object.fromEntries(rows.map((r) => [r.item_id, r]));
-    expect([by[ids.H].felt_a_lot, by[ids.H].felt_some, by[ids.H].felt_nothing]).toEqual([2, 2, 0]);
-    // `impact` is the day's answer about the HIGHEST impediment. Attributing it to
-    // another row would read as evidence about that row.
-    expect([by[ids.B].felt_a_lot, by[ids.B].felt_some, by[ids.B].felt_nothing]).toEqual([0, 0, 0]);
-    expect([by[ids.D].felt_a_lot, by[ids.D].felt_some, by[ids.D].felt_nothing]).toEqual([0, 0, 0]);
+    expect(Object.keys(rows[0]).filter((k) => k.startsWith("felt_"))).toEqual([]);
   });
 
   it("sprint_totals: one row per sprint with the summary's own total and the effective-day counts (0017)", async () => {
@@ -230,7 +245,7 @@ describe("F10 single-sprint insight calculations", () => {
 
     const b = await createTestUser("f10-insights-b");
     try {
-      for (const fn of ["insight_impediment_impact_many", "insight_response_followthrough_many", "insight_response_recovery_many", "insight_cue_usefulness_many", "sprint_review_summary_many"]) {
+      for (const fn of ["insight_impediment_impact_many", "insight_response_recovery_many", "insight_situations_many", "insight_cue_usefulness_many", "sprint_review_summary_many"]) {
         await expectRpcError(b, fn, { p_sprint_ids: [sprintId] }, "sprint_not_found");
       }
     } finally {
@@ -243,47 +258,59 @@ describe("F10 single-sprint insight calculations", () => {
     expect(rows.map((r) => r.item_id)).toEqual([ids.H, ids.B, ids.D]);
   });
 
-  it("response follow-through: partially is reported separately and never counts as ran", async () => {
-    type Row = {
-      occurrences: number;
-      answered: number;
-      ran: number;
-      didnt: number;
-      partially: number;
-      unsure: number;
-      rate: number | null;
-      enough: boolean;
-      proof_then: string;
-    };
-    const [row] = await rpc<Row[]>(u, "insight_response_followthrough", { p_sprint_id: sprintId });
-    expect([row.occurrences, row.answered, row.ran, row.didnt, row.partially, row.unsure]).toEqual([4, 4, 2, 2, 0, 0]);
-    expect(row.rate).toBe(50);
-    expect(row.enough).toBe(true);
-    expect(row.proof_then).toBe("I reply with the retainer offer within the hour");
+  type RecoveryRow = {
+    item_id: string;
+    is_highest: boolean;
+    proof_then: string | null;
+    proof_recover: string | null;
+    occurrences: number;
+    verdict_occurrences: number;
+    answered: number;
+    recovered: number;
+    didnt: number;
+    rate: number | null;
+    enough: boolean;
+  };
+
+  it("response recovery (F15): one row per impediment over its situation rows; the highest sorts first", async () => {
+    const rows = await rpc<RecoveryRow[]>(u, "insight_response_recovery", { p_sprint_id: sprintId });
+    expect(rows.map((r) => r.item_id)).toEqual([ids.H, ids.B, ids.D]);
+    const h = rows[0];
+    expect([h.occurrences, h.verdict_occurrences, h.answered, h.recovered, h.didnt]).toEqual([4, 4, 4, 2, 2]);
+    expect(h.rate).toBe(50);
+    expect(h.enough).toBe(true);
+    expect([h.proof_then, h.proof_recover]).toEqual([PROOF_THEN, PROOF_RECOVER]);
+    // B showed up three times but its situation was never asked about recovery: no rate.
+    const b = rows[1];
+    expect([b.occurrences, b.verdict_occurrences, b.answered, b.rate, b.enough]).toEqual([3, 0, 0, null, false]);
   });
 
-  it("response recovery: with the response vs without it", async () => {
-    type Row = {
-      with_response: number;
-      with_recovered: number;
-      without_response: number;
-      without_recovered: number;
-      answered: number;
-      rate: number | null;
-      enough: boolean;
-      median_recovered: string | null;
-      median_not: string | null;
-      outcome_enough: boolean;
-    };
-    const [row] = await rpc<Row[]>(u, "insight_response_recovery", { p_sprint_id: sprintId });
-    expect([row.with_response, row.with_recovered]).toEqual([2, 1]);
-    expect([row.without_response, row.without_recovered]).toEqual([2, 1]);
-    expect(row.answered).toBe(4);
-    expect(row.rate).toBe(50);
-    expect(row.enough).toBe(true);
-    expect(Number(row.median_recovered)).toBeCloseTo(0.65, 6); // days 1 and 4
-    expect(Number(row.median_not)).toBeCloseTo(0.65, 6); //      days 2 and 3
-    expect(row.outcome_enough).toBe(true);
+  type SituationRow = {
+    kind: string;
+    item_id: string;
+    situation_name: string;
+    occurrences: number;
+    asked_days: number;
+    recovered_yes: number;
+    recovered_answered: number;
+    rate: number | null;
+    enough: boolean;
+  };
+
+  it("situation breakdown (F15): occurrences and recovery per situation, thresholds at n = 3", async () => {
+    const rows = await rpc<SituationRow[]>(u, "insight_situations", { p_sprint_id: sprintId });
+    const by = Object.fromEntries(rows.map((r) => [`${r.kind}:${r.item_id}`, r]));
+    // H's situation: showed up on 4 of the 9 asked days, recovered 2 of 4 answered.
+    expect(by[`impediment:${ids.H}`]).toMatchObject({ situation_name: "S-H", occurrences: 4, asked_days: 9, recovered_yes: 2, recovered_answered: 4, rate: 50, enough: true });
+    // B: three occurrences, no recovery answered → not enough for a rate.
+    expect(by[`impediment:${ids.B}`]).toMatchObject({ occurrences: 3, asked_days: 9, recovered_answered: 0, rate: null, enough: false });
+    // D: two occurrences — below the bar either way.
+    expect(by[`impediment:${ids.D}`]).toMatchObject({ occurrences: 2, enough: false });
+    // Cues: applied on the used days; F clears the bar, both are asked on 10 days.
+    expect(by[`cue:${ids.F}`]).toMatchObject({ situation_name: "S-F", occurrences: 6, asked_days: 10, rate: null, enough: true });
+    expect(by[`cue:${ids.C}`]).toMatchObject({ occurrences: 6, asked_days: 9, enough: true });
+    // Impediments sort before cues; within a kind by item name.
+    expect(rows.map((r) => r.kind)).toEqual(["impediment", "impediment", "impediment", "cue", "cue"]);
   });
 
   it("cue usefulness: the focus cue sorts first and both cues clear the threshold", async () => {
@@ -343,8 +370,8 @@ describe("F10 single-sprint insight calculations", () => {
     try {
       for (const fn of [
         "insight_impediment_impact",
-        "insight_response_followthrough",
         "insight_response_recovery",
+        "insight_situations",
         "insight_cue_usefulness",
         "sprint_review_summary",
       ]) {
@@ -359,7 +386,7 @@ describe("F10 single-sprint insight calculations", () => {
     const fns = await sql<{ proname: string; def: string }[]>`
       select proname, pg_get_functiondef(oid) as def from pg_proc
       where pronamespace = 'public'::regnamespace
-        and proname in ('insight_impediment_impact', 'insight_response_followthrough',
+        and proname in ('insight_impediment_impact', 'insight_situations',
                         'insight_response_recovery', 'insight_cue_usefulness')
       order by proname`;
     expect(fns).toHaveLength(4);
@@ -371,68 +398,9 @@ describe("F10 single-sprint insight calculations", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The two corrections 0015 made after the F10 evaluation (docs/evals/eval-06.md).
+// 0015's best-streak correction (docs/evals/eval-06.md). Its follow-through sibling
+// went with the response question in F15.
 // ---------------------------------------------------------------------------
-describe("follow-through counts `partially` as an answer (eval-06 P2-3)", () => {
-  let u: TestUser;
-  let sprintId: string;
-
-  beforeAll(async () => {
-    u = await createTestUser("f10-partially");
-    const today = await dbTodayIn(TZ);
-    const [{ d: start }] = await sql<{ d: string }[]>`select to_char(${today}::date - 20, 'YYYY-MM-DD') as d`;
-    const seeded = await insertSprintRows(u, { startDate: start, tz: TZ, target: 100 });
-    sprintId = seeded.sprintId;
-    const imp = await insertImpediment(u, "Late meetings", {
-      proofWhen: "a meeting runs past 6",
-      proofThen: "I run the short loop",
-      proofRecover: "I am out of the door within 20 minutes",
-    });
-    const m = await admin.from("sprint_impediments").insert({ sprint_id: sprintId, user_id: u.id, impediment_id: imp, is_highest: true });
-    if (m.error) throw new Error(m.error.message);
-
-    // Three occurrences, every one of them answered: yes, no, partially.
-    const responses = ["yes", "no", "partially"] as const;
-    for (let i = 0; i < responses.length; i++) {
-      const d = await admin
-        .from("sprint_days")
-        .update({
-          actual: 100,
-          closed_at: new Date().toISOString(),
-          closed_on_time: true,
-          highest_impediment_id: imp,
-          proof_then: "I run the short loop",
-          proof_recover: "I am out of the door within 20 minutes",
-          response: responses[i],
-          recovered: "yes",
-        })
-        .eq("id", seeded.dayIds[i])
-        .select("id")
-        .single();
-      if (d.error) throw new Error(d.error.message);
-      const o = await admin
-        .from("day_impediment_observations")
-        .insert({ sprint_day_id: d.data.id, user_id: u.id, impediment_id: imp, name: "Late meetings", occurred: "yes", was_highest: true });
-      if (o.error) throw new Error(o.error.message);
-    }
-  });
-
-  afterAll(async () => {
-    await deleteTestUser(u);
-  });
-
-  it("a day answered `partially` is answered: the card is not suppressed", async () => {
-    type Row = { occurrences: number; answered: number; ran: number; didnt: number; partially: number; rate: number | null; enough: boolean };
-    const [row] = await rpc<Row[]>(u, "insight_response_followthrough", { p_sprint_id: sprintId });
-    expect([row.occurrences, row.answered, row.ran, row.didnt, row.partially]).toEqual([3, 3, 1, 1, 1]);
-    // Ran is `yes` only, so a third of three answered is 33% — the honest reading of a
-    // response that only half ran. Counting `partially` out of the denominator instead
-    // would leave 2 answered, below the threshold, and hide the row entirely.
-    expect(row.rate).toBe(33);
-    expect(row.enough).toBe(true);
-  });
-});
-
 describe("best streak treats a cancelled day as removed, not as a break (eval-06 P2-5)", () => {
   let u: TestUser;
 

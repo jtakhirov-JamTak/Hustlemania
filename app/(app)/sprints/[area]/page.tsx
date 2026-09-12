@@ -8,6 +8,7 @@ import {
   allOrThrow,
   eligibleFor,
   loadActiveLibrary,
+  loadActiveSituations,
   loadActiveSprint,
   loadAreaKit,
   loadDayOfferedItems,
@@ -37,13 +38,14 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
   // Everything that does not depend on the active sprint starts with it (#26): the
   // library, the streaks and the kit used to wait a round trip for a read they never
   // needed; the overview and the finished list are cached and the layout reads them too.
-  const [active, fullLibrary, streaks, kit, { vision }, finished] = await allOrThrow([
+  const [active, fullLibrary, streaks, kit, { vision }, finished, situations] = await allOrThrow([
     loadActiveSprint(supabase, area),
     loadActiveLibrary(supabase),
     loadStreaks(supabase),
     loadAreaKit(supabase, area),
     loadOverview(supabase),
     loadFinishedSprints(supabase),
+    loadActiveSituations(supabase),
   ]);
   const name = areaName(area);
 
@@ -121,6 +123,7 @@ export default async function AreaPage({ params }: { params: Promise<{ area: str
       position={position}
       items={items}
       library={library}
+      situations={situations}
       offered={offered}
       tasks={tasks}
       streak={streakOf(streaks, active.sprint.id)}

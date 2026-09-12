@@ -19,6 +19,8 @@ export type InsightRow = {
   note?: string | null;
   /** A short sample turns the note accent-ink: it is a caveat, not a footnote. */
   warn?: boolean;
+  /** F15: one line per situation under the item — "Starting late · 4 occurrences · 50% recovered". */
+  breakdown?: { name: string; text: string }[];
 };
 
 export function InsightCard({
@@ -78,6 +80,16 @@ export function InsightCard({
             {r.note ? (
               <div className="ic-note" data-warn={r.warn ? "true" : "false"}>
                 {r.note}
+              </div>
+            ) : null}
+            {r.breakdown && r.breakdown.length > 0 ? (
+              <div className="ic-breakdown" data-testid="situation-breakdown">
+                {r.breakdown.map((b) => (
+                  <div key={b.name} className="ic-breakdown-row" data-testid="situation-line">
+                    <span className="ic-breakdown-name">{b.name}</span>
+                    <span className="ic-breakdown-text">{b.text}</span>
+                  </div>
+                ))}
               </div>
             ) : null}
           </div>

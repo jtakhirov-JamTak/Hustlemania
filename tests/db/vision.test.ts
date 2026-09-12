@@ -306,11 +306,12 @@ describe("vision write path (F9 functions)", () => {
     for (const blank of [{ p_when: " " }, { p_then: "" }, { p_recover: null }]) {
       await expectRpcError(u, "set_vision_rule", { ...RULE, ...blank }, "rule_incomplete");
     }
-    let [row] = await sql<{ proof_when: string | null }[]>`select proof_when from public.impediments where id = ${obstacle}`;
-    expect(row.proof_when).toBeNull();
+    let [row] = await sql<{ name: string; proof_then: string | null }[]>`select name, proof_then from public.impediments where id = ${obstacle}`;
+    expect(row).toEqual({ name: "Saying yes to one-off projects", proof_then: null });
     await rpc(u, "set_vision_rule", RULE);
-    [row] = await sql<{ proof_when: string; proof_then: string; proof_recover: string }[]>`select proof_when, proof_then, proof_recover from public.impediments where id = ${obstacle}`;
-    expect(row).toEqual({ proof_when: RULE.p_when, proof_then: RULE.p_then, proof_recover: RULE.p_recover });
+    // F15: WHEN is the impediment's name.
+    [row] = await sql<{ name: string; proof_then: string; proof_recover: string }[]>`select name, proof_then, proof_recover from public.impediments where id = ${obstacle}`;
+    expect(row).toEqual({ name: RULE.p_when, proof_then: RULE.p_then, proof_recover: RULE.p_recover });
   });
 
   it("set_vision_rule is accepted by the F6 trigger when the obstacle is an active sprint's highest (shared row)", async () => {
@@ -319,8 +320,8 @@ describe("vision write path (F9 functions)", () => {
       where i.user_id = ${u.id} and m.is_highest and m.removed_at is null`;
     await rpc(u, "set_vision_obstacle", { p_impediment_id: highest });
     await rpc(u, "set_vision_rule", { p_when: "I stall", p_then: "I start the timer", p_recover: "The timer runs within 10 minutes" });
-    const [row] = await sql<{ proof_when: string; proof_recover: string }[]>`select proof_when, proof_recover from public.impediments where id = ${highest}`;
-    expect(row).toEqual({ proof_when: "I stall", proof_recover: "The timer runs within 10 minutes" });
+    const [row] = await sql<{ name: string; proof_recover: string }[]>`select name, proof_recover from public.impediments where id = ${highest}`;
+    expect(row).toEqual({ name: "I stall", proof_recover: "The timer runs within 10 minutes" });
     // The trigger still guards the row against a partial proof from the library path.
     await expect(sql`update public.impediments set proof_recover = null where id = ${highest}`).rejects.toThrow(/proof_point_required/);
   });
@@ -345,8 +346,8 @@ describe("vision write path (F9 functions)", () => {
     expect(archived.obstacle_id).toBe(before!.obstacle_id);
     const [after] = await sql<{ vision_id: string }[]>`select vision_id from public.sprints where id = ${sprint.id}`;
     expect(after.vision_id).toBe(before!.id);
-    const [imp] = await sql<{ archived_at: string | null; proof_when: string }[]>`select archived_at, proof_when from public.impediments where id = ${before!.obstacle_id}`;
-    expect(imp).toEqual({ archived_at: null, proof_when: "I stall" });
+    const [imp] = await sql<{ archived_at: string | null; name: string }[]>`select archived_at, name from public.impediments where id = ${before!.obstacle_id}`;
+    expect(imp).toEqual({ archived_at: null, name: "I stall" });
 
     // The archived vision's obstacle is no longer guarded; a second Replace has nothing to archive.
     await expectRpcError(u, "replace_vision", {}, "no_active_vision");

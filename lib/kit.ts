@@ -40,8 +40,8 @@ export const NO_PREFILL: Prefill = { impedimentIds: [], highestId: null, cueIds:
  * scoped to the Area — a global item promoted in Health must not arrive pre-checked in
  * a Wealth sprint if its scope no longer covers it.
  *
- * Rules 3–4 cap the picks at five impediments and three cues, so an over-long kit is
- * trimmed rather than handed to `start_sprint` for rejection.
+ * Rules 3–4 (as amended by F15) cap the picks at three impediments and three cues, so
+ * an over-long kit is trimmed rather than handed to `start_sprint` for rejection.
  */
 export function prefillFromKit(
   kit: AreaKit | null | undefined,
@@ -54,7 +54,7 @@ export function prefillFromKit(
   // The promoted impediment leads, so it survives the cap.
   const imps = kit.impedimentIds.filter((id) => liveImps.has(id));
   const ordered = kit.highestId && imps.includes(kit.highestId) ? [kit.highestId, ...imps.filter((id) => id !== kit.highestId)] : imps;
-  const impedimentIds = ordered.slice(0, 5);
+  const impedimentIds = ordered.slice(0, 3);
   const highestId = kit.highestId && impedimentIds.includes(kit.highestId) ? kit.highestId : null;
 
   const cueIds = kit.cueIds.filter((id) => liveCues.has(id)).slice(0, 3);

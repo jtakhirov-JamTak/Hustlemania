@@ -1,33 +1,25 @@
 /**
- * The words a closed day gets from its F7 answers (v8 README "Day summary line"), and
- * the one-name tail a closed timeline row shows. Both read the observation rows and the
- * day row's three Highest answers; a day closed before 0010 has no rows and gets nothing.
+ * The words a closed day gets from its F7 / F15 answers (v8 README "Day summary line"),
+ * and the one-name tail a closed timeline row shows. Both read the observation rows and
+ * their situation rows; a day closed before 0010 has no rows and gets nothing.
  */
 
-export type ImpedimentObservation = { id: string; name: string; occurred: string; was_highest: boolean };
-export type CueObservation = { id: string; name: string; used: string; was_focus: boolean };
+export type SituationObservation = { id: string; name: string; occurred: boolean; recovered: string | null };
+export type CueSituationObservation = { id: string; name: string; applied: boolean };
+export type ImpedimentObservation = { id: string; name: string; occurred: string; was_highest: boolean; situations: SituationObservation[] };
+export type CueObservation = { id: string; name: string; used: string; was_focus: boolean; situations: CueSituationObservation[] };
 
 export type DayObservations = { impediments: ImpedimentObservation[]; cues: CueObservation[] };
 
 export const NO_OBSERVATIONS: DayObservations = { impediments: [], cues: [] };
 
-type HighestAnswers = { response: string | null; recovered: string | null; impact: string | null };
-
-const RESPONSE: Record<string, string> = {
-  yes: "Response ran",
-  no: "Response didn't run",
-  partially: "Response partially ran",
-  unsure: "Response unsure",
-};
-const RECOVERED: Record<string, string> = { yes: "recovered", no: "didn't recover", unsure: "recovery unsure" };
-const IMPACT: Record<string, string> = { nothing: "Cost: nothing", some: "Cost: some", a_lot: "Cost: a lot", unsure: "Cost: unsure" };
-
 /** The impediments that showed up, highest first, then in the order the rows came (rank). */
 export function occurredNames(obs: DayObservations): string[] {
-  return obs.impediments
-    .filter((i) => i.occurred === "yes")
-    .sort((a, b) => Number(b.was_highest) - Number(a.was_highest))
-    .map((i) => i.name);
+  return occurredRows(obs).map((i) => i.name);
+}
+
+function occurredRows(obs: DayObservations): ImpedimentObservation[] {
+  return obs.impediments.filter((i) => i.occurred === "yes").sort((a, b) => Number(b.was_highest) - Number(a.was_highest));
 }
 
 function groupPhrase(rows: { name: string; answer: string }[], words: { some: string; none: string; unsure: string }): string | null {
@@ -38,29 +30,41 @@ function groupPhrase(rows: { name: string; answer: string }[], words: { some: st
   return words.none;
 }
 
+/** `{name} (a, b; recovered 1 of 2)` — an occurred impediment with its ticked situations and the recoveries it answered. */
+function impedimentPhrase(i: ImpedimentObservation): string {
+  const ticked = i.situations.filter((s) => s.occurred);
+  if (ticked.length === 0) return i.name;
+  const answered = ticked.filter((s) => s.recovered === "yes" || s.recovered === "no");
+  const recovered = answered.filter((s) => s.recovered === "yes").length;
+  const tail = answered.length ? `; recovered ${recovered} of ${answered.length}` : "";
+  return `${i.name} (${ticked.map((s) => s.name).join(", ")}${tail})`;
+}
+
+/** `{name} (a, b)` — a used cue with the situations it applied to. */
+function cuePhrase(c: CueObservation): string {
+  const applied = c.situations.filter((s) => s.applied);
+  return applied.length ? `${c.name} (${applied.map((s) => s.name).join(", ")})` : c.name;
+}
+
 /**
- * `Showed up: a, b` | `No obstacles` | `Obstacles: unsure` · `Response ran` + `recovered` ·
- * `Cost: some` · `Cues used: a` | `No cue used` | `Cues: unsure`. A group nobody answered
- * is left out; an empty string means the day carries no observations at all.
+ * `Showed up: a (x; recovered 1 of 1), b (y)` | `No obstacles` | `Obstacles: unsure` ·
+ * `Cues used: a (x)` | `No cue used` | `Cues: unsure`. A group nobody answered is left
+ * out; an empty string means the day carries no observations at all.
  */
-export function daySummaryLine(day: HighestAnswers, obs: DayObservations): string {
+export function daySummaryLine(obs: DayObservations): string {
   const parts: string[] = [];
-  const occurred = occurredNames(obs);
+  const occurred = occurredRows(obs);
   const obstacles = groupPhrase(
     obs.impediments.map((i) => ({ name: i.name, answer: i.occurred })),
     { some: "Showed up: ", none: "No obstacles", unsure: "Obstacles: unsure" },
   );
-  if (obstacles) parts.push(occurred.length > 0 ? `Showed up: ${occurred.join(", ")}` : obstacles);
-  if (day.response) {
-    const recovered = day.recovered ? RECOVERED[day.recovered] : null;
-    parts.push(recovered ? `${RESPONSE[day.response]} · ${recovered}` : RESPONSE[day.response]);
-  }
-  if (day.impact) parts.push(IMPACT[day.impact]);
+  if (obstacles) parts.push(occurred.length > 0 ? `Showed up: ${occurred.map(impedimentPhrase).join(", ")}` : obstacles);
+  const used = obs.cues.filter((c) => c.used === "yes");
   const cues = groupPhrase(
     obs.cues.map((c) => ({ name: c.name, answer: c.used })),
     { some: "Cues used: ", none: "No cue used", unsure: "Cues: unsure" },
   );
-  if (cues) parts.push(cues);
+  if (cues) parts.push(used.length > 0 ? `Cues used: ${used.map(cuePhrase).join(", ")}` : cues);
   return parts.join(" · ");
 }
 

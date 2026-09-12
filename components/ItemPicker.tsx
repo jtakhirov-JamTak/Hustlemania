@@ -5,15 +5,20 @@ import { ErrorBar } from "@/components/ErrorBar";
 import { useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { OptionRow } from "@/components/OptionRow";
+import { SituationPicker, type SituationOption } from "@/components/SituationPicker";
+import type { ItemKind } from "@/lib/data";
 
 export type PickerOption = { id: string; label: string; sub?: string | null; tag?: string | null; disabled?: boolean };
 
-export type PickerProof = { when: string; then: string; recover: string; onWhen: (v: string) => void; onThen: (v: string) => void; onRecover: (v: string) => void };
+export type PickerProof = { then: string; recover: string; onThen: (v: string) => void; onRecover: (v: string) => void };
+
+/** F15: the inline create needs at least one situation; the caller owns the options and the ticks. */
+export type PickerSituations = { kind: ItemKind; options: SituationOption[]; selected: string[]; onToggle: (id: string) => void; onCreate: (name: string) => Promise<string | null> };
 
 /**
  * The 560px picker dialog: a list of selection rows, optional proof inputs, an optional
- * inline "Create" line (one input, or WHEN + REMIND for a cue), a hint beside the
- * primary. Callers own the state.
+ * inline "Create" line (one input, or WHEN + REMIND for a cue, plus the situations it
+ * applies to), a hint beside the primary. Callers own the state.
  */
 export function ItemPicker({
   title,
@@ -39,8 +44,8 @@ export function ItemPicker({
   selected: string[];
   onToggle: (id: string) => void;
   proof?: PickerProof | null;
-  /** `whenLabel` adds a required WHEN input ahead of the name (a cue's trigger, F6). */
-  create?: { placeholder: string; whenLabel?: string; onCreate: (name: string, when: string) => Promise<string | null> } | null;
+  /** `whenLabel` adds a required WHEN input ahead of the name (a cue's trigger, F6); `situations` the required APPLIES TO ticks (F15). */
+  create?: { placeholder: string; whenLabel?: string; situations: PickerSituations; onCreate: (name: string, when: string) => Promise<string | null> } | null;
   hint?: string | null;
   error?: string | null;
   doneLabel: string;
@@ -55,7 +60,7 @@ export function ItemPicker({
   const [createError, setCreateError] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const blocked = Boolean(hint) || pending;
-  const createReady = Boolean(draft.trim()) && (!create?.whenLabel || Boolean(draftWhen.trim()));
+  const createReady = Boolean(draft.trim()) && (!create?.whenLabel || Boolean(draftWhen.trim())) && (create?.situations.selected.length ?? 0) > 0;
 
   async function submitCreate() {
     if (!create || !createReady || creating) return;
@@ -88,12 +93,11 @@ export function ItemPicker({
             <OptionRow key={o.id} on={selected.includes(o.id)} single={single} disabled={o.disabled} onPick={() => onToggle(o.id)} label={o.label} sub={o.sub} tag={o.tag} />
           ))}
         </div>
-        {proof ? (
-          <ProofInputs idPrefix="picker" when={proof.when} then={proof.then} recover={proof.recover} onWhen={proof.onWhen} onThen={proof.onThen} onRecover={proof.onRecover} className="mt-14" />
-        ) : null}
+        {proof ? <ProofInputs idPrefix="picker" then={proof.then} recover={proof.recover} onThen={proof.onThen} onRecover={proof.onRecover} className="mt-14" /> : null}
         {create ? (
           <form
             className="mt-14"
+            data-testid="picker-create"
             onSubmit={(e) => {
               e.preventDefault();
               submitCreate();
@@ -111,21 +115,33 @@ export function ItemPicker({
                 <label htmlFor="picker-create" className="label-accent proof-label">
                   REMIND
                 </label>
-                <div className="row">
-                  <input id="picker-create" className="input input-compact grow" value={draft} onChange={(e) => setDraft(e.target.value)} />
-                  <button type="submit" className="btn btn-ghost btn-ghost-accent" aria-disabled={creating || !createReady}>
-                    {creating ? "Creating…" : "Create"}
-                  </button>
-                </div>
+                <input id="picker-create" className="input input-compact" value={draft} onChange={(e) => setDraft(e.target.value)} />
               </div>
             ) : (
-              <div className="row">
-                <input id="picker-create" className="input grow" value={draft} onChange={(e) => setDraft(e.target.value)} />
-                <button type="submit" className="btn btn-ghost btn-ghost-accent" aria-disabled={creating || !createReady}>
-                  {creating ? "Creating…" : "Create"}
-                </button>
+              <div className="proof-grid" style={{ marginBottom: 8 }}>
+                <label htmlFor="picker-create" className="label-accent proof-label">
+                  WHEN
+                </label>
+                <input id="picker-create" className="input input-compact" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="I notice myself…" />
               </div>
             )}
+            <SituationPicker
+              idPrefix="picker"
+              kind={create.situations.kind}
+              options={create.situations.options}
+              selected={create.situations.selected}
+              onToggle={create.situations.onToggle}
+              onCreate={create.situations.onCreate}
+              compact
+            />
+            <div className="row mt-10">
+              <span className="hint grow" id="picker-create-hint" aria-live="polite">
+                {createReady ? "" : create.whenLabel ? "WHEN, REMIND and at least one situation are needed." : "WHEN and at least one situation are needed."}
+              </span>
+              <button type="submit" className="btn btn-ghost btn-ghost-accent" aria-disabled={creating || !createReady} aria-describedby={createReady ? undefined : "picker-create-hint"}>
+                {creating ? "Creating…" : "Create"}
+              </button>
+            </div>
           </form>
         ) : null}
         {createError || error ? <ErrorBar className="mt-12">{createError ?? error}</ErrorBar> : null}

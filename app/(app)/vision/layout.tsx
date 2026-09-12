@@ -19,7 +19,9 @@ export default async function VisionLayout({ children }: { children: React.React
   ];
   const libraries: SideItem[] = [
     { href: "/vision/cues", label: "Execution cues", meta: String(counts.cues) },
+    { href: "/vision/cue-situations", label: "Cue situations", meta: String(counts.cueSituations) },
     { href: "/vision/impediments", label: "Impediments", meta: String(counts.impediments) },
+    { href: "/vision/impediment-situations", label: "Impediment situations", meta: String(counts.impedimentSituations) },
   ];
 
   return (

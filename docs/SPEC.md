@@ -239,6 +239,7 @@ so the journal is built once with its final close questions.
     approval gate.
 
 ### F2 — Execution Cue and Impediment libraries; Highest Impediment; Day Close selections
+*Superseded in part by F15 (2026-09-11): the impediment's SITUATION field, the day-row response / recovered / impact answers, rules 3–4 caps and the focus-cue requirement changed there; this text is history and stays.*
 - **Behavior.** Two persistent libraries (Vision tab) with name, explanation, scope
   (global/health/wealth/relationships), rank (move up/down), archive/restore, and for
   Impediments a WHEN → THEN Proof Point. Sprint setup and the active Sprint select
@@ -506,6 +507,7 @@ so the journal is built once with its final close questions.
     false`; horizontal overflow 0. Phone layout covered by the Playwright phone project.
 
 ### F6 — Libraries v2: cue trigger, RECOVERED WHEN, relabelled editors
+*Superseded in part by F15 (2026-09-11): the impediment's SITUATION field, the day-row response / recovered / impact answers, rules 3–4 caps and the focus-cue requirement changed there; this text is history and stays.*
 *Specified 2026-09-07 by `/interview` (feature mode); amended the same day after the
 end-to-end spec review (`docs/audits/spec-review-2026-09-07.md`); **approved by the user
 2026-09-07 as amended, to be built in the next session** (user's call; the F6 metric row
@@ -646,6 +648,7 @@ day-row snapshot of RECOVERED WHEN moves to F7, which rewrites `close_day` anywa
     running within 10 minutes.
 
 ### F7 — Day observations: what showed up, what was used, did the response run
+*Superseded in part by F15 (2026-09-11): the impediment's SITUATION field, the day-row response / recovered / impact answers, rules 3–4 caps and the focus-cue requirement changed there; this text is history and stays.*
 *Specified 2026-09-07 by `/interview` (feature mode). Scope:
 `docs/RECONCILIATION-2026-09-06.md` rows B4 B12 C1 C7 D3 D11; its Decisions section is
 authoritative, and the 2026-09-07 review notes kept below are binding. In-session
@@ -1242,6 +1245,7 @@ restyle (from F8).
   `docs/mockups/f9-vision/` with the screenshots before the build.
 
 ### F10 — Sprint completion, End Early, postmortem, kit, next-sprint gate (was F6)
+*Superseded in part by F15 (2026-09-11): the impediment's SITUATION field, the day-row response / recovered / impact answers, rules 3–4 caps and the focus-cue requirement changed there; this text is history and stays.*
 *Specified 2026-09-08 by `/interview` (feature mode). Scope:
 `docs/RECONCILIATION-2026-09-06.md` rows B10 B17 C6 and the C5 calculation rules for the
 single-sprint view; plus the three F5 follow-ups this feature owns (closure timestamp,
@@ -1547,6 +1551,7 @@ missed · **End sprint early works before day 1** and cancels all 14.*
   `docs/mockups/f10-postmortem/` with three screenshots before the build.
 
 ### F11 — Insights v2: Across sprints, Suggested kit, the measurement rows (was F7)
+*Superseded in part by F15 (2026-09-11): the impediment's SITUATION field, the day-row response / recovered / impact answers, rules 3–4 caps and the focus-cue requirement changed there; this text is history and stays.*
 *Specified 2026-09-09 by `/interview` (feature mode), replacing the v1 entry. Scope:
 `docs/RECONCILIATION-2026-09-06.md` rows B9 C5 D4 D9 D10 minus everything F10 already
 built — the four cards, their calculations and the single-sprint postmortem are done, so
@@ -2050,6 +2055,170 @@ was already done and the production gate applied from the migration push onward.
 - **Evaluator.** pre-release. One run, after step 9.
 - **UI.** none — no screen added or changed.
 
+### F15 — Situations: one response covers many situations
+*Specified 2026-09-11 by `/interview` (feature mode, escalated to DESIGN → SPECIFY because
+it rewrites the entity model F2, F6, F7, F10 and F11 are built on; Part 1 untouched). Plan
+of record: `~/.claude/plans/i-think-the-change-parallel-hopcroft.md`. Direction approved
+and the spec approved the same day; built in the same session. Nine calls, the user's:
+situations are reusable library entities, one list per kind · impediment = WHEN (its
+name) → INTERFERES → THEN → RECOVERED WHEN → situations, cue = WHEN → REMIND → situations
+· 1–3 impediments, 0–3 cues, every member with ≥1 situation, Highest kept (auto when
+one), focus required only while the sprint has cues · the close asks per impediment
+"did it show up", which situations, and "recovered?" per ticked situation (blank
+allowed); per cue "used" and which situations; response-ran and cost are gone · per-item
+cards adapted and a per-situation breakdown now · the owner's rows are deleted by a
+separate user-run script, everyone else's converted in place · rule 6 applies to every
+sprint impediment at start / add, Highest-only in the validity check.*
+
+- **Behavior.** A library item is the response. An impediment reads WHEN (the moment
+  you will recognise; its name) → INTERFERES → THEN → RECOVERED WHEN and applies to one
+  or more **situations**; a cue reads WHEN → REMIND and applies to its own situations.
+  Situations are two libraries of their own (`/vision/impediment-situations`,
+  `/vision/cue-situations`) with rank, scope, archive and delete like the other two, and
+  are ticked under an item's editor (APPLIES TO) or named there inline. A sprint holds
+  1–3 impediments and 0–3 cues; every member carries at least one live situation, every
+  impediment a THEN and a RECOVERED WHEN, one impediment is the Highest (the only one by
+  default) and, while the sprint has cues, one is the focus (the first pick by default).
+  Closing a day asks, for every impediment, whether it showed up; when yes, in which of
+  its situations (at least one), and for each ticked situation whether you recovered
+  (yes / no, or left blank); for every cue, whether you used it and, when yes, which
+  situations it applied to. The Highest and the focus are tagged and asked nothing more.
+  Insights keep the per-item impact, recovery and cue cards, drop follow-through, and
+  add a line per situation under each item: occurrences and the recovery rate for an
+  impediment, days applied for a cue.
+- **Acceptance criteria.**
+  - Migration `supabase/migrations/0019_situations.sql`, data-transforming over every
+    user's rows and deleting none: `situations(id, user_id, kind check in cue /
+    impediment, name, scope, rank, archived_at, unique (id, kind))`,
+    `impediment_situations` / `cue_situations` with a composite FK on `(situation_id,
+    kind)` so a cue situation on an impediment is impossible at DDL level;
+    `day_impediment_situation_observations(observation_id, situation_id, name snapshot,
+    occurred, recovered yes / no / null, check occurred or recovered is null)` and
+    `day_cue_situation_observations(…, applied)`; `day_impediment_observations` gains the
+    `proof_then` / `proof_recover` snapshot; `impediments.proof_when` dropped after its
+    text moves into `name`; RLS and grants in the same statements (SELECT own on every
+    new table; situations INSERT `(user_id, kind, name, scope)`, UPDATE `(name)`, DELETE
+    own while unattached; join and observation tables written only by definer
+    functions). The six legacy day columns stay, never written again, out of
+    `sprint_days_effective`, still locked by the 0012 trigger (global no-delete rule;
+    BACKLOG: drop when no hosted row carries a value).
+  - Conversion, set-based: each impediment and cue becomes its own first situation
+    (same id, old name, rank kept), an impediment's `proof_when` becomes its `name` where
+    it had one, a cue's situation is its `cue_when` where it had one; every legacy
+    observation row gets a situation row (occurred = its answer; the Highest's recovered
+    copied from the day row) and the Highest rows the proof snapshot; an end-of-migration
+    assertion raises `conversion_incomplete` if any item ends without a situation.
+    `scripts/rehearse-0019.mjs` resets the local stack to 0018, seeds legacy rows through
+    the 0010 `close_day`, applies 0019 and asserts each of those (red if the coalesce or
+    the observation copy is dropped); the release rehearses the same on a restored hosted
+    dump (RUNBOOK_RESTORE) before the production gate.
+  - Functions rebuilt from their latest bodies, one pin marker each in
+    `tests/db/libraries.test.ts`: `start_sprint` (0–3 / 1–3, auto focus and highest when
+    exactly one, `no_situations`, THEN + RECOVERED WHEN on every selected impediment),
+    `sprint_invalid_reason` (`too_many_cues` → `no_focus_cue` only while cues remain →
+    `no_impediments` / `too_many_impediments` → `no_highest_impediment` →
+    `no_situations` → `proof_point_required` on the Highest), `add_sprint_item` (caps
+    3 / 3, `no_situations`, `proof_point_required`, the first cue becomes the focus),
+    `remove_sprint_item` / `archive_item` / `set_item_scope` (removing the last cue clears
+    `is_focus` in the same UPDATE), `restore_item` / `move_item` / `archive_item` /
+    `set_item_scope` / `affected_sprints_check` with the `situation` kind (scope is a
+    filter, archive a validity input), `set_highest_impediment(uuid, uuid, then,
+    recover)`, `impediments_before_update` (rule 22 over THEN and RECOVERED WHEN),
+    `set_vision_rule` (WHEN → `name`), `day_offered_items` (+ `situations jsonb`),
+    `close_day(uuid, bigint, text, jsonb, jsonb)` with `p_impediments = [{item_id, answer,
+    situations: [{situation_id, recovered}]}]` and `p_cues = [{item_id, answer,
+    situations: [{situation_id}]}]` — `situations_required`, `situations_not_applicable`,
+    `situation_not_offered`, `duplicate_situation`, `invalid_answer` (off-scale or on a
+    cue), one situation row per offered situation of every offered item; new
+    `set_item_situations(kind, item, ids[])` (`situation_not_found`, `situation_archived`,
+    `no_situations` when the item is a current member of an active sprint).
+  - Insights: `insight_response_followthrough` and its `_many` dropped;
+    `insight_impediment_impact` minus `felt_*`; `insight_response_recovery` → one row per
+    impediment `(occurrences, verdict_occurrences, answered, recovered, didnt, rate,
+    enough)` over situation rows, `verdict_occurrences` on the 0016 predicate so the
+    postmortem's `verdictApplies` and `finish_review` cannot disagree (DB test on the
+    promote-away case); new `insight_situations` per (kind, item, situation)
+    `(occurrences, asked_days, recovered_yes, recovered_answered, rate, enough)` with
+    `enough` at 3 answered recoveries for an impediment, 3 occurrences for a cue; every
+    one reads only `sprint_days_effective` (function scan test). Hand-computed matrix in
+    `tests/db/insights.test.ts`.
+  - DB tests (`tests/db/`): RLS two-user denial and disable/enable leak on the five new
+    tables; the amended rules 3–6 each with a failing input (0 cues starts; 4 of either
+    refused; two impediments need a named highest; blank THEN or RECOVERED on any member
+    refused; `no_situations` from `start_sprint`, `add_sprint_item`,
+    `set_item_situations` and `archive_item('situation')`); the composite FK refused for
+    the postgres role; `situations` direct-write denial on kind / scope / rank /
+    archived_at; the delete policy; last-cue removal clears the focus; the close's five
+    payload errors, null recovered accepted, snapshots surviving item and situation
+    renames, situation rows immutable, API-role insert denied; the legacy day columns
+    never written; grants list.
+  - App: `lib/dayAnswers.ts` (pure state, unit-tested), `components/today/DayQuestions.tsx`
+    (occurrence group first, `impediment-item` / `cue-item` with Yes / No / Unsure
+    radiogroups, `impediment-situations` / `cue-situations` checkbox chips, one
+    `situation-recovery` radiogroup per ticked situation, HIGHEST / FOCUS tags), hint
+    "Tick at least one situation for {name}."; summary line `Showed up: {WHEN} ({sit};
+    recovered k of n) · Cues used: {REMIND} ({sit})`; library editors WHEN · INTERFERES ·
+    THEN · RECOVERED WHEN / WHEN · REMIND · NOTE plus the APPLIES TO picker
+    (`components/SituationPicker.tsx`), hints "WHEN and at least one situation are
+    needed." / "WHEN, REMIND and at least one situation are needed.", a card without a
+    situation marked `data-blocked` with the usage line "Blocked · no situation";
+    `components/SituationLibraryPage.tsx` on the two new routes; the wizard's hint ladder
+    "Select 1–3 impediments." → "Designate the highest impediment." → "The highest
+    impediment needs THEN and a recovery criterion." → "{name} needs a THEN and a
+    RECOVERED WHEN — …" → "Confirm the outcome advances the vision.", inline creates with
+    WHEN + situations (cue: WHEN + REMIND + situations), rows without a situation
+    disabled, "n of 3"; the rail's Highest card WHEN · THEN · RECOVERED WHEN · APPLIES TO
+    and "Edit response", cue rows with APPLIES TO, the last cue removable; Vision step 2
+    labelled WHEN, step 3 THEN + RECOVERED WHEN; Insights recovery card `{recovered} of
+    {answered}` recovered vs didn't, `situation-line`s under every card, kit sentences
+    `Keep {name} as the highest impediment; days it shows up run {n} points lower.` · `You
+    recover from {name} {rate}% of the time.` (rate < 50: `only {rate}% … — make the THEN
+    smaller.`) · `Keep {name} — +{n} points on the days it's used.`; `lib/errors.ts`
+    copy for every new code; `lib/kit.ts` trims to 3.
+  - e2e golden path (desktop + phone): the obstacle card blocked until a situation is
+    named inline under Edit; the wizard's create rows gated on WHEN + situation; Start
+    enabled with zero cues; the rail's APPLIES TO rows; the Add-cue picker gated on a
+    situation tick; the close's per-item flow, hint, recovery radio, summary line, the
+    situation observation rows in the DB, the untouched cue as unanswered; the F5
+    backfill with situations attached; the F10 seed with situation rows, no follow-through
+    card, the situation line "4 occurrences · 50% recovered", the kit sentence `Keep Late
+    meetings as the highest impediment; days it shows up run 75 points lower. You recover
+    from Late meetings 50% of the time.`; the situations page's blocked archive. `npm run
+    verify` green.
+  - Falsifiability, live mutations each turning a named test red: a cap left at 5 ·
+    `is_focus` not cleared on the last cue's removal · the auto-pick removed from
+    `start_sprint` · the situation fill removed from `close_day` · `recovered` forced to
+    `'yes'` · the effective-days filter dropped · the coalesce dropped from the conversion
+    (rehearsal) · `.slice(0, 5)` in `lib/kit.ts`.
+- **Non-goals.** Situation-level kit sentences · reusing a situation across kinds ·
+  drag-and-drop · dropping the legacy day columns (BACKLOG) · Circles (F12) · the wizard
+  restyle (BACKLOG) · a group-level None / Unsure pill (each item answers for itself).
+- **Risks.** (1) Fourteen rebuilt functions, one from a stale body — the named source
+  migration per function and a pin marker each. (2) The close becomes a wall on a phone —
+  situations appear only after a Yes, recovery only per tick, checked at 390px. (3) The
+  conversion mishandles a shape the seed did not cover — rehearsed on the real dump before
+  the gate; the migration's own assertion refuses a half-conversion; nobody's rows are
+  deleted by it. (4) A friend's active sprint with an impediment whose response was never
+  finished — the validity check keeps the Highest-only rule, so archive / scope still
+  work; the wizard and `add_sprint_item` are where the new rule bites.
+- **Evaluator.** migration transforming production rows · migrations creating user-data
+  tables — one run.
+- **UI.** Primary action: write the response once, then tick the situations it applies
+  to (`/vision/impediments`, `/vision/cues`). Viewport: both, desktop-first (Chrome at
+  1138px; phone via the Playwright phone project). States: item with no situation
+  (blocked) · close with a ticked situation · empty situations library · Insights
+  breakdown with thin data. Mockups of record: `docs/mockups/ui-v2/Sprint App v8
+  Libraries.dc.html`, `docs/mockups/today/handoff_sprint_ui`, `docs/mockups/f10-postmortem`,
+  `docs/mockups/f11-across`, each extended in-stack; no new artboard. Guidance copy
+  (verbatim on the editors): cue — "A good cue names a moment you will recognise (WHEN)
+  and a reminder, question or action specific enough to act on right there (REMIND). Then
+  tick the situations it applies to — one cue can cover several."; impediment — "Name the
+  moment you will recognise (WHEN), what it does to your day, a response that is specific
+  and feasible right there (THEN), and what you would observe, within a time window, to
+  know you are back on track (RECOVERED WHEN). Then tick the situations it applies to —
+  one response usually covers several." Examples reordered WHEN → INTERFERES → THEN →
+  RECOVERED WHEN → applies to.
+
 ## 4. Explicit v1 non-goals
 AI-written insights or reviews · push notifications · native apps · offline mode ·
 custom Areas · circle roles/moderation · account deletion self-service · data import
@@ -2105,6 +2274,19 @@ recommendations in `docs/RECONCILIATION-2026-09-06.md`):
 - DELTA vs PRD §12 and Part 1: **no data export in v1** (F14; BACKLOG).
 - IGNORED: `spec_v3.md` in the v8 zip — identical to the superseded v4 `spec.md`.
 - BACKLOG from the drafts: task-completion-vs-result insight; mental rehearsal prompt.
+
+**F15 deltas, 2026-09-11** (user's calls in the interview; `docs/DECISIONS.md` same date):
+- DELTA vs PRD rules 3–4: a sprint holds **0–3 Execution Cues** and **1–3 Impediments**
+  (was 1–3 / 1–5). Every member applies to at least one situation.
+- DELTA vs PRD rule 6 and F6: the response is THEN → RECOVERED WHEN on an impediment whose
+  **name is its WHEN**; required on **every** sprint impediment at start / add, on the
+  Highest in the validity check. The SITUATION field is gone: situations are a library.
+- DELTA vs F7: the focus cue is required only while the sprint has cues; the Highest's
+  response-ran, recovered and cost answers are replaced by a recovery answer **per
+  situation** that showed up. The six legacy day columns stay on `sprint_days`, never
+  written again (global no-delete rule).
+- DELTA vs F11: the follow-through card and kit clause go; recovery is per impediment over
+  its situations; a situation line sits under every card.
 
 ## 6. Stack, auth/security model, shared entities
 - Next.js 16 App Router (current release at build time; "middleware" is `proxy.ts`

@@ -3,7 +3,7 @@ import { cache } from "react";
 import type { Scope, SprintInsights } from "@/lib/across";
 import { AREAS, type AreaKey } from "@/lib/areas";
 import type { Database, Tables } from "@/lib/database.types";
-import { NO_OBSERVATIONS, type DayObservations } from "@/lib/daySummary";
+import { NO_OBSERVATIONS, type CueObservation, type DayObservations, type ImpedimentObservation } from "@/lib/daySummary";
 import { goalMet, type Measurement } from "@/lib/format";
 import { report } from "@/lib/observe";
 import { sprintDayFor } from "@/lib/sprintDay";
@@ -17,6 +17,8 @@ export type Impediment = Tables<"impediments">;
 export type Client = SupabaseClient<Database>;
 
 export type ItemKind = "cue" | "impediment";
+/** F15: the library functions (archive, scope, rank, restore) also take a situation. */
+export type LibraryKind = ItemKind | "situation";
 export type ItemScope = "global" | AreaKey;
 export const SCOPES: { key: ItemScope; label: string }[] = [
   { key: "global", label: "Global" },
@@ -26,7 +28,14 @@ export function isItemScope(value: string): value is ItemScope {
   return SCOPES.some((s) => s.key === value);
 }
 
-/** One library entry, cue or impediment, in the shape every list and picker renders. */
+/** F15: a situation as an item carries it — live attachments only (an archived one is not offered). */
+export type SituationRef = { id: string; name: string };
+
+/**
+ * One library entry, cue or impediment, in the shape every list and picker renders.
+ * F15: an impediment's `name` is its WHEN; a cue's `name` is its REMIND and `cue_when`
+ * its WHEN. Both apply to one or more situations.
+ */
 export type LibraryItem = {
   id: string;
   kind: ItemKind;
@@ -37,14 +46,31 @@ export type LibraryItem = {
   archived_at: string | null;
   /** F6: the moment a cue fires (cue only; null on cues saved before F6 until edited). */
   cue_when: string | null;
-  proof_when: string | null;
   proof_then: string | null;
   /** F6: RECOVERED WHEN — what you would observe to know you are back on track. */
   proof_recover: string | null;
+  /** F15: the live situations this response applies to, in rank order. */
+  situations: SituationRef[];
   /** Has ever been a member of any sprint (rule 19: then it can only be archived). */
   used: boolean;
   /** Is a current member of an active sprint. */
   active: boolean;
+};
+
+/** F15: one row of a situations library (per kind), archived rows included. */
+export type SituationItem = {
+  id: string;
+  kind: ItemKind;
+  name: string;
+  scope: ItemScope;
+  rank: number;
+  archived_at: string | null;
+  /** Attached to an item that has ever been a member of a sprint. */
+  used: boolean;
+  /** Attached to a current member of an active sprint. */
+  active: boolean;
+  /** Live items it is attached to. */
+  attached: number;
 };
 
 export type AreaOverview = {
@@ -74,8 +100,8 @@ export const loadOverview = cache(async (supabase: Client): Promise<Overview> =>
   };
 });
 
-/** The vision's main obstacle: a global impediment, with its guiding rule (the proof parts). */
-export type VisionObstacle = Pick<Impediment, "id" | "name" | "explanation" | "proof_when" | "proof_then" | "proof_recover">;
+/** The vision's main obstacle: a global impediment, with its guiding rule (WHEN is its name; THEN and RECOVERED WHEN the proof parts). */
+export type VisionObstacle = Pick<Impediment, "id" | "name" | "explanation" | "proof_then" | "proof_recover">;
 
 export type VisionReview = { verdict: string; created_at: string };
 
@@ -106,7 +132,7 @@ export const loadVision = cache(async (supabase: Client): Promise<VisionView> =>
   const [visions, sprints] = await Promise.all([
     supabase
       .from("visions")
-      .select("*, obstacle:impediments(id, name, explanation, proof_when, proof_then, proof_recover)")
+      .select("*, obstacle:impediments(id, name, explanation, proof_then, proof_recover)")
       .order("archived_at", { ascending: false, nullsFirst: true }),
     supabase.from("sprints").select("vision_id"),
   ]);
@@ -226,22 +252,39 @@ export function eligibleFor(area: AreaKey): (item: { scope: string }) => boolean
   return (item) => item.scope === "global" || item.scope === area;
 }
 
-type ProofParts = Pick<LibraryItem, "proof_when" | "proof_then" | "proof_recover">;
+type ProofParts = Pick<LibraryItem, "proof_then" | "proof_recover">;
 
-/** All three parts of a Proof Point are present (rule 6, F6). */
+/** Both parts of the response are present (rule 6 as amended by F15: THEN + RECOVERED WHEN; WHEN is the name). */
 export function proofComplete(i: ProofParts): boolean {
-  return Boolean(i.proof_when && i.proof_then && i.proof_recover);
+  return Boolean(i.proof_then && i.proof_recover);
 }
 
-/** "WHEN … · THEN … · RECOVERED …" over the parts an impediment has; null when it has none. */
+/** "THEN … · RECOVERED …" over the parts an impediment has; null when it has none. */
 export function proofSummary(i: ProofParts): string | null {
-  const parts = [i.proof_when && `WHEN ${i.proof_when}`, i.proof_then && `THEN ${i.proof_then}`, i.proof_recover && `RECOVERED ${i.proof_recover}`].filter(Boolean);
+  const parts = [i.proof_then && `THEN ${i.proof_then}`, i.proof_recover && `RECOVERED ${i.proof_recover}`].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
 }
 
 /** "WHEN …" for a cue that has its trigger; null for a pre-F6 cue. */
 export function cueSummary(c: Pick<LibraryItem, "cue_when">): string | null {
   return c.cue_when ? `WHEN ${c.cue_when}` : null;
+}
+
+/** F15: "a, b, c" — the situations an item applies to; null when it has none. */
+export function appliesTo(i: Pick<LibraryItem, "situations">): string | null {
+  return i.situations.length ? i.situations.map((s) => s.name).join(", ") : null;
+}
+
+/** F15: a member needs at least one live situation; an item without one cannot join a sprint. */
+export function hasSituation(i: Pick<LibraryItem, "situations">): boolean {
+  return i.situations.length > 0;
+}
+
+/** F15: what keeps an item out of a sprint, in the order start_sprint checks it; null when it may join. */
+export function joinBlocker(i: Pick<LibraryItem, "kind" | "situations" | "proof_then" | "proof_recover">): "situation" | "response" | null {
+  if (!hasSituation(i)) return "situation";
+  if (i.kind === "impediment" && !proofComplete(i)) return "response";
+  return null;
 }
 
 /**
@@ -274,9 +317,26 @@ export async function loadDays(supabase: Client, sprintId: string): Promise<Spri
   return days.data;
 }
 
-function toItem(kind: ItemKind, row: Cue | Impediment, usage: { used: boolean; active: boolean }): LibraryItem {
-  const cue = kind === "cue" ? (row as Cue) : null;
-  const imp = kind === "impediment" ? (row as Impediment) : null;
+/** The attachment embed every library read carries: `situations(id, name, archived_at)` through the join table. */
+type SituationEmbed = { situations: { id: string; name: string; archived_at: string | null; rank: number } | null }[];
+const SITUATIONS_EMBED = "situations(id, name, archived_at, rank)";
+const CUE_SELECT = `*, cue_situations(${SITUATIONS_EMBED})`;
+const IMPEDIMENT_SELECT = `*, impediment_situations(${SITUATIONS_EMBED})`;
+
+function liveSituations(embed: SituationEmbed | null | undefined): SituationRef[] {
+  return (embed ?? [])
+    .map((a) => a.situations)
+    .filter((s): s is NonNullable<typeof s> => s !== null && s.archived_at === null)
+    .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name))
+    .map((s) => ({ id: s.id, name: s.name }));
+}
+
+type CueRowWithSituations = Cue & { cue_situations?: SituationEmbed | null };
+type ImpedimentRowWithSituations = Impediment & { impediment_situations?: SituationEmbed | null };
+
+function toItem(kind: ItemKind, row: CueRowWithSituations | ImpedimentRowWithSituations, usage: { used: boolean; active: boolean }): LibraryItem {
+  const cue = kind === "cue" ? (row as CueRowWithSituations) : null;
+  const imp = kind === "impediment" ? (row as ImpedimentRowWithSituations) : null;
   return {
     id: row.id,
     kind,
@@ -286,9 +346,9 @@ function toItem(kind: ItemKind, row: Cue | Impediment, usage: { used: boolean; a
     rank: row.rank,
     archived_at: row.archived_at,
     cue_when: cue?.cue_when ?? null,
-    proof_when: imp?.proof_when ?? null,
     proof_then: imp?.proof_then ?? null,
     proof_recover: imp?.proof_recover ?? null,
+    situations: liveSituations(cue ? cue.cue_situations : imp?.impediment_situations),
     used: usage.used,
     active: usage.active,
   };
@@ -300,17 +360,18 @@ const IN_SPRINT = { used: true, active: true };
  * The whole library of one kind, archived rows included, in rank order. `used` (rule
  * 19) and `active` come from the `library_item_usage` view, one row per item computed
  * in SQL and read in parallel with the items, so the read is O(library) however many
- * sprints the user has run — never the membership history itself.
+ * sprints the user has run — never the membership history itself. F15: each item's
+ * situations ride along on the join-table embed.
  */
 export async function loadLibrary(supabase: Client, kind: ItemKind): Promise<LibraryItem[]> {
   const usageQuery = supabase.from("library_item_usage").select("item_id, used, active").eq("kind", kind);
   const [rows, usage] = kind === "cue"
-    ? await Promise.all([supabase.from("cues").select("*").order("rank").order("created_at"), usageQuery])
-    : await Promise.all([supabase.from("impediments").select("*").order("rank").order("created_at"), usageQuery]);
+    ? await Promise.all([supabase.from("cues").select(CUE_SELECT).order("rank").order("created_at"), usageQuery])
+    : await Promise.all([supabase.from("impediments").select(IMPEDIMENT_SELECT).order("rank").order("created_at"), usageQuery]);
   if (rows.error) throw new Error(`${kind === "cue" ? "cues" : "impediments"}: ${rows.error.message}`);
   if (usage.error) throw new Error(`library_item_usage: ${usage.error.message}`);
   const byId = new Map(usage.data.map((u) => [u.item_id, { used: Boolean(u.used), active: Boolean(u.active) }]));
-  return rows.data.map((r) => toItem(kind, r, byId.get(r.id) ?? { used: false, active: false }));
+  return (rows.data as (CueRowWithSituations | ImpedimentRowWithSituations)[]).map((r) => toItem(kind, r, byId.get(r.id) ?? { used: false, active: false }));
 }
 
 /** Active (non-archived) items of both kinds, for pickers. Rule 24: archived never appear here. */
@@ -322,14 +383,56 @@ export async function loadActiveLibrary(supabase: Client): Promise<{ cues: Libra
   };
 }
 
-export async function loadLibraryCounts(supabase: Client): Promise<{ cues: number; impediments: number }> {
-  const [c, i] = await Promise.all([
+/**
+ * F15: the situations library of one kind, archived rows included, in rank order.
+ * `used` / `active` come from `library_item_usage`'s situation branch; `attached` counts
+ * the live items it is attached to, from the join table under RLS.
+ */
+export async function loadSituations(supabase: Client, kind: ItemKind): Promise<SituationItem[]> {
+  const [rows, usage, joins] = await Promise.all([
+    supabase.from("situations").select("*").eq("kind", kind).order("rank").order("created_at"),
+    supabase.from("library_item_usage").select("item_id, used, active").eq("kind", "situation"),
+    kind === "cue"
+      ? supabase.from("cue_situations").select("situation_id, cues!inner(archived_at)").is("cues.archived_at", null)
+      : supabase.from("impediment_situations").select("situation_id, impediments!inner(archived_at)").is("impediments.archived_at", null),
+  ]);
+  if (rows.error) throw new Error(`situations: ${rows.error.message}`);
+  if (usage.error) throw new Error(`library_item_usage: ${usage.error.message}`);
+  if (joins.error) throw new Error(`situation attachments: ${joins.error.message}`);
+  const byId = new Map(usage.data.map((u) => [u.item_id, { used: Boolean(u.used), active: Boolean(u.active) }]));
+  const attached = new Map<string, number>();
+  for (const j of joins.data as { situation_id: string }[]) attached.set(j.situation_id, (attached.get(j.situation_id) ?? 0) + 1);
+  return rows.data.map((r) => ({
+    id: r.id,
+    kind: r.kind as ItemKind,
+    name: r.name,
+    scope: r.scope as ItemScope,
+    rank: r.rank,
+    archived_at: r.archived_at,
+    used: byId.get(r.id)?.used ?? false,
+    active: byId.get(r.id)?.active ?? false,
+    attached: attached.get(r.id) ?? 0,
+  }));
+}
+
+/** F15: live situations of both kinds, for the pickers (rule 24: archived never appear here). */
+export async function loadActiveSituations(supabase: Client): Promise<{ cues: SituationItem[]; impediments: SituationItem[] }> {
+  const [cues, impediments] = await Promise.all([loadSituations(supabase, "cue"), loadSituations(supabase, "impediment")]);
+  return { cues: cues.filter((s) => s.archived_at === null), impediments: impediments.filter((s) => s.archived_at === null) };
+}
+
+export async function loadLibraryCounts(supabase: Client): Promise<{ cues: number; impediments: number; cueSituations: number; impedimentSituations: number }> {
+  const [c, i, sc, si] = await Promise.all([
     supabase.from("cues").select("id", { count: "exact", head: true }).is("archived_at", null),
     supabase.from("impediments").select("id", { count: "exact", head: true }).is("archived_at", null),
+    supabase.from("situations").select("id", { count: "exact", head: true }).eq("kind", "cue").is("archived_at", null),
+    supabase.from("situations").select("id", { count: "exact", head: true }).eq("kind", "impediment").is("archived_at", null),
   ]);
   if (c.error) throw new Error(`cues: ${c.error.message}`);
   if (i.error) throw new Error(`impediments: ${i.error.message}`);
-  return { cues: c.count ?? 0, impediments: i.count ?? 0 };
+  if (sc.error) throw new Error(`situations: ${sc.error.message}`);
+  if (si.error) throw new Error(`situations: ${si.error.message}`);
+  return { cues: c.count ?? 0, impediments: i.count ?? 0, cueSituations: sc.count ?? 0, impedimentSituations: si.count ?? 0 };
 }
 
 export type SprintItems = {
@@ -341,8 +444,8 @@ export type SprintItems = {
 /** The sprint's current members (active memberships only), each with its library row. */
 export async function loadSprintItems(supabase: Client, sprintId: string): Promise<SprintItems> {
   const [cues, imps] = await Promise.all([
-    supabase.from("sprint_cues").select("cue_id, is_focus, cues(*)").eq("sprint_id", sprintId).is("removed_at", null),
-    supabase.from("sprint_impediments").select("impediment_id, is_highest, impediments(*)").eq("sprint_id", sprintId).is("removed_at", null),
+    supabase.from("sprint_cues").select(`cue_id, is_focus, cues(${CUE_SELECT})`).eq("sprint_id", sprintId).is("removed_at", null),
+    supabase.from("sprint_impediments").select(`impediment_id, is_highest, impediments(${IMPEDIMENT_SELECT})`).eq("sprint_id", sprintId).is("removed_at", null),
   ]);
   if (cues.error) throw new Error(`sprint_cues: ${cues.error.message}`);
   if (imps.error) throw new Error(`sprint_impediments: ${imps.error.message}`);
@@ -353,11 +456,11 @@ export async function loadSprintItems(supabase: Client, sprintId: string): Promi
   return {
     cues: cues.data
       .filter((m) => m.cues)
-      .map((m) => ({ ...toItem("cue", m.cues as Cue, IN_SPRINT), is_focus: m.is_focus }))
+      .map((m) => ({ ...toItem("cue", m.cues as unknown as CueRowWithSituations, IN_SPRINT), is_focus: m.is_focus }))
       .sort(byRank),
     impediments: imps.data
       .filter((m) => m.impediments)
-      .map((m) => ({ ...toItem("impediment", m.impediments as Impediment, IN_SPRINT), is_highest: m.is_highest }))
+      .map((m) => ({ ...toItem("impediment", m.impediments as unknown as ImpedimentRowWithSituations, IN_SPRINT), is_highest: m.is_highest }))
       .sort(byRank),
   };
 }
@@ -380,9 +483,10 @@ export async function loadDayOfferedItems(supabase: Client, dayId: string): Prom
     rank: r.rank,
     archived_at: null,
     cue_when: r.cue_when,
-    proof_when: r.proof_when,
     proof_then: r.proof_then,
     proof_recover: r.proof_recover,
+    // F15: the item's live situations as of the call — `[{id, name, rank}]` in rank order.
+    situations: ((r.situations ?? []) as { id: string; name: string }[]).map((s) => ({ id: s.id, name: s.name })),
     is_focus: r.is_focus,
     used: true,
     active: true,
@@ -395,18 +499,43 @@ export async function loadDayOfferedItems(supabase: Client, dayId: string): Prom
 
 /**
  * F7's observation rows for every closed day of a sprint, keyed by day id (F8: the
- * closed row's tail, the Closed card's summary line, "Set up tomorrow"). Two reads,
- * both under the tables' SELECT policies; a day without rows maps to no observations.
+ * closed row's tail, the Closed card's summary line, "Set up tomorrow"), with F15's
+ * situation rows nested under each. Four reads, all under the tables' SELECT policies;
+ * a day without rows maps to no observations.
  */
 export async function loadSprintObservations(supabase: Client, dayIds: string[]): Promise<Map<string, DayObservations>> {
   const out = new Map<string, DayObservations>();
   if (dayIds.length === 0) return out;
   const [imps, cues] = await Promise.all([
-    supabase.from("day_impediment_observations").select("sprint_day_id, impediment_id, name, occurred, was_highest").in("sprint_day_id", dayIds).order("created_at").order("id"),
-    supabase.from("day_cue_observations").select("sprint_day_id, cue_id, name, used, was_focus").in("sprint_day_id", dayIds).order("created_at").order("id"),
+    supabase.from("day_impediment_observations").select("id, sprint_day_id, impediment_id, name, occurred, was_highest").in("sprint_day_id", dayIds).order("created_at").order("id"),
+    supabase.from("day_cue_observations").select("id, sprint_day_id, cue_id, name, used, was_focus").in("sprint_day_id", dayIds).order("created_at").order("id"),
   ]);
   if (imps.error) throw new Error(`day_impediment_observations: ${imps.error.message}`);
   if (cues.error) throw new Error(`day_cue_observations: ${cues.error.message}`);
+  const impIds = imps.data.map((r) => r.id);
+  const cueIds = cues.data.map((r) => r.id);
+  const [impSits, cueSits] = await Promise.all([
+    impIds.length
+      ? supabase.from("day_impediment_situation_observations").select("observation_id, situation_id, name, occurred, recovered").in("observation_id", impIds).order("created_at").order("id")
+      : { data: [] as { observation_id: string; situation_id: string; name: string; occurred: boolean; recovered: string | null }[], error: null },
+    cueIds.length
+      ? supabase.from("day_cue_situation_observations").select("observation_id, situation_id, name, applied").in("observation_id", cueIds).order("created_at").order("id")
+      : { data: [] as { observation_id: string; situation_id: string; name: string; applied: boolean }[], error: null },
+  ]);
+  if (impSits.error) throw new Error(`day_impediment_situation_observations: ${impSits.error.message}`);
+  if (cueSits.error) throw new Error(`day_cue_situation_observations: ${cueSits.error.message}`);
+  const impSitsBy = new Map<string, ImpedimentObservation["situations"]>();
+  for (const s of impSits.data) {
+    const list = impSitsBy.get(s.observation_id) ?? [];
+    list.push({ id: s.situation_id, name: s.name, occurred: s.occurred, recovered: s.recovered });
+    impSitsBy.set(s.observation_id, list);
+  }
+  const cueSitsBy = new Map<string, CueObservation["situations"]>();
+  for (const s of cueSits.data) {
+    const list = cueSitsBy.get(s.observation_id) ?? [];
+    list.push({ id: s.situation_id, name: s.name, applied: s.applied });
+    cueSitsBy.set(s.observation_id, list);
+  }
   const of = (id: string) => {
     let d = out.get(id);
     if (!d) {
@@ -415,8 +544,8 @@ export async function loadSprintObservations(supabase: Client, dayIds: string[])
     }
     return d;
   };
-  for (const r of imps.data) of(r.sprint_day_id).impediments.push({ id: r.impediment_id, name: r.name, occurred: r.occurred, was_highest: r.was_highest });
-  for (const r of cues.data) of(r.sprint_day_id).cues.push({ id: r.cue_id, name: r.name, used: r.used, was_focus: r.was_focus });
+  for (const r of imps.data) of(r.sprint_day_id).impediments.push({ id: r.impediment_id, name: r.name, occurred: r.occurred, was_highest: r.was_highest, situations: impSitsBy.get(r.id) ?? [] });
+  for (const r of cues.data) of(r.sprint_day_id).cues.push({ id: r.cue_id, name: r.name, used: r.used, was_focus: r.was_focus, situations: cueSitsBy.get(r.id) ?? [] });
   return out;
 }
 
@@ -540,39 +669,41 @@ export type ImpactRow = {
   median_absent: number | null;
   delta_pts: number | null;
   enough: boolean;
-  felt_a_lot: number;
-  felt_some: number;
-  felt_nothing: number;
 };
 
-export type FollowThroughRow = {
-  item_id: string;
-  name: string;
-  proof_then: string | null;
-  occurrences: number;
-  answered: number;
-  ran: number;
-  didnt: number;
-  partially: number;
-  unsure: number;
-  rate: number | null;
-  enough: boolean;
-};
-
+/**
+ * F15: one row per impediment. On the days it showed up, across the situations it
+ * showed up in, how often the recovery criterion was met. `verdict_occurrences` is the
+ * postmortem's verdict predicate (the current Highest on a day whose snapshot names it).
+ */
 export type RecoveryRow = {
   item_id: string;
   name: string;
+  proof_then: string | null;
   proof_recover: string | null;
-  with_response: number;
-  with_recovered: number;
-  without_response: number;
-  without_recovered: number;
+  is_highest: boolean;
+  occurrences: number;
+  verdict_occurrences: number;
   answered: number;
+  recovered: number;
+  didnt: number;
   rate: number | null;
   enough: boolean;
-  median_recovered: number | null;
-  median_not: number | null;
-  outcome_enough: boolean;
+};
+
+/** F15: one row per (item, situation) that a closed day offered. */
+export type SituationRow = {
+  kind: ItemKind;
+  item_id: string;
+  item_name: string;
+  situation_id: string;
+  situation_name: string;
+  occurrences: number;
+  asked_days: number;
+  recovered_yes: number;
+  recovered_answered: number;
+  rate: number | null;
+  enough: boolean;
 };
 
 export type CueRow = {
@@ -627,8 +758,8 @@ export type Postmortem = {
   sprint: Sprint;
   summary: ReviewSummary | null;
   impact: ImpactRow[];
-  followThrough: FollowThroughRow[];
   recovery: RecoveryRow[];
+  situations: SituationRow[];
   cues: CueRow[];
   items: SprintItems;
   days: ClosedDay[];
@@ -639,6 +770,11 @@ export type Postmortem = {
    */
   verdictApplies: boolean;
 };
+
+/** finish_review's own predicate, read off the recovery rows: the current Highest showed up on a counted day. */
+export function verdictAppliesFrom(recovery: RecoveryRow[]): boolean {
+  return recovery.some((r) => r.is_highest && r.verdict_occurrences > 0);
+}
 
 /** `numeric` arrives from PostgREST as a string; every median here is a ratio. */
 function numeric(v: unknown): number | null {
@@ -655,12 +791,12 @@ function numeric(v: unknown): number | null {
 export async function loadPostmortem(supabase: Client, sprintId: string): Promise<Postmortem | null> {
   // One batch, the sprint row included (#26): a missing or running sprint returns null
   // before any RPC result is inspected, so the not-found path is unchanged.
-  const [sprint, summary, impact, follow, recovery, cues, items, days, review] = await allOrThrow([
+  const [sprint, summary, impact, recovery, situations, cues, items, days, review] = await allOrThrow([
     supabase.from("sprints").select("*").eq("id", sprintId).maybeSingle(),
     supabase.rpc("sprint_review_summary", { p_sprint_id: sprintId }),
     supabase.rpc("insight_impediment_impact", { p_sprint_id: sprintId }),
-    supabase.rpc("insight_response_followthrough", { p_sprint_id: sprintId }),
     supabase.rpc("insight_response_recovery", { p_sprint_id: sprintId }),
+    supabase.rpc("insight_situations", { p_sprint_id: sprintId }),
     supabase.rpc("insight_cue_usefulness", { p_sprint_id: sprintId }),
     loadSprintMembers(supabase, sprintId),
     loadClosedDays(supabase, sprintId),
@@ -671,8 +807,8 @@ export async function loadPostmortem(supabase: Client, sprintId: string): Promis
   for (const [name, res] of [
     ["sprint_review_summary", summary],
     ["insight_impediment_impact", impact],
-    ["insight_response_followthrough", follow],
     ["insight_response_recovery", recovery],
+    ["insight_situations", situations],
     ["insight_cue_usefulness", cues],
   ] as const) {
     if (res.error) throw new Error(`${name}: ${res.error.message}`);
@@ -681,20 +817,20 @@ export async function loadPostmortem(supabase: Client, sprintId: string): Promis
   const rows = (res: { data: unknown }): Record<string, unknown>[] => (res.data ?? []) as Record<string, unknown>[];
   const impactRows = rows(impact).map((r) => ({ ...r, median_present: numeric(r.median_present), median_absent: numeric(r.median_absent) }) as unknown as ImpactRow);
   const cueRows = rows(cues).map((r) => ({ ...r, median_used: numeric(r.median_used), median_unused: numeric(r.median_unused) }) as unknown as CueRow);
-  const recoveryRows = rows(recovery).map((r) => ({ ...r, median_recovered: numeric(r.median_recovered), median_not: numeric(r.median_not) }) as unknown as RecoveryRow);
-  const followRows = rows(follow) as unknown as FollowThroughRow[];
+  const recoveryRows = rows(recovery) as unknown as RecoveryRow[];
+  const situationRows = rows(situations) as unknown as SituationRow[];
 
   return {
     sprint: sprint.data,
     summary: (rows(summary)[0] as unknown as ReviewSummary) ?? null,
     impact: impactRows,
-    followThrough: followRows,
     recovery: recoveryRows,
+    situations: situationRows,
     cues: cueRows,
     items,
     days,
     review,
-    verdictApplies: followRows.some((r) => r.occurrences > 0),
+    verdictApplies: verdictAppliesFrom(recoveryRows),
   };
 }
 
@@ -704,15 +840,19 @@ export async function loadPostmortem(supabase: Client, sprintId: string): Promis
  */
 export async function loadSprintMembers(supabase: Client, sprintId: string): Promise<SprintItems> {
   const [cues, imps] = await Promise.all([
-    supabase.from("sprint_cues").select("cue_id, is_focus, removed_at, cues(*)").eq("sprint_id", sprintId),
-    supabase.from("sprint_impediments").select("impediment_id, is_highest, removed_at, impediments(*)").eq("sprint_id", sprintId),
+    supabase.from("sprint_cues").select(`cue_id, is_focus, removed_at, cues(${CUE_SELECT})`).eq("sprint_id", sprintId),
+    supabase.from("sprint_impediments").select(`impediment_id, is_highest, removed_at, impediments(${IMPEDIMENT_SELECT})`).eq("sprint_id", sprintId),
   ]);
   if (cues.error) throw new Error(`sprint_cues: ${cues.error.message}`);
   if (imps.error) throw new Error(`sprint_impediments: ${imps.error.message}`);
   return {
-    cues: onePerItem(cues.data.filter((m) => m.cues).map((m) => ({ ...toItem("cue", m.cues as Cue, IN_SPRINT), is_focus: m.is_focus, removed: m.removed_at !== null }))).sort(byRank),
+    cues: onePerItem(
+      cues.data.filter((m) => m.cues).map((m) => ({ ...toItem("cue", m.cues as unknown as CueRowWithSituations, IN_SPRINT), is_focus: m.is_focus, removed: m.removed_at !== null })),
+    ).sort(byRank),
     impediments: onePerItem(
-      imps.data.filter((m) => m.impediments).map((m) => ({ ...toItem("impediment", m.impediments as Impediment, IN_SPRINT), is_highest: m.is_highest, removed: m.removed_at !== null })),
+      imps.data
+        .filter((m) => m.impediments)
+        .map((m) => ({ ...toItem("impediment", m.impediments as unknown as ImpedimentRowWithSituations, IN_SPRINT), is_highest: m.is_highest, removed: m.removed_at !== null })),
     ).sort(byRank),
   };
 }
@@ -851,17 +991,17 @@ export async function loadAcross(supabase: Client, scope: Scope): Promise<Across
 
   // Five requests for the whole history (0017), whatever N is: the `_many` wrappers call
   // the same definer function per sprint, and `sprint_totals` is one row per sprint.
-  const [impact, follow, recovery, cues, totals] = await allOrThrow([
+  const [impact, recovery, situations, cues, totals] = await allOrThrow([
     supabase.rpc("insight_impediment_impact_many", { p_sprint_ids: ids }),
-    supabase.rpc("insight_response_followthrough_many", { p_sprint_ids: ids }),
     supabase.rpc("insight_response_recovery_many", { p_sprint_ids: ids }),
+    supabase.rpc("insight_situations_many", { p_sprint_ids: ids }),
     supabase.rpc("insight_cue_usefulness_many", { p_sprint_ids: ids }),
     supabase.from("sprint_totals").select("sprint_id, effective_days, on_target_days").in("sprint_id", ids),
   ]);
   for (const [name, res] of [
     ["insight_impediment_impact_many", impact],
-    ["insight_response_followthrough_many", follow],
     ["insight_response_recovery_many", recovery],
+    ["insight_situations_many", situations],
     ["insight_cue_usefulness_many", cues],
     ["sprint_totals", totals],
   ] as const) {
@@ -878,16 +1018,16 @@ export async function loadAcross(supabase: Client, scope: Scope): Promise<Across
     return map;
   };
   const impactBy = bySprint(impact);
-  const followBy = bySprint(follow);
   const recoveryBy = bySprint(recovery);
+  const situationsBy = bySprint(situations);
   const cuesBy = bySprint(cues);
 
   const history = finished.map(
     (sprint): SprintInsights => ({
       sprint: { id: sprint.id, area: sprint.area, start_date: sprint.start_date, end_date: sprint.end_date },
       impact: (impactBy.get(sprint.id) ?? []).map((r) => ({ ...r, median_present: numeric(r.median_present), median_absent: numeric(r.median_absent) }) as unknown as ImpactRow),
-      follow: (followBy.get(sprint.id) ?? []) as unknown as FollowThroughRow[],
-      recovery: (recoveryBy.get(sprint.id) ?? []).map((r) => ({ ...r, median_recovered: numeric(r.median_recovered), median_not: numeric(r.median_not) }) as unknown as RecoveryRow),
+      recovery: (recoveryBy.get(sprint.id) ?? []) as unknown as RecoveryRow[],
+      situations: (situationsBy.get(sprint.id) ?? []) as unknown as SituationRow[],
       cues: (cuesBy.get(sprint.id) ?? []).map((r) => ({ ...r, median_used: numeric(r.median_used), median_unused: numeric(r.median_unused) }) as unknown as CueRow),
     }),
   );

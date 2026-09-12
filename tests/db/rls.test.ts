@@ -83,13 +83,13 @@ describe("RLS isolation", () => {
     const v = await b.client.from("visions").update({ body: "hijacked" }).eq("user_id", a.id).select("id");
     expect(v.error?.message).toMatch(/permission denied/);
     expect(v.data).toBeNull();
-    const i = await b.client.from("impediments").update({ proof_when: "hijacked", name: "hijacked" }).eq("id", impedimentId).select("id");
+    const i = await b.client.from("impediments").update({ proof_then: "hijacked", name: "hijacked" }).eq("id", impedimentId).select("id");
     expect(i.error).toBeNull();
     expect(i.data).toEqual([]);
 
     const [row] = await sql<{ v: number; i: number }[]>`
       select (select count(*)::int from public.visions where user_id = ${a.id} and body = 'hijacked') as v,
-             (select count(*)::int from public.impediments where id = ${impedimentId} and (name = 'hijacked' or proof_when = 'hijacked')) as i`;
+             (select count(*)::int from public.impediments where id = ${impedimentId} and (name = 'hijacked' or proof_then = 'hijacked')) as i`;
     expect(row).toEqual({ v: 0, i: 0 });
   });
 

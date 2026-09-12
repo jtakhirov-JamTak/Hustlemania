@@ -29,7 +29,6 @@ export type StartSprintInput = {
   focusCueId: string | null;
   impedimentIds: string[];
   highestImpedimentId: string | null;
-  proofWhen: string | null;
   proofThen: string | null;
   proofRecover: string | null;
   /** F3: a custom plan in base units (14 entries summing to `amount`), or null for Goal ÷ 14. */
@@ -42,7 +41,8 @@ export type StartSprintInput = {
 export async function startSprintAction(input: StartSprintInput): Promise<{ error: string }> {
   if (!isAreaKey(input.area)) return { error: "Unknown area." };
   if (!input.highestImpedimentId) return { error: friendlyError("no_highest_impediment") };
-  if (!input.focusCueId || !input.cueIds.includes(input.focusCueId)) return { error: friendlyError("no_focus_cue") };
+  // F15: cues are optional (0–3); a focus is required only while the sprint has any.
+  if (input.cueIds.length > 0 && (!input.focusCueId || !input.cueIds.includes(input.focusCueId))) return { error: friendlyError("no_focus_cue") };
   if (input.targets) {
     const bad = validTargets(input.targets);
     if (bad) return { error: bad };
@@ -68,8 +68,8 @@ export async function startSprintAction(input: StartSprintInput): Promise<{ erro
     p_cue_ids: input.cueIds,
     p_impediment_ids: input.impedimentIds,
     p_highest_impediment_id: input.highestImpedimentId,
-    p_focus_cue_id: input.focusCueId,
-    p_proof_when: input.proofWhen?.trim() || undefined,
+    // Sent explicitly as null when there is no cue: an omitted key changes the call signature.
+    p_focus_cue_id: (input.cueIds.length > 0 ? input.focusCueId : null) as unknown as string,
     p_proof_then: input.proofThen?.trim() || undefined,
     p_proof_recover: input.proofRecover?.trim() || undefined,
     p_targets: input.targets ?? undefined,

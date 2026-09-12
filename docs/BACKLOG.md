@@ -2,6 +2,29 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## Deferred from F15 (2026-09-11)
+
+- **Drop the six legacy day columns** (`sprint_days.proof_when`, `proof_then`,
+  `proof_recover`, `response`, `recovered`, `impact`) once no hosted row carries a value:
+  0019 stopped writing them and took them out of `sprint_days_effective`, but the global
+  no-delete rule keeps them while a friend's closed day still holds an answer.
+- **A "None showed up" shortcut on the close.** F15 answers per item; a day with three
+  impediments and three cues is six radios. Add the group-level No if the phone close
+  proves long in practice (DECISIONS 2026-09-11, re-open clause).
+- **Situation-level kit sentences.** The breakdown lines exist; the Suggested kit still
+  speaks per item.
+- **`prefillFromKit` cannot see a situation-less item** (it takes ids only), so the wizard
+  filters the kit against `joinBlocker` after the fact. Move the filter into the loader
+  when the kit grows another consumer.
+- **Breakdown lines mix a live item name with a snapshot situation name** (eval-09 P2-1):
+  `insight_situations.item_name` reads the library row, `situation_name` the observation
+  snapshot, so a renamed situation reads differently from its parent card. Pick one
+  source for both (the snapshot, as the day rows do) when the cards are next touched.
+- **`rate` is null until `enough`** (eval-09 P2-2): `insight_response_recovery` and
+  `insight_situations` return no rate below three answered recoveries and the UI shows
+  "Not enough data". Deliberate (thin-data rule from F10), recorded so nobody reads the
+  null as a bug; revisit only if the user asks to see thin rates.
+
 ## Found during F14 (2026-09-10), not fixed there
 
 - **Evaluator shell allowlist rejects an env-prefixed command** (eval-08 P2-1):
@@ -10,6 +33,9 @@
   reproduce the deployed spec with curl. Governance change — the guard lives in
   `~/.claude`, the human's move: allow a leading `NAME=value` prefix when the command
   after it is allowlisted, or add `env`.
+- **CI actions on Node 20.** The first run (2026-09-11) annotated `actions/checkout@v4`,
+  `setup-node@v4` and `setup-python@v5` as targeting the deprecated Node 20 runtime;
+  GitHub forces Node 24 for now. Bump the three majors when convenient.
 - **CI on GitHub — the DB and e2e half.** `.github/workflows/ci.yml` (U3, 2026-09-11)
   runs typecheck, lint, hooks and unit on every push and pull request. The DB and e2e
   suites still need the local Supabase stack and run only in the pre-commit hook; the

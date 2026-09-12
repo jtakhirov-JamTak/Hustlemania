@@ -12,6 +12,18 @@ const MESSAGES: Record<string, string> = {
   obstacle_not_global: "The main obstacle has to be a global impediment.",
   no_vision_obstacle: "Name the obstacle before writing its rule.",
   rule_incomplete: "WHEN, THEN and the recovery criterion are all required.",
+  // Situations (F15).
+  no_situations: "Each impediment and cue needs at least one situation before it can join a sprint.",
+  situations_required: "Tick at least one situation for every item that showed up or was used.",
+  situations_not_applicable: "Situations are ticked only for an item answered Yes.",
+  situation_not_offered: "That situation was not part of the item on this day.",
+  duplicate_situation: "A situation was ticked twice.",
+  situation_not_found: "That situation could not be found in this library.",
+  situation_archived: "That situation is archived. Restore it first.",
+  situation_kind_mismatch: "That situation belongs to the other library.",
+  situations_name_check: "Give the situation a name.",
+  situations_kind_check: "That situation belongs to the other library.",
+  situation_in_use: "That situation is attached to an item, so it can only be archived.",
   invalid_verdict: "That review answer is not one of the choices.",
   vision_obstacle: "This impediment is the vision's main obstacle. Change the obstacle on the Vision tab first.",
   visions_obstacle_id_fkey: "This impediment is the vision's main obstacle. Change the obstacle on the Vision tab first.",
@@ -36,23 +48,18 @@ const MESSAGES: Record<string, string> = {
   visions_body_check: "Write something before saving the vision.",
   cues_name_check: "Give the cue a name.",
   impediments_name_check: "Give the impediment a name.",
-  no_cues: "A sprint needs at least one execution cue.",
   too_many_cues: "A sprint carries at most three execution cues.",
   no_impediments: "A sprint needs at least one impediment.",
-  too_many_impediments: "A sprint carries at most five impediments.",
+  too_many_impediments: "A sprint carries at most three impediments.",
   no_highest_impediment: "Designate one of the impediments as the highest.",
-  proof_point_required: "The highest impediment needs a WHEN, a THEN and a RECOVERED WHEN.",
+  proof_point_required: "Every impediment in a sprint needs a THEN and a RECOVERED WHEN.",
   item_not_found: "That item could not be found in your library.",
   item_archived: "That item is archived. Restore it first.",
   item_out_of_scope: "That item's scope does not cover this area.",
   item_not_offered: "That item was not part of the sprint on this day.",
   invalid_answer: "That answer is not one of the choices.",
   duplicate_item: "An item was answered twice.",
-  response_required: "Say whether the response ran — Unsure is a truthful answer.",
-  recovered_required: "Say whether you recovered — Unsure is a truthful answer.",
-  response_not_applicable: "The response questions only apply when the highest impediment showed up.",
-  highest_changed: "The highest impediment changed since this page loaded. Reload, then close the day.",
-  no_focus_cue: "A sprint needs one focus cue among its execution cues.",
+  no_focus_cue: "A sprint with cues needs one of them as the focus.",
   already_in_sprint: "That item is already in this sprint.",
   not_in_sprint: "That item is not in this sprint.",
   invalid_scope: "Scope is Global, Health, Wealth or Relationships.",
@@ -82,7 +89,7 @@ const MESSAGES: Record<string, string> = {
 export const GENERIC_SAVE_ERROR = "That did not save. Your input is still here — try again.";
 
 /** Rule 22 on the Impediments page: a proof edit that would leave the highest of an active sprint incomplete. */
-export const HIGHEST_PROOF_EDIT_ERROR = "This is the highest impediment of an active sprint: WHEN, THEN and RECOVERED WHEN are all required.";
+export const HIGHEST_PROOF_EDIT_ERROR = "This is the highest impediment of an active sprint: THEN and RECOVERED WHEN are both required.";
 
 export function friendlyError(message: string | undefined | null): string {
   if (!message) return GENERIC_SAVE_ERROR;
@@ -95,16 +102,16 @@ export function friendlyError(message: string | undefined | null): string {
 /** Why an archive or scope change was blocked for one sprint (archive_item / set_item_scope). */
 export function blockedReason(reason: string): string {
   switch (reason) {
-    case "no_cues":
-      return "it would be left without an execution cue";
     case "no_impediments":
       return "it would be left without an impediment";
     case "no_highest_impediment":
       return "this is its highest impediment";
     case "no_focus_cue":
       return "this is its focus cue";
+    case "no_situations":
+      return "one of its items would be left without a situation";
     case "proof_point_required":
-      return "its highest impediment would lack a WHEN, a THEN or a RECOVERED WHEN";
+      return "its highest impediment would lack a THEN or a RECOVERED WHEN";
     default:
       return "it would become invalid";
   }

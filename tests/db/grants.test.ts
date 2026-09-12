@@ -37,6 +37,7 @@ describe("public schema access model", () => {
     expect(rows).toEqual([
       { table_name: "cues", privilege_type: "DELETE" },
       { table_name: "impediments", privilege_type: "DELETE" },
+      { table_name: "situations", privilege_type: "DELETE" },
     ]);
     const cols = await sql<{ table_name: string; column_name: string }[]>`
       select table_name, column_name from information_schema.column_privileges
@@ -52,9 +53,12 @@ describe("public schema access model", () => {
       { table_name: "impediments", column_name: "name" },
       { table_name: "impediments", column_name: "proof_recover" },
       { table_name: "impediments", column_name: "proof_then" },
-      { table_name: "impediments", column_name: "proof_when" },
       { table_name: "impediments", column_name: "scope" },
       { table_name: "impediments", column_name: "user_id" },
+      { table_name: "situations", column_name: "kind" },
+      { table_name: "situations", column_name: "name" },
+      { table_name: "situations", column_name: "scope" },
+      { table_name: "situations", column_name: "user_id" },
       { table_name: "tasks", column_name: "sprint_day_id" },
       { table_name: "tasks", column_name: "text" },
       { table_name: "tasks", column_name: "user_id" },
@@ -74,7 +78,7 @@ describe("public schema access model", () => {
       { table_name: "impediments", column_name: "name" },
       { table_name: "impediments", column_name: "proof_recover" },
       { table_name: "impediments", column_name: "proof_then" },
-      { table_name: "impediments", column_name: "proof_when" },
+      { table_name: "situations", column_name: "name" },
       { table_name: "sprint_days", column_name: "intention" },
       { table_name: "sprints", column_name: "mantra" },
       { table_name: "tasks", column_name: "archived_at" },
@@ -160,10 +164,10 @@ describe("public schema access model", () => {
       "insight_cue_usefulness_many",
       "insight_impediment_impact",
       "insight_impediment_impact_many",
-      "insight_response_followthrough",
-      "insight_response_followthrough_many",
       "insight_response_recovery",
       "insight_response_recovery_many",
+      "insight_situations",
+      "insight_situations_many",
       "move_item",
       "remove_sprint_item",
       "replace_vision",
@@ -174,6 +178,7 @@ describe("public schema access model", () => {
       "set_focus_cue",
       "set_highest_impediment",
       "set_item_scope",
+      "set_item_situations",
       "set_vision_obstacle",
       "set_vision_rule",
       "sprint_best_streak",
@@ -186,8 +191,8 @@ describe("public schema access model", () => {
 
   it("anon cannot execute the write functions", async () => {
     const [row] = await sql<{ start: boolean; close: boolean }[]>`
-      select has_function_privilege('anon', 'public.start_sprint(text,text,text,text,text,bigint,int,text,text,text,jsonb,text,date,uuid[],uuid[],uuid,uuid,text,text,text,text,bigint[],text[])', 'execute') as "start",
-             has_function_privilege('anon', 'public.close_day(uuid,bigint,text,jsonb,jsonb,text,text,text)', 'execute') as close`;
+      select has_function_privilege('anon', 'public.start_sprint(text,text,text,text,text,bigint,int,text,text,text,jsonb,text,date,uuid[],uuid[],uuid,uuid,text,text,text,bigint[],text[])', 'execute') as "start",
+             has_function_privilege('anon', 'public.close_day(uuid,bigint,text,jsonb,jsonb)', 'execute') as close`;
     expect(row).toEqual({ start: false, close: false });
   });
 

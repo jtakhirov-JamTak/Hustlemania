@@ -93,15 +93,16 @@ test.describe("golden path", () => {
     await expect(page.locator("[data-sidebar]").getByText("1 of 3")).toBeVisible();
     await expect(page.getByText("Pick or name one obstacle.")).toBeVisible();
     await noOverflow();
-    await page.getByLabel("Situation").fill("Starting late");
+    // F15: the obstacle is named by its WHEN — the moment you will recognise it.
+    await page.getByLabel("When", { exact: true }).fill("I notice myself delaying my first work block");
     await page.getByLabel("Interferes").fill("what it does to your day");
     await page.getByRole("button", { name: "Save & continue" }).click();
 
-    // Step 3: the rule, saved onto the impediment.
+    // Step 3: the rule (THEN → RECOVERED WHEN), saved onto the impediment; WHEN is its name.
     await expect(page.getByTestId("vision-setup")).toHaveAttribute("data-step", "3");
-    await expect(page.getByText("WHEN, THEN and the recovery criterion are all required.")).toBeVisible();
+    await expect(page.getByText("THEN and the recovery criterion are both required.")).toBeVisible();
+    await expect(page.getByLabel("WHEN", { exact: true })).toHaveCount(0);
     await noOverflow();
-    await page.getByLabel("WHEN", { exact: true }).fill("I notice myself delaying my first work block");
     await page.getByLabel("THEN", { exact: true }).fill("I start a 10-minute timer on the smallest executable task");
     await page.getByLabel("RECOVERED WHEN").fill("The timer is running within 10 minutes");
     await page.getByRole("button", { name: "Save", exact: true }).click();
@@ -111,11 +112,34 @@ test.describe("golden path", () => {
     await expect(overview).toBeVisible();
     await expect(page.getByTestId("vision-steps")).toHaveText("3 of 3 steps");
     await noOverflow();
-    await expect(page.getByTestId("card-obstacle")).toContainText("Starting late");
+    await expect(page.getByTestId("card-obstacle")).toContainText("I notice myself delaying my first work block");
     await expect(page.getByTestId("card-rule")).toContainText("WHEN I notice myself delaying my first work block → THEN I start a 10-minute timer on the smallest executable task");
     await expect(page.getByTestId("card-sprints")).toContainText("No sprints yet.");
     await expect(page.getByTestId("vision-meta")).toContainText("Not reviewed yet");
     await expect(page.locator("[data-sidebar]").getByText("3 of 3")).toBeVisible();
+
+    // F15: the obstacle cannot join a sprint until it applies to a situation. The library
+    // card says so (blocked state); Edit → name the situation inline → Save.
+    await page.goto("/vision/impediments");
+    // Anchor on the item id: in edit mode the name sits in an input value, which a text
+    // filter does not see.
+    const obstacleId = await page.getByTestId("library-item").filter({ hasText: "I notice myself delaying my first work block" }).getAttribute("data-item-id");
+    const obstacleCard = page.locator(`[data-testid="library-item"][data-item-id="${obstacleId}"]`);
+    await expect(obstacleCard).toHaveAttribute("data-blocked", "true");
+    await expect(obstacleCard.locator("[data-part=applies-to][data-missing]")).toContainText("no situation yet");
+    await expect(obstacleCard.getByTestId("usage-line")).toHaveText("Blocked · no situation");
+    await obstacleCard.getByRole("button", { name: /^Edit / }).click();
+    const obstacleEditor = obstacleCard.locator("form");
+    await expect(obstacleEditor.getByTestId("situations-empty")).toContainText("No impediment situations yet");
+    await expect(obstacleEditor.getByRole("button", { name: "Save" })).toHaveAttribute("aria-disabled", "true");
+    await obstacleEditor.getByLabel("New situation").fill("Starting late");
+    await obstacleEditor.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(obstacleEditor.getByRole("checkbox", { name: "Starting late" })).toHaveAttribute("aria-checked", "true");
+    await expect(obstacleEditor.getByRole("button", { name: "Save" })).toHaveAttribute("aria-disabled", "false");
+    await obstacleEditor.getByRole("button", { name: "Save" }).click();
+    await expect(obstacleCard.locator("[data-part=applies-to]")).toHaveText("Starting late");
+    await expect(obstacleCard).not.toHaveAttribute("data-blocked", "true");
+    await expect(page.locator("[data-sidebar]").getByText("Impediment situations")).toBeVisible();
 
     // The Sprints sidebar now reads Ready on every area → create a sprint.
     await page.goto("/sprints/health");
@@ -170,32 +194,62 @@ test.describe("golden path", () => {
     await page.getByTestId("intentions-toggle").click();
     await page.getByLabel(/^D2 /).fill("Move the second $600 before lunch.");
 
-    // F2: the sprint cannot start without impediments, a highest with WHEN → THEN, and cues.
+    // F2 / F15: the sprint cannot start without 1–3 impediments and a highest with THEN → RECOVERED WHEN; cues are optional.
     const start = page.getByRole("button", { name: "Start sprint" });
     await expect(start).toBeDisabled();
-    await expect(page.getByText("Select 1–5 impediments.")).toBeVisible();
-    // F9: the vision's obstacle is a global impediment with its rule, so it is offered here.
-    await page.getByTestId("wizard-impediments").getByRole("checkbox", { name: /Starting late/ }).click();
-    await expect(page.getByTestId("wizard-impediments").getByRole("checkbox", { name: /Starting late/ })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByText("Select 1–3 impediments.")).toBeVisible();
+    // F9: the vision's obstacle is a global impediment with its rule and, since the library step above, a situation.
+    const impSetup = page.getByTestId("wizard-impediments");
+    await impSetup.getByRole("checkbox", { name: /I notice myself delaying/ }).click();
+    await expect(impSetup.getByRole("checkbox", { name: /I notice myself delaying/ })).toHaveAttribute("aria-checked", "true");
+    await expect(impSetup.getByRole("checkbox", { name: /I notice myself delaying/ })).toContainText("applies to: Starting late");
     await expect(page.getByText("Designate the highest impediment.")).toBeVisible();
-    await page.getByTestId("wizard-highest").getByRole("radio", { name: /Starting late/ }).click();
-    // The rule written on the Vision tab is complete, so no proof inputs open.
+    await page.getByTestId("wizard-highest").getByRole("radio", { name: /I notice myself delaying/ }).click();
+    // The rule written on the Vision tab is complete, so no response inputs open; there is no WHEN input anywhere in it.
+    await expect(page.getByTestId("wizard-highest").getByLabel("THEN", { exact: true })).toHaveCount(0);
     await expect(page.getByTestId("wizard-highest").getByLabel("WHEN", { exact: true })).toHaveCount(0);
-    // A second impediment created inline still works (the create row is unchanged).
-    await page.getByLabel("Create a new impediment").fill("Phone distraction");
-    await page.getByTestId("wizard-impediments").getByRole("button", { name: "Create" }).click();
-    await expect(page.getByTestId("wizard-impediments").getByRole("checkbox", { name: "Phone distraction" })).toHaveAttribute("aria-checked", "true");
-    await expect(page.getByText("Select 1–3 execution cues.")).toBeVisible();
-    // F6: a cue is a WHEN → REMIND pair; Create waits for both.
+    // Cues are optional (F15): with the highest complete the sprint could start now.
+    await expect(page.getByText("Select 1–3 execution cues.")).toHaveCount(0);
+    await expect(page.getByText("Confirm the outcome advances the vision.")).toBeVisible();
+    // A second impediment created inline needs its WHEN and at least one situation.
+    const createImp = impSetup.getByRole("button", { name: "Create" });
+    await impSetup.getByLabel("WHEN", { exact: true }).fill("Phone distraction");
+    await expect(createImp).toBeDisabled();
+    await expect(impSetup.getByText("WHEN and at least one situation are needed.")).toBeVisible();
+    await impSetup.getByLabel("New situation").fill("Phone on the desk");
+    await impSetup.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(impSetup.getByRole("checkbox", { name: "Phone on the desk" })).toHaveAttribute("aria-checked", "true");
+    await expect(createImp).toBeEnabled();
+    await createImp.click();
+    await expect(impSetup.getByRole("checkbox", { name: /^Phone distraction/ })).toHaveAttribute("aria-checked", "true");
+    // Its response is still blank: it joined as a watched impediment, so the highest stays and the hint asks for its THEN.
+    await expect(page.getByTestId("wizard-highest").getByRole("radio", { name: /I notice myself delaying/ })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByText(/Phone distraction needs a THEN and a RECOVERED WHEN/)).toBeVisible();
+    await page.getByTestId("wizard-highest").getByRole("radio", { name: /^Phone distraction/ }).click();
+    await expect(page.getByText("The highest impediment needs THEN and a recovery criterion.")).toBeVisible();
+    await page.getByTestId("wizard-highest").getByLabel("THEN", { exact: true }).fill("I put the phone in the drawer");
+    await page.getByTestId("wizard-highest").getByLabel("RECOVERED WHEN").fill("The drawer is shut within a minute");
+    await expect(page.getByText("Confirm the outcome advances the vision.")).toBeVisible();
+    // Back to the vision's obstacle as the highest: Phone distraction's response is still typed only, so the hint returns.
+    await page.getByTestId("wizard-highest").getByRole("radio", { name: /I notice myself delaying/ }).click();
+    await expect(page.getByText(/Phone distraction needs a THEN and a RECOVERED WHEN/)).toBeVisible();
+    // Untick it: the sprint carries the obstacle alone.
+    await impSetup.getByRole("checkbox", { name: /^Phone distraction/ }).click();
+    await expect(page.getByText("Confirm the outcome advances the vision.")).toBeVisible();
+    // F6 / F15: a cue is a WHEN → REMIND pair with a situation; Create waits for all three.
     const cueSetup = page.getByTestId("wizard-cues");
     const createCue = cueSetup.getByRole("button", { name: "Create" });
     await cueSetup.getByLabel("REMIND").fill("Ask how much this pays");
     await expect(createCue).toBeDisabled();
     await cueSetup.getByLabel("WHEN", { exact: true }).fill("I schedule anything");
+    await expect(createCue).toBeDisabled();
+    await expect(cueSetup.getByText("WHEN, REMIND and at least one situation are needed.")).toBeVisible();
+    await cueSetup.getByLabel("New situation").fill("Scheduling");
+    await cueSetup.getByRole("button", { name: "Add", exact: true }).click();
     await expect(createCue).toBeEnabled();
     await createCue.click();
     await expect(cueSetup.getByRole("checkbox", { name: "Ask how much this pays" })).toHaveAttribute("aria-checked", "true");
-    await expect(cueSetup.getByRole("checkbox", { name: "Ask how much this pays" })).toContainText("WHEN I schedule anything");
+    await expect(cueSetup.getByRole("checkbox", { name: "Ask how much this pays" })).toContainText("WHEN I schedule anything · applies to: Scheduling");
     // F7: the first picked cue is the focus by default; the radio is there to change it.
     await expect(page.getByTestId("wizard-focus").getByRole("radio", { name: "Ask how much this pays" })).toHaveAttribute("aria-checked", "true");
     await expect(page.getByText("Confirm the outcome advances the vision.")).toBeVisible();
@@ -226,34 +280,40 @@ test.describe("golden path", () => {
     await expect(rows.nth(1)).toContainText("Tomorrow");
     await expect(rows.nth(2)).toContainText("Rest of the sprint");
 
-    // F2: the rail's Highest card with WHEN → THEN; the cues card with the focus.
+    // F2 / F15: the rail's Highest card with WHEN (its name) → THEN → RECOVERED WHEN → APPLIES TO; the cues card with the focus.
     const highest = page.getByTestId("highest-impediment");
-    await expect(highest.getByTestId("highest-name")).toHaveText("Starting late");
+    await expect(highest.getByTestId("highest-name")).toContainText("I notice myself delaying my first work block");
     expect(await highest.getByTestId("highest-name").evaluate((el) => getComputedStyle(el).fontSize)).toBe("16px");
-    await expect(highest.getByTestId("proof-when")).toHaveText("I notice myself delaying my first work block");
+    await expect(highest.getByTestId("proof-when")).toHaveCount(0);
     await expect(highest.getByTestId("proof-then")).toHaveText("I start a 10-minute timer on the smallest executable task");
     await expect(highest.getByTestId("proof-recover")).toHaveText("The timer is running within 10 minutes");
-    await expect(highest.getByTestId("also-watching")).toContainText("2 of 5");
+    await expect(highest.getByTestId("highest-situations")).toHaveText("Starting late");
+    await expect(highest.getByTestId("also-watching")).toContainText("1 of 3");
     await expect(page.getByTestId("sprint-items")).toContainText("1 of 3");
     await expect(page.getByTestId("sprint-items").getByText("Ask how much this pays")).toBeVisible();
     await expect(page.getByTestId("sprint-items").getByText("WHEN I schedule anything")).toBeVisible();
-    // F7: the focus cue carries the tag and no Remove.
+    await expect(page.getByTestId("sprint-items").getByTestId("cue-situations-line")).toContainText("Scheduling");
+    // F7 / F15: the focus cue carries the tag; as the sprint's only cue it can still be removed (0–3 cues).
     const focusRow = page.getByTestId("sprint-items").getByTestId("sprint-item").filter({ hasText: "Ask how much this pays" });
     await expect(focusRow.getByTestId("focus-tag")).toHaveText("FOCUS");
-    await expect(focusRow.getByRole("button", { name: /^Remove/ })).toHaveCount(0);
-    // F6: the Today Add-cue picker's create row is a WHEN + REMIND pair too.
+    await expect(focusRow.getByRole("button", { name: "Remove Ask how much this pays" })).toBeVisible();
+    // F6 / F15: the Today Add-cue picker's create row is a WHEN + REMIND pair with a situation tick too.
     await page.getByRole("button", { name: "Add cue" }).click();
     const picker = page.getByRole("dialog");
     const createInPicker = picker.getByRole("button", { name: "Create" });
     await picker.getByLabel("REMIND").fill("Close the laptop at nine");
     await expect(createInPicker).toHaveAttribute("aria-disabled", "true");
     await picker.getByLabel("WHEN", { exact: true }).fill("the clock shows 9 pm");
+    await expect(createInPicker).toHaveAttribute("aria-disabled", "true");
+    await picker.getByRole("checkbox", { name: "Scheduling" }).click();
     await expect(createInPicker).toHaveAttribute("aria-disabled", "false");
     await createInPicker.click();
     await expect(picker.getByRole("radio", { name: /Close the laptop at nine/ })).toHaveAttribute("aria-checked", "true");
     await picker.getByRole("button", { name: "Add to sprint" }).click();
     await expect(page.getByTestId("sprint-items")).toContainText("2 of 3");
     await expect(page.getByTestId("sprint-items").getByText("WHEN the clock shows 9 pm")).toBeVisible();
+    // With a second cue in the sprint the focus is guarded again.
+    await expect(focusRow.getByRole("button", { name: /^Remove/ })).toHaveCount(0);
     // F7: "Set as focus" moves the tag to the new cue and frees the old one.
     await page.getByRole("button", { name: "Set as focus: Close the laptop at nine" }).click();
     const newFocusRow = page.getByTestId("sprint-items").getByTestId("sprint-item").filter({ hasText: "Close the laptop at nine" });
@@ -370,23 +430,31 @@ test.describe("golden path", () => {
     await expect(today.locator("#close-hint")).toHaveText("Enter today's actual — zero is truthful");
     await today.getByLabel("Actual result").fill("600");
     await expect(confirm).toBeEnabled();
-    // F7: observations. The focus cue is asked first; the highest's occurrence opens the
-    // response questions, and the close waits for both answers.
-    const use = today.getByTestId("use-group");
-    await expect(use.getByRole("button").first()).toContainText("Ask how much this pays");
-    await expect(use.getByRole("button").first().getByTestId("focus-tag")).toHaveText("FOCUS");
+    // F15: observations per item. An impediment answered Yes asks which situations, then a
+    // recovery per ticked situation; a cue answered Yes asks which situations it applied to.
+    // The response-ran and cost questions are gone.
+    const impItem = today.getByTestId("impediment-item").filter({ hasText: "I notice myself delaying" });
+    await expect(impItem.getByTestId("highest-tag")).toHaveText("HIGHEST");
+    const cueItem = today.getByTestId("cue-item").filter({ hasText: "Ask how much this pays" });
+    await expect(cueItem.getByTestId("focus-tag")).toHaveText("FOCUS");
     await expect(today.getByTestId("response-group")).toHaveCount(0);
-    await today.getByTestId("occurrence-group").getByRole("button", { name: "Starting late" }).click();
-    await expect(today.getByTestId("response-group")).toBeVisible();
+    await expect(today.getByTestId("impact-group")).toHaveCount(0);
+    await impItem.getByRole("radio", { name: "Yes" }).click();
+    await expect(impItem.getByTestId("impediment-situations")).toBeVisible();
     await expect(confirm).toBeDisabled();
-    await expect(today.locator("#close-hint")).toHaveText("Did the response run?");
-    await today.getByTestId("response-group").getByRole("radio", { name: "Partially" }).click();
-    await expect(today.locator("#close-hint")).toHaveText("Did you recover?");
-    await expect(confirm).toBeDisabled();
-    await today.getByTestId("recovery-group").getByRole("radio", { name: "Yes" }).click();
+    await expect(today.locator("#close-hint")).toHaveText("Tick at least one situation for I notice myself delaying my first work block.");
+    await impItem.getByRole("checkbox", { name: "Starting late" }).click();
     await expect(confirm).toBeEnabled();
-    await today.getByTestId("impact-group").getByRole("radio", { name: "Some" }).click();
-    // Tasks are read-only while closing; the cue group stays untouched (stored as unanswered).
+    const recoveryRow = impItem.getByTestId("situation-recovery");
+    await expect(recoveryRow).toContainText("Starting late · Recovered?");
+    await recoveryRow.getByRole("radio", { name: "Yes" }).click();
+    await expect(recoveryRow.getByRole("radio", { name: "Yes" })).toHaveAttribute("aria-checked", "true");
+    await cueItem.getByRole("radio", { name: "Yes" }).click();
+    await expect(confirm).toBeDisabled();
+    await expect(today.locator("#close-hint")).toHaveText("Tick at least one situation for Ask how much this pays.");
+    await cueItem.getByRole("checkbox", { name: "Scheduling" }).click();
+    await expect(confirm).toBeEnabled();
+    // Tasks are read-only while closing; the second cue stays untouched (stored as unanswered).
     await expect(today.getByLabel("Task 1")).toBeDisabled();
     await today.getByLabel("Note").fill("The timer worked.");
     await confirm.click();
@@ -395,17 +463,16 @@ test.describe("golden path", () => {
     await expect(today).toHaveAttribute("data-state", "closed");
     await expect(page.getByTestId("closed-actual")).toHaveText("600");
     await expect(page.getByTestId("closed-actual")).toHaveAttribute("data-state", "at-or-above");
-    await expect(page.getByTestId("day-summary")).toHaveText("Showed up: Starting late · Response partially ran · recovered · Cost: some");
+    const summaryLine = "Showed up: I notice myself delaying my first work block (Starting late; recovered 1 of 1) · Cues used: Ask how much this pays (Scheduling)";
+    await expect(page.getByTestId("day-summary")).toHaveText(summaryLine);
     await expect(today.getByText("“The timer worked.”")).toBeVisible();
     await expect(page.getByTestId("day-locked")).toHaveText("Day closed · locked · tomorrow's target 572");
     const setup = page.getByTestId("setup-tomorrow");
     await expect(setup).toContainText("Set up tomorrow · Day 2");
-    // Untouched cues are offered; the focus cue never is.
+    // Untouched cues are offered; the focus cue never is; the highest never is.
     await expect(setup.getByTestId("quiet-cue")).toHaveCount(1);
     await expect(setup.getByTestId("quiet-cue")).toContainText("Close the laptop at nine");
-    // F9 golden path carries a second impediment (Phone distraction), untouched at close → offered.
-    await expect(setup.getByTestId("quiet-impediment")).toHaveCount(1);
-    await expect(setup.getByTestId("quiet-impediment")).toContainText("Phone distraction");
+    await expect(setup.getByTestId("quiet-impediment")).toHaveCount(0);
     await setup.getByRole("button", { name: "Remove Close the laptop at nine" }).click();
     await expect(setup.getByTestId("quiet-cue")).toHaveCount(0);
     await expect(page.getByTestId("sprint-items")).toContainText("1 of 3");
@@ -415,24 +482,30 @@ test.describe("golden path", () => {
     await expect(page.getByTestId("streak-label")).toHaveText("1-day streak");
     await expect(page.getByTestId("sprint-progress")).toContainText("600 of 8,000 USD");
     await expect(page.getByTestId("sprint-progress").locator('.j-seg[data-day="1"]')).toHaveAttribute("data-closed", "true");
-    // F7: the day row carries the highest's answers and snapshot; one observation row per
-    // offered item, the untouched cue group as unanswered.
-    const dayRow = await admin.from("sprint_days").select("id, response, recovered, impact, proof_recover").eq("user_id", user.id).eq("day_index", 1).single();
-    expect(dayRow.data).toMatchObject({ response: "partially", recovered: "yes", impact: "some", proof_recover: "The timer is running within 10 minutes" });
-    const impRows = await admin.from("day_impediment_observations").select("name, occurred, was_highest").eq("sprint_day_id", dayRow.data!.id).order("name");
-    expect(impRows.data).toEqual([
-      { name: "Phone distraction", occurred: "no", was_highest: false },
-      { name: "Starting late", occurred: "yes", was_highest: true },
-    ]);
-    const cueRows = await admin.from("day_cue_observations").select("name, used, was_focus").eq("sprint_day_id", dayRow.data!.id).order("name");
-    expect(cueRows.data).toEqual([
-      { name: "Ask how much this pays", used: "unanswered", was_focus: true },
+    // F15: the day row names the highest and nothing else (the legacy answer columns stay
+    // null); one observation row per offered item with the response snapshot on it, one
+    // situation row per offered situation, the untouched cue as unanswered.
+    const dayRow = await admin.from("sprint_days").select("id, response, recovered, impact, proof_recover, highest_impediment_id").eq("user_id", user.id).eq("day_index", 1).single();
+    expect(dayRow.data).toMatchObject({ response: null, recovered: null, impact: null, proof_recover: null });
+    expect(dayRow.data!.highest_impediment_id).not.toBeNull();
+    const impRows = await admin.from("day_impediment_observations").select("id, name, occurred, was_highest, proof_recover").eq("sprint_day_id", dayRow.data!.id).order("name");
+    expect(impRows.data!.map((r) => ({ name: r.name, occurred: r.occurred, was_highest: r.was_highest, proof_recover: r.proof_recover }))).toEqual([{ name: "I notice myself delaying my first work block", occurred: "yes", was_highest: true, proof_recover: "The timer is running within 10 minutes" }]);
+    const sitRows = await admin.from("day_impediment_situation_observations").select("name, occurred, recovered").eq("observation_id", impRows.data![0].id);
+    expect(sitRows.data).toEqual([{ name: "Starting late", occurred: true, recovered: "yes" }]);
+    const cueRows = await admin.from("day_cue_observations").select("id, name, used, was_focus").eq("sprint_day_id", dayRow.data!.id).order("name");
+    expect(cueRows.data!.map((r) => ({ name: r.name, used: r.used, was_focus: r.was_focus }))).toEqual([
+      { name: "Ask how much this pays", used: "yes", was_focus: true },
       { name: "Close the laptop at nine", used: "unanswered", was_focus: false },
+    ]);
+    const cueSitRows = await admin.from("day_cue_situation_observations").select("name, applied").in("observation_id", cueRows.data!.map((r) => r.id)).order("name");
+    expect(cueSitRows.data).toEqual([
+      { name: "Scheduling", applied: true },
+      { name: "Scheduling", applied: false },
     ]);
     // Reload: still locked; intention read-only, tasks read-only, no close button, no "Set up tomorrow".
     await page.reload();
     await expect(page.getByTestId("today-card")).toHaveAttribute("data-state", "closed");
-    await expect(page.getByTestId("day-summary")).toHaveText("Showed up: Starting late · Response partially ran · recovered · Cost: some");
+    await expect(page.getByTestId("day-summary")).toHaveText(summaryLine);
     await expect(page.getByTestId("intention-locked")).toHaveText("Today I will move the $600 before lunch.");
     await expect(page.getByLabel("Daily intention")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Close the day" })).toHaveCount(0);
@@ -499,36 +572,51 @@ test.describe("golden path", () => {
     // it is the sprint's highest impediment (rule 20), and nothing changed.
     await page.goto("/vision/impediments");
     await expect(page.locator("[data-sidebar]").getByText("Impediments")).toBeVisible();
-    const item = page.getByTestId("library-item").filter({ hasText: "Starting late" });
-    // F6: the card shows the five labelled parts and the three-state usage line.
+    const item = page.getByTestId("library-item").filter({ hasText: "I notice myself delaying my first work block" });
+    // F6 / F15: the card shows the labelled parts (WHEN is the name), APPLIES TO, and the three-state usage line.
     await expect(item.getByText("In an active sprint")).toBeVisible();
-    await expect(item.locator("[data-part=situation]")).toHaveText("Starting late");
+    await expect(item.locator("[data-part=when]")).toHaveText("I notice myself delaying my first work block");
     await expect(item.locator("[data-part=interferes]")).toHaveText("what it does to your day");
     await expect(item.locator("[data-part=recovered]")).toHaveText("The timer is running within 10 minutes");
+    await expect(item.locator("[data-part=applies-to]")).toHaveText("Starting late");
     await expect(page.getByTestId("library-count")).toHaveText("2 · 0 archived");
     await item.getByRole("button", { name: "Archive" }).click();
     // F9: the vision's obstacle is guarded before any sprint rule is consulted.
     await expect(item.getByRole("alert")).toContainText("This impediment is the vision's main obstacle.");
     await page.reload();
-    await expect(page.getByTestId("library-item").filter({ hasText: "Starting late" })).toBeVisible();
+    await expect(page.getByTestId("library-item").filter({ hasText: "I notice myself delaying my first work block" })).toBeVisible();
     await page.getByRole("button", { name: /Show archived/ }).click();
     await expect(page.getByText("Nothing archived yet.")).toBeVisible();
 
+    // F15: the situations library — the one named inline is here, applied by its impediment,
+    // in an active sprint, so it can be archived only if the sprint keeps another one.
+    await page.goto("/vision/impediment-situations");
+    const situationsPage = page.getByTestId("situations-page");
+    await expect(situationsPage.getByTestId("library-count")).toHaveText("2 · 0 archived");
+    const startingLate = situationsPage.getByTestId("situation-item").filter({ hasText: "Starting late" });
+    await expect(startingLate.getByTestId("usage-line")).toHaveText("Applied by 1 impediment · in an active sprint");
+    await startingLate.getByRole("button", { name: "Archive" }).click();
+    await expect(startingLate.getByRole("alert")).toContainText("one of its items would be left without a situation");
+    await noOverflow();
+
     // An unused cue can be deleted; a used one only archived (rule 19).
     await page.goto("/vision/cues");
-    // F6: the library Add form needs WHEN and REMIND; the hint names both until they are filled.
+    // F6 / F15: the library Add form needs WHEN, REMIND and a situation; the hint names them until they are filled.
     const addCue = page.getByTestId("library-add");
-    const addButton = page.getByRole("button", { name: "Add", exact: true });
+    const addButton = addCue.getByRole("button", { name: "Add", exact: true }).last();
     await addCue.getByLabel("REMIND").fill("Temporary cue");
     await expect(addButton).toHaveAttribute("aria-disabled", "true");
-    await expect(addCue.getByText("WHEN and REMIND are both needed.")).toBeVisible();
+    await expect(addCue.getByText("WHEN, REMIND and at least one situation are needed.")).toBeVisible();
     await addCue.getByLabel("WHEN", { exact: true }).fill("I open the calendar");
+    await expect(addButton).toHaveAttribute("aria-disabled", "true");
+    await addCue.getByRole("checkbox", { name: "Scheduling" }).click();
     await expect(addButton).toHaveAttribute("aria-disabled", "false");
     await addButton.click();
     const temp = page.getByTestId("library-item").filter({ hasText: "Temporary cue" });
     await expect(temp.getByText("Unused")).toBeVisible();
     await expect(temp.locator("[data-part=when]")).toHaveText("I open the calendar");
     await expect(temp.locator("[data-part=remind]")).toHaveText("Temporary cue");
+    await expect(temp.locator("[data-part=applies-to]")).toHaveText("Scheduling");
     await temp.getByRole("button", { name: "Delete" }).click();
     await expect(temp).toHaveCount(0);
     const used = page.getByTestId("library-item").filter({ hasText: "Ask how much this pays" });
@@ -544,8 +632,22 @@ test.describe("golden path", () => {
     const sprint = await insertSprintRows(admin, user.id, { startDate: addDays(todayUtc, -2), tz: "UTC", target: 10_000, outcome: "Bank the side income", mantra: "Small deposits, every day." });
     // F7: memberships dated from day 1, so the backfill dialog offers one cue (the focus) and one impediment (the highest).
     const seededCue = await admin.from("cues").insert({ user_id: user.id, name: "Check the balance first", cue_when: "I open the banking app" }).select("id").single();
-    const seededImp = await admin.from("impediments").insert({ user_id: user.id, name: "Impulse spend", proof_when: "I see a deal", proof_then: "I wait a day", proof_recover: "No purchase that day" }).select("id").single();
+    const seededImp = await admin.from("impediments").insert({ user_id: user.id, name: "I see a deal", proof_then: "I wait a day", proof_recover: "No purchase that day" }).select("id").single();
     if (seededCue.error || seededImp.error) throw new Error((seededCue.error ?? seededImp.error)!.message);
+    // F15: every member applies to a situation.
+    const sits = await admin
+      .from("situations")
+      .insert([
+        { user_id: user.id, kind: "cue", name: "Banking app" },
+        { user_id: user.id, kind: "impediment", name: "Impulse spend" },
+      ])
+      .select("id, kind");
+    if (sits.error) throw new Error(sits.error.message);
+    const attach = await Promise.all([
+      admin.from("cue_situations").insert({ user_id: user.id, cue_id: seededCue.data.id, situation_id: sits.data.find((s) => s.kind === "cue")!.id }),
+      admin.from("impediment_situations").insert({ user_id: user.id, impediment_id: seededImp.data.id, situation_id: sits.data.find((s) => s.kind === "impediment")!.id }),
+    ]);
+    for (const a of attach) if (a.error) throw new Error(a.error.message);
     const addedAt = `${addDays(todayUtc, -2)}T00:00:00Z`;
     const memberships = await Promise.all([
       admin.from("sprint_cues").insert({ sprint_id: sprint.sprintId, user_id: user.id, cue_id: seededCue.data.id, is_focus: true, added_at: addedAt }),
@@ -572,11 +674,11 @@ test.describe("golden path", () => {
     await expect(dialog.getByTestId("close-note")).toContainText("never repairs the streak");
     await dialog.getByLabel("Actual result").fill("50");
     await dialog.getByRole("button", { name: "Continue" }).click();
-    // F7: None on both groups; nothing blocks the close and every offered item is stored as `no`.
+    // F7 / F15: No on both items; nothing blocks the close, every offered item is stored as `no` and no situation is ticked.
     await expect(dialog.getByTestId("use-group").getByTestId("focus-tag")).toHaveText("FOCUS");
-    await dialog.getByTestId("use-none").click();
-    await dialog.getByTestId("occurrence-none").click();
-    await expect(dialog.getByTestId("response-group")).toHaveCount(0);
+    await dialog.getByTestId("cue-item").getByRole("radio", { name: "No" }).click();
+    await dialog.getByTestId("impediment-item").getByRole("radio", { name: "No" }).click();
+    await expect(dialog.getByTestId("impediment-situations")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Close the day" }).click();
     await expect(page.getByRole("dialog").getByText("Day 1 backfilled")).toBeVisible();
     await expect(page.getByRole("dialog").getByTestId("result-streak")).toHaveText("0 days · unchanged by a backfill");
@@ -599,10 +701,12 @@ test.describe("golden path", () => {
     await expect(page.getByTestId("streak-label")).toHaveText("No streak");
     const closed = await admin.from("sprint_days").select("id, closed_on_time, actual, response").eq("sprint_id", sprint.sprintId).eq("day_index", 1).single();
     expect(closed.data).toMatchObject({ closed_on_time: false, actual: 5000, response: null });
-    const noCue = await admin.from("day_cue_observations").select("name, used, was_focus").eq("sprint_day_id", closed.data!.id);
-    expect(noCue.data).toEqual([{ name: "Check the balance first", used: "no", was_focus: true }]);
-    const noImp = await admin.from("day_impediment_observations").select("name, occurred, was_highest").eq("sprint_day_id", closed.data!.id);
-    expect(noImp.data).toEqual([{ name: "Impulse spend", occurred: "no", was_highest: true }]);
+    const noCue = await admin.from("day_cue_observations").select("id, name, used, was_focus").eq("sprint_day_id", closed.data!.id);
+    expect(noCue.data!.map((r) => ({ name: r.name, used: r.used, was_focus: r.was_focus }))).toEqual([{ name: "Check the balance first", used: "no", was_focus: true }]);
+    const noImp = await admin.from("day_impediment_observations").select("id, name, occurred, was_highest").eq("sprint_day_id", closed.data!.id);
+    expect(noImp.data!.map((r) => ({ name: r.name, occurred: r.occurred, was_highest: r.was_highest }))).toEqual([{ name: "I see a deal", occurred: "no", was_highest: true }]);
+    const noSit = await admin.from("day_impediment_situation_observations").select("name, occurred, recovered").eq("observation_id", noImp.data![0].id);
+    expect(noSit.data).toEqual([{ name: "Impulse spend", occurred: false, recovered: null }]);
   });
 
   test("F10: finish a sprint → the gate → the postmortem → the kit pre-fills the next sprint", async ({ page }) => {
@@ -629,10 +733,26 @@ test.describe("golden path", () => {
     const cue = await admin.from("cues").insert({ user_id: user.id, name: "Shoes by the door", cue_when: "I get home" }).select("id").single();
     const imp = await admin
       .from("impediments")
-      .insert({ user_id: user.id, name: "Late meetings", proof_when: "a meeting runs past 6", proof_then: "I run the short loop", proof_recover: "I am out of the door within 20 minutes" })
+      .insert({ user_id: user.id, name: "Late meetings", proof_then: "I run the short loop", proof_recover: "I am out of the door within 20 minutes" })
       .select("id")
       .single();
     if (cue.error || imp.error) throw new Error((cue.error ?? imp.error)!.message);
+    // F15: the impediment applies to one situation; every occurrence below is that situation.
+    const sits = await admin
+      .from("situations")
+      .insert([
+        { user_id: user.id, kind: "impediment", name: "A meeting runs past 6" },
+        { user_id: user.id, kind: "cue", name: "Coming home" },
+      ])
+      .select("id, kind");
+    if (sits.error) throw new Error(sits.error.message);
+    const impSit = sits.data.find((s) => s.kind === "impediment")!.id;
+    const cueSit = sits.data.find((s) => s.kind === "cue")!.id;
+    const attach = await Promise.all([
+      admin.from("impediment_situations").insert({ user_id: user.id, impediment_id: imp.data.id, situation_id: impSit }),
+      admin.from("cue_situations").insert({ user_id: user.id, cue_id: cue.data.id, situation_id: cueSit }),
+    ]);
+    for (const a of attach) if (a.error) throw new Error(a.error.message);
     const addedAt = `${start}T00:00:00Z`;
     const members = await Promise.all([
       admin.from("sprint_cues").insert({ sprint_id: sprint.sprintId, user_id: user.id, cue_id: cue.data.id, is_focus: true, added_at: addedAt }),
@@ -645,32 +765,33 @@ test.describe("golden path", () => {
     const task = await admin.from("tasks").insert({ sprint_day_id: sprint.dayIds[0], user_id: user.id, text: "Lay out the kit", done: true });
     if (task.error) throw new Error(task.error.message);
 
-    // Eight closed days: the highest showed up on four of them, so the verdict is asked.
-    // Days 9–14 were never closed and stay missed — finishing does not cancel a past day.
+    // Eight closed days: the highest showed up on four of them (recovered on two), so the
+    // verdict is asked. Days 9–14 were never closed and stay missed — finishing does not
+    // cancel a past day.
     const actuals = [5_000, 6_000, 7_000, 8_000, 20_000, 15_000, 13_000, 12_000]; // 860 USD in minor units
     for (let i = 0; i < actuals.length; i++) {
       const occurred = i < 4 ? "yes" : "no";
       const day = await admin
         .from("sprint_days")
-        .update({
-          actual: actuals[i],
-          closed_at: new Date().toISOString(),
-          closed_on_time: true,
-          highest_impediment_id: imp.data.id,
-          proof_when: "a meeting runs past 6",
-          proof_then: "I run the short loop",
-          proof_recover: "I am out of the door within 20 minutes",
-          ...(i < 4 ? { response: i < 2 ? "yes" : "no", recovered: i % 2 === 0 ? "yes" : "no", impact: "some" } : {}),
-        })
+        .update({ actual: actuals[i], closed_at: new Date().toISOString(), closed_on_time: true, highest_impediment_id: imp.data.id })
         .eq("id", sprint.dayIds[i])
         .select("id")
         .single();
       if (day.error) throw new Error(day.error.message);
-      const rows = await Promise.all([
-        admin.from("day_impediment_observations").insert({ sprint_day_id: day.data.id, user_id: user.id, impediment_id: imp.data.id, name: "Late meetings", occurred, was_highest: true }),
-        admin.from("day_cue_observations").insert({ sprint_day_id: day.data.id, user_id: user.id, cue_id: cue.data.id, name: "Shoes by the door", used: i % 2 === 0 ? "yes" : "no", was_focus: true }),
+      const [io, co] = await Promise.all([
+        admin
+          .from("day_impediment_observations")
+          .insert({ sprint_day_id: day.data.id, user_id: user.id, impediment_id: imp.data.id, name: "Late meetings", occurred, was_highest: true, proof_then: "I run the short loop", proof_recover: "I am out of the door within 20 minutes" })
+          .select("id")
+          .single(),
+        admin.from("day_cue_observations").insert({ sprint_day_id: day.data.id, user_id: user.id, cue_id: cue.data.id, name: "Shoes by the door", used: i % 2 === 0 ? "yes" : "no", was_focus: true }).select("id").single(),
       ]);
-      for (const r of rows) if (r.error) throw new Error(r.error.message);
+      if (io.error || co.error) throw new Error((io.error ?? co.error)!.message);
+      const sitRows = await Promise.all([
+        admin.from("day_impediment_situation_observations").insert({ observation_id: io.data.id, user_id: user.id, situation_id: impSit, name: "A meeting runs past 6", occurred: i < 4, recovered: i < 4 ? (i % 2 === 0 ? "yes" : "no") : null }),
+        admin.from("day_cue_situation_observations").insert({ observation_id: co.data.id, user_id: user.id, situation_id: cueSit, name: "Coming home", applied: i % 2 === 0 }),
+      ]);
+      for (const r of sitRows) if (r.error) throw new Error(r.error.message);
     }
     await signInViaMagicLink(page, user.email);
     await page.goto("/sprints/relationships");
@@ -695,10 +816,16 @@ test.describe("golden path", () => {
     await expect(page.getByTestId("result-total")).toContainText("860");
     await expect(page.getByTestId("result-meta")).toContainText("61% · under · 8 days closed · 6 not closed · best streak 8");
     await expect(pm.getByTestId("card-impact")).toBeVisible();
-    await expect(pm.getByTestId("card-followthrough")).toContainText("4 occurrences · 4 answered");
-    await expect(pm.getByTestId("card-recovery")).toBeVisible();
+    await expect(pm.getByTestId("card-followthrough")).toHaveCount(0);
+    await expect(pm.getByTestId("card-recovery")).toContainText("4 occurrences · 4 answered");
+    await expect(pm.getByTestId("card-recovery")).toContainText("50% recovered");
+    // F15: the situation line under the item, in the impact card and the recovery card.
+    await expect(pm.getByTestId("card-impact").getByTestId("situation-line")).toContainText("A meeting runs past 6");
+    await expect(pm.getByTestId("card-impact").getByTestId("situation-line")).toContainText("4 occurrences · 50% recovered");
     await expect(pm.getByTestId("card-cues")).toContainText("Shoes by the door");
-    await expect(pm.getByTestId("proof-observation")).toContainText("Showed up on 4 logged days · response ran 2 of 4 answered");
+    await expect(pm.getByTestId("card-cues").getByTestId("situation-line")).toContainText("Coming home");
+    await expect(pm.getByTestId("card-cues").getByTestId("situation-line")).toContainText("applied on 4 days");
+    await expect(pm.getByTestId("proof-observation")).toContainText("Showed up on 4 logged days · recovered 2 of 4 answered");
     await noOverflow();
 
     // The one place a closed day's tasks are readable.
@@ -772,15 +899,16 @@ test.describe("golden path", () => {
     // This sprint's closed days DO clear n≥3, so the kit speaks — and every number in it
     // is one the cards above print. Asserted as the exact sentence set: a loose regex here
     // passed while the expected branch was wrong, which is worse than no assertion.
-    // The response ran on 2 of the 4 answered occurrences, below the 3 a recovery figure
-    // needs, so the sentence carries no recovery clause (FIX_LOG 2026-09-11: the old one
-    // printed the overall 50%, which counted the recovery on a day the response did not run).
+    // F15: the recovery sentence quotes the recovered share of the four answered situation
+    // occurrences (2 of 4), the same rate the recovery card's tail shows.
     await expect(page.getByTestId("suggested-kit")).toContainText(
       "Keep Late meetings as the highest impediment; days it shows up run 75 points lower. " +
-        "The response for Late meetings runs 50% of the time.",
+        "You recover from Late meetings 50% of the time.",
     );
-    await expect(page.getByTestId("suggested-kit")).not.toContainText("recovers");
+    await expect(page.getByTestId("suggested-kit")).not.toContainText("runs");
     await expect(page.getByTestId("suggested-kit")).not.toContainText("Not enough logged days yet");
+    await expect(page.getByTestId("card-followthrough")).toHaveCount(0);
+    await expect(page.getByTestId("card-impact").getByTestId("situation-line")).toContainText("A meeting runs past 6");
     await noOverflow();
 
     // A scope with no finished sprint states the reason rather than emptying the page.

@@ -1,8 +1,8 @@
 import type { InsightRow } from "@/components/insights/InsightCard";
-import type { CueRow, FollowThroughRow, ImpactRow, RecoveryRow } from "@/lib/data";
+import type { CueRow, ImpactRow, ItemKind, RecoveryRow, SituationRow } from "@/lib/data";
 
 /**
- * The four insight cards' copy and bar geometry, kept out of the components so the
+ * The insight cards' copy and bar geometry, kept out of the components so the
  * thresholds and the wording are unit-testable without rendering.
  *
  * Two rules run through all of it. Every comparison prints both group sizes, so a
@@ -31,29 +31,20 @@ function pts(delta: number | null): string {
 }
 
 export function impactRows(rows: ImpactRow[]): InsightRow[] {
-  return rows.map((r) => {
-    const felt = [
-      r.felt_a_lot ? `${r.felt_a_lot} a lot` : "",
-      r.felt_some ? `${r.felt_some} some` : "",
-      r.felt_nothing ? `${r.felt_nothing} nothing` : "",
-    ].filter(Boolean);
-    const short = r.enough ? "" : `Needs ${MIN_DAYS} days with and ${MIN_DAYS} without · has ${r.present_days} and ${r.absent_days}`;
-    const note = [short, felt.length ? `Felt: ${felt.join(", ")}` : ""].filter(Boolean).join(" · ");
-    return {
-      key: r.item_id,
-      name: r.name,
-      tag: r.is_highest ? "HIGHEST" : null,
-      tail: pts(r.delta_pts),
-      tailTone: r.delta_pts !== null && r.delta_pts <= -10 ? "bad" : undefined,
-      sub: `Present on ${r.present_days} of ${plural(r.logged_days, "logged day")}`,
-      bars: [
-        { value: attainment(r.median_present), label: "attainment when present", pct: width(r.median_present), tone: "bad" as const },
-        { value: attainment(r.median_absent), label: "attainment when absent", pct: width(r.median_absent) },
-      ],
-      note: note || null,
-      warn: !r.enough,
-    };
-  });
+  return rows.map((r) => ({
+    key: r.item_id,
+    name: r.name,
+    tag: r.is_highest ? "HIGHEST" : null,
+    tail: pts(r.delta_pts),
+    tailTone: r.delta_pts !== null && r.delta_pts <= -10 ? ("bad" as const) : undefined,
+    sub: `Present on ${r.present_days} of ${plural(r.logged_days, "logged day")}`,
+    bars: [
+      { value: attainment(r.median_present), label: "attainment when present", pct: width(r.median_present), tone: "bad" as const },
+      { value: attainment(r.median_absent), label: "attainment when absent", pct: width(r.median_absent) },
+    ],
+    note: r.enough ? null : `Needs ${MIN_DAYS} days with and ${MIN_DAYS} without · has ${r.present_days} and ${r.absent_days}`,
+    warn: !r.enough,
+  }));
 }
 
 export function cueRows(rows: CueRow[]): InsightRow[] {
@@ -73,59 +64,52 @@ export function cueRows(rows: CueRow[]): InsightRow[] {
   }));
 }
 
-export function followThroughRows(rows: FollowThroughRow[]): InsightRow[] {
+/**
+ * F15: recovery per impediment, over the situations it showed up in. A row exists for
+ * every impediment that showed up at all; the rate needs MIN_DAYS answered recoveries.
+ */
+export function recoveryRows(rows: RecoveryRow[]): InsightRow[] {
   return rows
     .filter((r) => r.occurrences > 0)
     .map((r) => {
-      const extra = [r.partially ? `${r.partially} partially` : "", r.unsure ? `${r.unsure} unsure` : ""].filter(Boolean);
-      const short = r.enough ? "" : `Needs ${MIN_DAYS} answered occurrences · has ${r.answered}`;
+      const short = r.enough ? "" : `Needs ${MIN_DAYS} answered recoveries · has ${r.answered}`;
+      const blank = r.occurrences - r.answered;
+      const left = blank > 0 ? `${plural(blank, "occurrence")} left blank` : "";
       return {
         key: r.item_id,
         name: r.name,
-        tail: r.rate === null ? "Not enough data" : `${r.rate}% ran`,
+        tag: r.is_highest ? "HIGHEST" : null,
+        tail: r.rate === null ? "Not enough data" : `${r.rate}% recovered`,
         tailTone: r.rate === null ? undefined : r.rate >= 70 ? ("good" as const) : r.rate < 40 ? ("bad" as const) : undefined,
-        sub: r.proof_then ? `THEN ${r.proof_then}` : "No THEN was recorded for this sprint",
+        sub: r.proof_recover ? `Recovered when ${r.proof_recover}` : "No recovery criterion was recorded for this sprint",
         bars: [
-          { value: String(r.ran), label: "ran the response", pct: r.answered ? (r.ran / r.answered) * 100 : 0, tone: "good" as const },
-          { value: String(r.didnt), label: "didn't run it", pct: r.answered ? (r.didnt / r.answered) * 100 : 0, tone: "bad" as const },
+          { value: `${r.recovered} of ${r.answered}`, label: "recovered", pct: r.answered ? (r.recovered / r.answered) * 100 : 0, tone: "good" as const },
+          { value: `${r.didnt} of ${r.answered}`, label: "didn't recover", pct: r.answered ? (r.didnt / r.answered) * 100 : 0, tone: "bad" as const },
         ],
-        note: [short, ...extra].filter(Boolean).join(" · ") || null,
+        note: [short, left].filter(Boolean).join(" · ") || null,
         warn: !r.enough,
       };
     });
 }
 
-export function recoveryRows(rows: RecoveryRow[]): InsightRow[] {
+/**
+ * F15: the situation lines under an item's card. An impediment's situation reads
+ * "4 occurrences · 50% recovered" (or "Not enough data" under MIN_DAYS answered
+ * recoveries); a cue's reads "applied on 6 days". A situation the day never offered has
+ * no row, and an item with no rows gets no lines.
+ */
+export function breakdownLines(rows: SituationRow[], itemId: string, kind: ItemKind): { name: string; text: string }[] {
   return rows
-    .filter((r) => r.answered > 0 || r.with_response > 0 || r.without_response > 0)
-    .map((r) => {
-      const short = r.enough ? "" : `Needs ${MIN_DAYS} answered responses · has ${r.answered}`;
-      const outcome = r.outcome_enough
-        ? `Attainment ${attainment(r.median_recovered)} when recovered vs ${attainment(r.median_not)} when not`
-        : "";
-      return {
-        key: r.item_id,
-        name: r.name,
-        tail: r.rate === null ? "Not enough data" : `${r.rate}% recovered`,
-        tailTone: r.rate === null ? undefined : r.rate >= 70 ? ("good" as const) : r.rate < 40 ? ("bad" as const) : undefined,
-        sub: r.proof_recover ? `Recovered when ${r.proof_recover}` : "No recovery criterion was recorded for this sprint",
-        bars: [
-          {
-            value: `${r.with_recovered} of ${r.with_response}`,
-            label: "recovered with the response",
-            pct: r.with_response ? (r.with_recovered / r.with_response) * 100 : 0,
-            tone: "good" as const,
-          },
-          {
-            value: `${r.without_recovered} of ${r.without_response}`,
-            label: "recovered without it",
-            pct: r.without_response ? (r.without_recovered / r.without_response) * 100 : 0,
-          },
-        ],
-        note: [short, outcome].filter(Boolean).join(" · ") || null,
-        warn: !r.enough,
-      };
-    });
+    .filter((r) => r.item_id === itemId && r.kind === kind)
+    .map((r) => ({
+      name: r.situation_name,
+      text:
+        kind === "cue"
+          ? `applied on ${plural(r.occurrences, "day")}`
+          : r.occurrences === 0
+            ? "never showed up"
+            : `${plural(r.occurrences, "occurrence")} · ${r.enough && r.rate !== null ? `${r.rate}% recovered` : "Not enough data"}`,
+    }));
 }
 
 /**

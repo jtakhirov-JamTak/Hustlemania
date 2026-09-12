@@ -15,7 +15,7 @@ import { addDays, localDateIn } from "@/lib/sprintDay";
 export type SetupStep = 1 | 2 | 3;
 
 const STEP_NAMES = ["Vision", "Obstacle", "Rule"];
-const TITLES: Record<SetupStep, string> = { 1: "Define your vision", 2: "Identify the main obstacle", 3: "Choose a WHEN → THEN guiding rule" };
+const TITLES: Record<SetupStep, string> = { 1: "Define your vision", 2: "Identify the main obstacle", 3: "Choose a THEN → RECOVERED WHEN guiding rule" };
 
 /**
  * F9: the three annual steps. Each step saves on continue through its own function and
@@ -62,8 +62,7 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
   const [newName, setNewName] = useState("");
   const [newExplanation, setNewExplanation] = useState("");
 
-  // Step 3
-  const [when, setWhen] = useState(obstacle?.proof_when ?? "");
+  // Step 3 (F15: WHEN is the obstacle's name; the rule adds THEN and RECOVERED WHEN)
   const [then, setThen] = useState(obstacle?.proof_then ?? "");
   const [recover, setRecover] = useState(obstacle?.proof_recover ?? "");
 
@@ -80,8 +79,8 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
         ? !pickedId && !newName.trim()
           ? "Pick or name one obstacle."
           : null
-        : !when.trim() || !then.trim() || !recover.trim()
-          ? "WHEN, THEN and the recovery criterion are all required."
+        : !then.trim() || !recover.trim()
+          ? "THEN and the recovery criterion are both required."
           : null;
   const blocked = hint !== null || pending;
 
@@ -94,7 +93,7 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
           ? await callAction(() => saveVision({ body, deadline, proof, meaning, baseline }))
           : step === 2
             ? await callAction(() => setVisionObstacle({ impedimentId: pickedId, name: pickedId ? "" : newName, explanation: pickedId ? "" : newExplanation }))
-            : await callAction(() => setVisionRule({ when, then, recover }));
+            : await callAction(() => setVisionRule({ when: obstacle?.name ?? "", then, recover }));
       if (res.error) {
         setError(res.error);
         return;
@@ -174,7 +173,7 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
 
         {step === 2 ? (
           <>
-            <div className="v-prompt">What most often pulls you off that course? Pick a global impediment or name a new one.</div>
+            <div className="v-prompt">What most often pulls you off that course? Pick a global impediment or name the moment you will recognise it.</div>
             <div className="v-options" role="radiogroup" aria-label="Global impediments">
               {impediments.map((i) => (
                 <OptionRow
@@ -182,7 +181,7 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
                   single
                   on={pickedId === i.id}
                   label={i.name}
-                  tag={i.proof_when && i.proof_then ? "has WHEN → THEN" : null}
+                  tag={i.proof_then && i.proof_recover ? "has THEN → RECOVERED" : null}
                   onPick={() => {
                     setPickedId(i.id);
                     setNewName("");
@@ -195,7 +194,7 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
             <div className="v-field-label">{impediments.length ? "Or create a new impediment" : "Create the impediment"}</div>
             <div className="proof-grid v-grid">
               <label htmlFor="obstacle-name" className="label-accent proof-label">
-                SITUATION
+                WHEN
               </label>
               <input
                 id="obstacle-name"
@@ -205,8 +204,8 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
                   setNewName(e.target.value);
                   if (e.target.value) setPickedId(null);
                 }}
-                placeholder="e.g. Saying yes to one-off projects"
-                aria-label="Situation"
+                placeholder="e.g. a one-off request lands in my inbox"
+                aria-label="When"
               />
               <label htmlFor="obstacle-explanation" className="label-accent proof-label">
                 INTERFERES
@@ -223,27 +222,29 @@ export function VisionSetup({ step, active, impediments }: { step: SetupStep; ac
                 aria-label="Interferes"
               />
             </div>
-            <div className="v-note">Same card as any impediment in the library, saved with global scope so every sprint can watch it. The WHEN → THEN comes next.</div>
+            <div className="v-note">
+              Same card as any impediment in the library, saved with global scope so every sprint can watch it. The THEN → RECOVERED WHEN comes next; the situations it applies to are
+              ticked on the Impediments page before a sprint can watch it.
+            </div>
           </>
         ) : null}
 
         {step === 3 ? (
           <>
-            <div className="v-prompt">The one move you make the moment {obstacleName} shows up.</div>
+            <div className="v-prompt">
+              The one move you make the moment <strong>WHEN {obstacleName}</strong>.
+            </div>
             <ProofInputs
               idPrefix="rule"
-              when={when}
               then={then}
               recover={recover}
-              onWhen={setWhen}
               onThen={setThen}
               onRecover={setRecover}
-              placeholderWhen="a one-off request lands in my inbox"
               placeholderThen="I reply with the retainer offer or a no, within the hour"
               placeholderRecover="Observable sign you're back on track, e.g. I'm on the task within 15 minutes"
               className="v-grid"
             />
-            <div className="v-note">Saved on {obstacleName} as its WHEN → THEN. Any sprint that watches it uses this same response.</div>
+            <div className="v-note">Saved on {obstacleName} as its THEN → RECOVERED WHEN. Any sprint that watches it uses this same response.</div>
           </>
         ) : null}
 

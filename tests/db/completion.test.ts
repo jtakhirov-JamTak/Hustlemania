@@ -12,9 +12,11 @@ import {
   moneySprintArgs,
   rpc,
   seedItems,
+  situationsOf,
   sql,
   startSprint,
   type TestUser,
+  used,
 } from "./helpers";
 
 const TZ = "America/Los_Angeles";
@@ -430,10 +432,8 @@ describe("finish_review verdict when the highest occurred", () => {
     await rpc(u, "close_day", {
       p_sprint_day_id: day1.id,
       p_actual: 50_000,
-      p_impediments: [{ item_id: items.p_impediment_ids[0], answer: "yes" }],
-      p_cues: [{ item_id: items.p_cue_ids[0], answer: "yes" }],
-      p_response: "yes",
-      p_recovered: "yes",
+      p_impediments: [{ item_id: items.p_impediment_ids[0], answer: "yes", situations: [{ situation_id: items.situations.impediment, recovered: "yes" }] }],
+      p_cues: [{ item_id: items.p_cue_ids[0], answer: "yes", situations: [{ situation_id: items.situations.cue }] }],
     });
     await rpc(u, "end_sprint_early", { p_sprint_id: sprintId });
   });
@@ -611,7 +611,7 @@ describe("finish_review and the insight cards after a member is removed and adde
     sprintId = await startSprint(u, moneySprintArgs({ ...items, p_cue_ids: [...items.p_cue_ids, cueB, cueC], p_tz: TZ, p_start_date: today }));
     const [day1] = await sql<{ id: string }[]>`
       select id from public.sprint_days where sprint_id = ${sprintId} and day_index = 1`;
-    await rpc(u, "close_day", { p_sprint_day_id: day1.id, p_actual: 1000, p_impediments: [], p_cues: [{ item_id: cueB, answer: "yes" }] });
+    await rpc(u, "close_day", { p_sprint_day_id: day1.id, p_actual: 1000, p_impediments: [], p_cues: [used(cueB, await situationsOf("cue", cueB))] });
     await rpc(u, "remove_sprint_item", { p_sprint_id: sprintId, p_kind: "cue", p_item_id: cueB });
     await rpc(u, "add_sprint_item", { p_sprint_id: sprintId, p_kind: "cue", p_item_id: cueB });
     // C is removed and never added back: the review must default it to `drop` (0017).
@@ -699,18 +699,15 @@ describe("finish_review verdict after the highest impediment changed mid-sprint"
     a = items.p_impediment_ids[0];
     const today = await dbTodayIn(TZ);
     sprintId = await startSprint(u, moneySprintArgs({ ...items, p_tz: TZ, p_start_date: today }));
-    b = await insertImpediment(u, "Doomscrolling", { proofWhen: "w", proofThen: "t", proofRecover: "r" });
+    b = await insertImpediment(u, "Doomscrolling", { proofThen: "t", proofRecover: "r" });
     await rpc(u, "add_sprint_item", { p_sprint_id: sprintId, p_kind: "impediment", p_item_id: b });
     const [day1] = await sql<{ id: string }[]>`
       select id from public.sprint_days where sprint_id = ${sprintId} and day_index = 1`;
     await rpc(u, "close_day", {
       p_sprint_day_id: day1.id,
       p_actual: 1000,
-      p_impediments: [{ item_id: a, answer: "yes" }, { item_id: b, answer: "no" }],
+      p_impediments: [{ item_id: a, answer: "yes", situations: [{ situation_id: items.situations.impediment, recovered: "yes" }] }, { item_id: b, answer: "no" }],
       p_cues: [],
-      p_response: "yes",
-      p_recovered: "yes",
-      p_impact: "some",
     });
     await rpc(u, "set_highest_impediment", { p_sprint_id: sprintId, p_impediment_id: b });
     await rpc(u, "end_sprint_early", { p_sprint_id: sprintId });
@@ -719,9 +716,13 @@ describe("finish_review verdict after the highest impediment changed mid-sprint"
     await deleteTestUser(u);
   });
 
-  it("the follow-through card and finish_review agree: no occurrence of the current highest, no verdict", async () => {
-    const rows = await rpc<{ item_id: string; occurrences: number }[]>(u, "insight_response_followthrough", { p_sprint_id: sprintId });
-    expect(rows.map((r) => [r.item_id, r.occurrences])).toEqual([[b, 0]]);
+  it("the recovery card and finish_review agree: no occurrence of the current highest, no verdict", async () => {
+    // F15: one recovery row per impediment. `verdict_occurrences` is the 0016 predicate —
+    // the day's snapshot names the item AND its observation was the highest — so the
+    // earlier highest keeps its occurrence and the current one (b) shows none; the UI
+    // reads the `is_highest` row, exactly as finish_review does.
+    const rows = await rpc<{ item_id: string; is_highest: boolean; occurrences: number; verdict_occurrences: number }[]>(u, "insight_response_recovery", { p_sprint_id: sprintId });
+    expect(rows.map((r) => [r.item_id, r.is_highest, r.occurrences, r.verdict_occurrences]).sort()).toEqual([[a, false, 1, 1], [b, true, 0, 0]].sort());
     await expectRpcError(u, "finish_review", { p_sprint_id: sprintId, p_lesson: "L", p_moved: false, p_verdict: "worked" }, "verdict_not_applicable");
     const id = await rpc<string>(u, "finish_review", { p_sprint_id: sprintId, p_lesson: "L", p_moved: false });
     expect(id).toBeTruthy();

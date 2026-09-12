@@ -4,14 +4,15 @@ import { ProofInputs } from "@/components/ProofInputs";
 import { ErrorBar } from "@/components/ErrorBar";
 import Link from "next/link";
 import { Fragment, useEffect, useRef, useState, useTransition } from "react";
-import { createItem } from "@/app/(app)/actions/library";
+import { createItem, createSituation } from "@/app/(app)/actions/library";
 import { startSprintAction, type StartSprintInput } from "@/app/(app)/actions/sprint";
 import { OptionRow } from "@/components/OptionRow";
 import { effectivePlan, PlanGrid, type PlanCell } from "@/components/PlanGrid";
+import { SituationPicker, type SituationOption } from "@/components/SituationPicker";
 import { useDeviceToday } from "@/components/useDeviceToday";
 import { areaName, type AreaKey } from "@/lib/areas";
 import { callAction } from "@/lib/callAction";
-import { cueSummary, eligibleFor, proofComplete, proofSummary, type AreaKit, type LibraryItem } from "@/lib/data";
+import { appliesTo, cueSummary, eligibleFor, joinBlocker, proofComplete, proofSummary, type AreaKit, type ItemKind, type LibraryItem, type SituationItem } from "@/lib/data";
 import { prefillFromKit } from "@/lib/kit";
 import { formatIsoDate } from "@/lib/dates";
 import { toBaseUnits, unitLabel, type Measurement, type Measured } from "@/lib/format";
@@ -42,7 +43,6 @@ type Draft = {
   custom: string[];
   impedimentIds: string[];
   highestId: string | null;
-  proofWhen: string;
   proofThen: string;
   proofRecover: string;
   cueIds: string[];
@@ -52,6 +52,7 @@ type Draft = {
 };
 
 type Library = { cues: LibraryItem[]; impediments: LibraryItem[] };
+type Situations = { cues: SituationOption[]; impediments: SituationOption[] };
 
 const STEPS = ["Area & outcome", "Measure & goal", "Confidence & mantra", "Plan & start"];
 
@@ -59,35 +60,60 @@ const STEPS = ["Area & outcome", "Measure & goal", "Confidence & mantra", "Plan 
  * F9: `vision` is the account's one vision (its text) or null; without it no Area can
  * start. F10: `kits` carries each Area's last postmortem decisions, which pre-check
  * step 4 — picking an Area re-reads its own kit, so switching Areas never carries the
- * previous one's items across.
+ * previous one's items across. F15: `situations` feeds the inline creates' APPLIES TO.
  */
 export function NewSprintWizard({
   areas,
   initialArea,
   library: initialLibrary,
+  situations: initialSituations,
   vision,
   kits,
 }: {
   areas: AreaOption[];
   initialArea: AreaKey | null;
   library: Library;
+  situations: { cues: SituationItem[]; impediments: SituationItem[] };
   vision: string | null;
   kits: Partial<Record<AreaKey, AreaKit | null>>;
 }) {
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [library, setLibrary] = useState<Library>(initialLibrary);
+  const [sits, setSits] = useState<Situations>({
+    cues: initialSituations.cues.map((s) => ({ id: s.id, name: s.name })),
+    impediments: initialSituations.impediments.map((s) => ({ id: s.id, name: s.name })),
+  });
   const [newImp, setNewImp] = useState("");
+  const [newImpSits, setNewImpSits] = useState<string[]>([]);
   const [newCue, setNewCue] = useState("");
   const [newCueWhen, setNewCueWhen] = useState("");
+  const [newCueSits, setNewCueSits] = useState<string[]>([]);
   const [creating, setCreating] = useState<"cue" | "impediment" | null>(null);
   const [pending, start] = useTransition();
   /**
    * Step 4's starting picks for an Area: the kit from its last postmortem, filtered to
-   * what that Area's library still offers. No kit means an empty step 4, exactly as
-   * before F10.
+   * what that Area's library still offers — and, F15, to what can still join a sprint
+   * (a situation on every item; a complete response on every impediment).
    */
-  const prefillFor = (area: AreaKey) => prefillFromKit(kits[area], { cues: initialLibrary.cues.filter(eligibleFor(area)), impediments: initialLibrary.impediments.filter(eligibleFor(area)) });
+  const prefillFor = (area: AreaKey) => {
+    const joinable = (i: LibraryItem) => joinBlocker(i) === null;
+    return prefillFromKit(kits[area], {
+      cues: initialLibrary.cues.filter(eligibleFor(area)).filter(joinable),
+      impediments: initialLibrary.impediments.filter(eligibleFor(area)).filter(joinable),
+    });
+  };
+
+  /** A situation named inline is saved to its library (global scope) and ticked for the item being created. */
+  async function createSituationInline(kind: ItemKind, name: string): Promise<string | null> {
+    const res = await callAction(() => createSituation(kind, name, "global"));
+    if (res.error || !res.id) return res.error ?? "That did not save.";
+    const id = res.id;
+    setSits((s) => (kind === "cue" ? { ...s, cues: [...s.cues, { id, name }] } : { ...s, impediments: [...s.impediments, { id, name }] }));
+    if (kind === "cue") setNewCueSits((t) => [...t, id]);
+    else setNewImpSits((t) => [...t, id]);
+    return null;
+  }
 
   const [d, setD] = useState<Draft>({
     area: initialArea,
@@ -107,10 +133,9 @@ export function NewSprintWizard({
     intentions: Array(14).fill(""),
     mode: "same",
     custom: Array(14).fill(""),
-    proofWhen: "",
     proofThen: "",
     proofRecover: "",
-    ...(initialArea ? prefillFromKit(kits[initialArea], { cues: initialLibrary.cues.filter(eligibleFor(initialArea)), impediments: initialLibrary.impediments.filter(eligibleFor(initialArea)) }) : { impedimentIds: [], highestId: null, cueIds: [], focusId: null }),
+    ...(initialArea ? prefillFor(initialArea) : { impedimentIds: [], highestId: null, cueIds: [], focusId: null }),
     aligned: false,
   });
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
@@ -175,14 +200,16 @@ export function NewSprintWizard({
     set("mode", mode);
   }
 
-  // Rules 3–6 at setup: eligible = global or the chosen area; 1–5 impediments, one
-  // highest with a complete WHEN → THEN → RECOVERED WHEN, 1–3 cues.
+  // Rules 3–6 at setup (F15): eligible = global or the chosen area; 1–3 impediments, one
+  // highest, a complete THEN → RECOVERED WHEN on every impediment (the highest's can be
+  // written here), 0–3 cues, and a situation on every member.
   const eligible = d.area ? eligibleFor(d.area) : () => false;
   const impOptions = library.impediments.filter(eligible);
   const cueOptions = library.cues.filter(eligible);
   const highest = impOptions.find((i) => i.id === d.highestId) ?? null;
   const highestNeedsProof = Boolean(highest && !proofComplete(highest));
-  const proofOk = Boolean(highest) && (!highestNeedsProof || Boolean(d.proofWhen.trim() && d.proofThen.trim() && d.proofRecover.trim()));
+  const proofOk = Boolean(highest) && (!highestNeedsProof || Boolean(d.proofThen.trim() && d.proofRecover.trim()));
+  const incomplete = impOptions.find((i) => d.impedimentIds.includes(i.id) && i.id !== d.highestId && !proofComplete(i)) ?? null;
 
   const usageRows = d.usage.filter((u) => u.label.trim() || u.amount !== "");
   const usageValid = d.measurement !== "money" || usageRows.every((u) => u.label.trim() && Number(u.amount) > 0);
@@ -202,18 +229,16 @@ export function NewSprintWizard({
     planHint
       ? planHint
       : d.impedimentIds.length === 0
-      ? "Select 1–5 impediments."
-      : !d.highestId
-        ? "Designate the highest impediment."
-        : !proofOk
-          ? "The highest impediment needs WHEN → THEN and a recovery criterion."
-          : d.cueIds.length === 0
-            ? "Select 1–3 execution cues."
-            : !d.focusId || !d.cueIds.includes(d.focusId)
-              ? "Pick the focus cue."
-            : !d.aligned
-              ? "Confirm the outcome advances the vision."
-              : null,
+        ? "Select 1–3 impediments."
+        : !d.highestId
+          ? "Designate the highest impediment."
+          : !proofOk
+            ? "The highest impediment needs THEN and a recovery criterion."
+            : incomplete
+              ? `${incomplete.name} needs a THEN and a RECOVERED WHEN — make it the highest and complete it here, or finish it on the Impediments page.`
+              : !d.aligned
+                ? "Confirm the outcome advances the vision."
+                : null,
   ];
   const canNext = stepHint[step] === null;
 
@@ -241,10 +266,9 @@ export function NewSprintWizard({
       intentions: d.intentions.some((t) => t.trim()) ? d.intentions : null,
       targets: d.mode === "custom" ? targets : null,
       cueIds: d.cueIds,
-      focusCueId: d.focusId,
+      focusCueId: d.cueIds.length > 0 ? d.focusId : null,
       impedimentIds: d.impedimentIds,
       highestImpedimentId: d.highestId,
-      proofWhen: highestNeedsProof ? d.proofWhen : null,
       proofThen: highestNeedsProof ? d.proofThen : null,
       proofRecover: highestNeedsProof ? d.proofRecover : null,
     };
@@ -255,15 +279,17 @@ export function NewSprintWizard({
     });
   }
 
-  const newCueReady = Boolean(newCue.trim() && newCueWhen.trim());
+  const newCueReady = Boolean(newCue.trim() && newCueWhen.trim()) && newCueSits.length > 0;
+  const newImpReady = Boolean(newImp.trim()) && newImpSits.length > 0;
 
   async function createInline(kind: "cue" | "impediment") {
     const name = (kind === "cue" ? newCue : newImp).trim();
     const cueWhen = newCueWhen.trim();
-    if (!name || (kind === "cue" && !cueWhen)) return;
+    const situationIds = kind === "cue" ? newCueSits : newImpSits;
+    if (!name || (kind === "cue" && !cueWhen) || situationIds.length === 0) return;
     setCreating(kind);
     setError(null);
-    const res = await callAction(() => createItem(kind, { name, explanation: "", scope: "global", cueWhen: kind === "cue" ? cueWhen : undefined }));
+    const res = await callAction(() => createItem(kind, { name, explanation: "", scope: "global", cueWhen: kind === "cue" ? cueWhen : undefined, situationIds }));
     setCreating(null);
     if (res.error || !res.id) {
       setError(res.error ?? "That did not save. Your input is still here — try again.");
@@ -278,9 +304,9 @@ export function NewSprintWizard({
       rank: 0,
       archived_at: null,
       cue_when: kind === "cue" ? cueWhen : null,
-      proof_when: null,
       proof_then: null,
       proof_recover: null,
+      situations: (kind === "cue" ? sits.cues : sits.impediments).filter((s) => situationIds.includes(s.id)),
       used: false,
       active: false,
     };
@@ -288,11 +314,15 @@ export function NewSprintWizard({
       setLibrary((l) => ({ ...l, cues: [...l.cues, item] }));
       setNewCue("");
       setNewCueWhen("");
+      setNewCueSits([]);
       if (d.cueIds.length < 3) setCues([...d.cueIds, item.id]);
     } else {
       setLibrary((l) => ({ ...l, impediments: [...l.impediments, item] }));
       setNewImp("");
-      if (d.impedimentIds.length < 5) set("impedimentIds", [...d.impedimentIds, item.id]);
+      setNewImpSits([]);
+      // A new impediment has no response yet: it joins as the highest, whose THEN and
+      // RECOVERED WHEN are written below, when there is room and no highest yet.
+      if (d.impedimentIds.length < 3) setD((p) => ({ ...p, impedimentIds: [...p.impedimentIds, item.id], highestId: p.highestId ?? item.id, proofThen: p.highestId ? p.proofThen : "", proofRecover: p.highestId ? p.proofRecover : "" }));
     }
   }
 
@@ -532,29 +562,56 @@ export function NewSprintWizard({
             <div className="wz-section" data-testid="wizard-impediments">
               <div className="wz-between">
                 <span className="wz-group-title">
-                  Impediments <span className={`wz-count ${d.impedimentIds.length > 0 ? "wz-count-on" : ""}`}>{d.impedimentIds.length} of 5</span>
+                  Impediments <span className={`wz-count ${d.impedimentIds.length > 0 ? "wz-count-on" : ""}`}>{d.impedimentIds.length} of 3</span>
                 </span>
                 <span className="wz-note">What is most likely to get in the way?</span>
               </div>
               <div role="group" aria-label="Impediments" className="mt-6">
-                {impOptions.map((i) => (
-                  <OptionRow
-                    key={i.id}
-                    on={d.impedimentIds.includes(i.id)}
-                    disabled={!d.impedimentIds.includes(i.id) && d.impedimentIds.length >= 5}
-                    label={i.name}
-                    sub={proofSummary(i) ?? i.explanation}
-                    tag={i.scope === "global" ? "Global" : null}
-                    onPick={() => toggleImpediment(i.id)}
-                  />
-                ))}
+                {impOptions.map((i) => {
+                  const noSituation = joinBlocker(i) === "situation";
+                  return (
+                    <OptionRow
+                      key={i.id}
+                      on={d.impedimentIds.includes(i.id)}
+                      disabled={noSituation || (!d.impedimentIds.includes(i.id) && d.impedimentIds.length >= 3)}
+                      label={i.name}
+                      sub={noSituation ? "No situation yet — add one on the Impediments page" : [proofSummary(i), appliesTo(i) && `applies to: ${appliesTo(i)}`].filter(Boolean).join(" · ") || i.explanation}
+                      tag={i.scope === "global" ? "Global" : null}
+                      onPick={() => toggleImpediment(i.id)}
+                    />
+                  );
+                })}
               </div>
               <label htmlFor="new-impediment" className="label-accent block mt-12">
                 Create a new impediment
               </label>
-              <div className="wz-row mt-6">
-                <input id="new-impediment" className="input grow" value={newImp} onChange={(e) => setNewImp(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInline("impediment"); } }} />
-                <button type="button" className="btn btn-ghost wz-create" disabled={!newImp.trim() || creating !== null} onClick={() => createInline("impediment")}>
+              <div className="proof-grid mt-6">
+                <label htmlFor="new-impediment" className="label-accent proof-label">
+                  WHEN
+                </label>
+                <input
+                  id="new-impediment"
+                  className="input input-compact"
+                  value={newImp}
+                  onChange={(e) => setNewImp(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInline("impediment"); } }}
+                  placeholder="I notice myself delaying my first work block"
+                />
+              </div>
+              <SituationPicker
+                idPrefix="new-impediment"
+                kind="impediment"
+                options={sits.impediments}
+                selected={newImpSits}
+                onToggle={(id) => setNewImpSits((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id]))}
+                onCreate={(name) => createSituationInline("impediment", name)}
+                compact
+              />
+              <div className="wz-row mt-8">
+                <span className="hint grow" id="new-impediment-hint" aria-live="polite">
+                  {newImpReady ? "" : "WHEN and at least one situation are needed."}
+                </span>
+                <button type="button" className="btn btn-ghost wz-create" disabled={!newImpReady || creating !== null} onClick={() => createInline("impediment")} aria-describedby={newImpReady ? undefined : "new-impediment-hint"}>
                   {creating === "impediment" ? "Creating…" : "Create"}
                 </button>
               </div>
@@ -563,9 +620,7 @@ export function NewSprintWizard({
             {d.impedimentIds.length > 0 ? (
               <div className="wz-highest" data-testid="wizard-highest">
                 <div className="wz-group-title">Highest impediment</div>
-                <div className="wz-blurb">
-                  The obstacle most likely to cause this sprint to fail. It must carry a WHEN → THEN proof point and a recovery criterion.
-                </div>
+                <div className="wz-blurb">The obstacle most likely to cause this sprint to fail. Its WHEN must carry a THEN and a recovery criterion.</div>
                 <div role="radiogroup" aria-label="Highest impediment">
                   {impOptions
                     .filter((i) => d.impedimentIds.includes(i.id))
@@ -575,21 +630,18 @@ export function NewSprintWizard({
                         single
                         on={d.highestId === i.id}
                         label={i.name}
-                        sub={proofComplete(i) ? null : proofSummary(i) ? "Proof point incomplete — complete it below" : "No proof point yet — write one below"}
-                        onPick={() => setD((p) => ({ ...p, highestId: i.id, proofWhen: i.proof_when ?? "", proofThen: i.proof_then ?? "", proofRecover: i.proof_recover ?? "" }))}
+                        sub={proofComplete(i) ? null : proofSummary(i) ? "Response incomplete — complete it below" : "No response yet — write one below"}
+                        onPick={() => setD((p) => ({ ...p, highestId: i.id, proofThen: i.proof_then ?? "", proofRecover: i.proof_recover ?? "" }))}
                       />
                     ))}
                 </div>
                 {highestNeedsProof ? (
                   <ProofInputs
                     idPrefix="proof"
-                    when={d.proofWhen}
                     then={d.proofThen}
                     recover={d.proofRecover}
-                    onWhen={(v) => set("proofWhen", v)}
                     onThen={(v) => set("proofThen", v)}
                     onRecover={(v) => set("proofRecover", v)}
-                    placeholderWhen="I notice myself delaying my first work block"
                     placeholderThen="I start a 10-minute timer on the smallest executable task"
                     placeholderRecover="The timer is running within 10 minutes"
                     className="mt-14"
@@ -603,20 +655,23 @@ export function NewSprintWizard({
                 <span className="wz-group-title">
                   Execution cues <span className={`wz-count ${d.cueIds.length > 0 ? "wz-count-on" : ""}`}>{d.cueIds.length} of 3</span>
                 </span>
-                <span className="wz-note">What should I remember to help me succeed?</span>
+                <span className="wz-note">Optional · what should I remember to help me succeed?</span>
               </div>
               <div role="group" aria-label="Execution cues" className="mt-6">
-                {cueOptions.map((c) => (
-                  <OptionRow
-                    key={c.id}
-                    on={d.cueIds.includes(c.id)}
-                    disabled={!d.cueIds.includes(c.id) && d.cueIds.length >= 3}
-                    label={c.name}
-                    sub={cueSummary(c) ?? c.explanation}
-                    tag={c.scope === "global" ? "Global" : null}
-                    onPick={() => setCues(d.cueIds.includes(c.id) ? d.cueIds.filter((x) => x !== c.id) : [...d.cueIds, c.id])}
-                  />
-                ))}
+                {cueOptions.map((c) => {
+                  const noSituation = joinBlocker(c) === "situation";
+                  return (
+                    <OptionRow
+                      key={c.id}
+                      on={d.cueIds.includes(c.id)}
+                      disabled={noSituation || (!d.cueIds.includes(c.id) && d.cueIds.length >= 3)}
+                      label={c.name}
+                      sub={noSituation ? "No situation yet — add one on the Cues page" : [cueSummary(c), appliesTo(c) && `applies to: ${appliesTo(c)}`].filter(Boolean).join(" · ") || c.explanation}
+                      tag={c.scope === "global" ? "Global" : null}
+                      onPick={() => setCues(d.cueIds.includes(c.id) ? d.cueIds.filter((x) => x !== c.id) : [...d.cueIds, c.id])}
+                    />
+                  );
+                })}
               </div>
               {d.cueIds.length > 0 ? (
                 <div className="mt-12" data-testid="wizard-focus">
@@ -653,19 +708,31 @@ export function NewSprintWizard({
                 <label htmlFor="new-cue" className="label-accent proof-label">
                   REMIND
                 </label>
-                <div className="wz-row">
-                  <input
-                    id="new-cue"
-                    className="input input-compact grow"
-                    value={newCue}
-                    onChange={(e) => setNewCue(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInline("cue"); } }}
-                    placeholder='ask "How much does this pay?"'
-                  />
-                  <button type="button" className="btn btn-ghost wz-create" disabled={!newCueReady || creating !== null} onClick={() => createInline("cue")}>
-                    {creating === "cue" ? "Creating…" : "Create"}
-                  </button>
-                </div>
+                <input
+                  id="new-cue"
+                  className="input input-compact"
+                  value={newCue}
+                  onChange={(e) => setNewCue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInline("cue"); } }}
+                  placeholder='ask "How much does this pay?"'
+                />
+              </div>
+              <SituationPicker
+                idPrefix="new-cue"
+                kind="cue"
+                options={sits.cues}
+                selected={newCueSits}
+                onToggle={(id) => setNewCueSits((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id]))}
+                onCreate={(name) => createSituationInline("cue", name)}
+                compact
+              />
+              <div className="wz-row mt-8">
+                <span className="hint grow" id="new-cue-hint" aria-live="polite">
+                  {newCueReady ? "" : "WHEN, REMIND and at least one situation are needed."}
+                </span>
+                <button type="button" className="btn btn-ghost wz-create" disabled={!newCueReady || creating !== null} onClick={() => createInline("cue")} aria-describedby={newCueReady ? undefined : "new-cue-hint"}>
+                  {creating === "cue" ? "Creating…" : "Create"}
+                </button>
               </div>
             </div>
 

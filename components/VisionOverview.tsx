@@ -30,7 +30,7 @@ export function VisionOverview({
   active: ActiveVision;
   sprints: VisionSprintRow[];
   previous: PreviousVision[];
-  counts: { cues: number; impediments: number };
+  counts: { cues: number; impediments: number; cueSituations: number; impedimentSituations: number };
 }) {
   const router = useRouter();
   const [review, setReview] = useState(false);
@@ -44,7 +44,7 @@ export function VisionOverview({
   const device = useDeviceToday();
   const daysLeft = device ? daysBetween(device.today, vision.deadline) : null;
   const deadlineText = formatIsoDate(vision.deadline, DATE);
-  const ruleComplete = Boolean(obstacle && obstacle.proof_when && obstacle.proof_then && obstacle.proof_recover);
+  const ruleComplete = Boolean(obstacle && obstacle.proof_then && obstacle.proof_recover);
 
   function send(verdict: Verdict) {
     setError(null);
@@ -175,7 +175,7 @@ export function VisionOverview({
           {obstacle && ruleComplete ? (
             <>
               <div className="v-mini-body">
-                WHEN {obstacle.proof_when} → THEN {obstacle.proof_then}
+                WHEN {obstacle.name} → THEN {obstacle.proof_then}
               </div>
               <div className="v-mini-sub">Recovered when {obstacle.proof_recover}</div>
             </>
@@ -198,7 +198,15 @@ export function VisionOverview({
             <span>Impediments</span>
             <span className="v-row-n">{counts.impediments} →</span>
           </Link>
-          <div className="v-mini-note">Cues and impediments are picked per sprint.</div>
+          <Link href="/vision/cue-situations" className="v-row">
+            <span>Cue situations</span>
+            <span className="v-row-n">{counts.cueSituations} →</span>
+          </Link>
+          <Link href="/vision/impediment-situations" className="v-row">
+            <span>Impediment situations</span>
+            <span className="v-row-n">{counts.impedimentSituations} →</span>
+          </Link>
+          <div className="v-mini-note">Cues and impediments are picked per sprint; each applies to one or more situations.</div>
         </div>
         <div className="card v-mini" data-testid="card-sprints">
           <div className="v-mini-head">

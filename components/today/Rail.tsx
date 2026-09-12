@@ -10,11 +10,13 @@ import { ProofInputs } from "@/components/ProofInputs";
 import { AddItemPicker, candidatesFor } from "@/components/today/AddItemPicker";
 import { TwoTap } from "@/components/TwoTap";
 import { callAction } from "@/lib/callAction";
-import { proofComplete, proofSummary, type ItemKind, type LibraryItem, type SprintItems } from "@/lib/data";
+import { appliesTo, proofComplete, proofSummary, type ItemKind, type LibraryItem, type SituationItem, type SprintItems } from "@/lib/data";
 import { formatAmount, type Measured } from "@/lib/format";
 import { celebrationState } from "@/lib/sprintDay";
 
-const PROOF_HINT = "WHEN, THEN and the recovery criterion are all required.";
+const PROOF_HINT = "THEN and the recovery criterion are both required.";
+
+export type Situations = { cues: SituationItem[]; impediments: SituationItem[] };
 
 type UsageRow = { label: string; amount: number };
 
@@ -29,6 +31,7 @@ export function Rail({
   streakText,
   items,
   library,
+  situations,
   locked,
   celebration,
   measured,
@@ -45,6 +48,8 @@ export function Rail({
   streakText: string;
   items: SprintItems;
   library: { cues: LibraryItem[]; impediments: LibraryItem[] };
+  /** F15: the live situations per kind, for the inline creates. */
+  situations: Situations;
   /** The sprint window has passed: the rail reads, nothing edits. */
   locked: boolean;
   celebration: string;
@@ -69,8 +74,8 @@ export function Rail({
           <div className="r-lesson">“{lastLesson}”</div>
         </section>
       ) : null}
-      <HighestCard sprintId={sprintId} impediments={items.impediments} library={library} locked={locked} />
-      <CuesCard sprintId={sprintId} cues={items.cues} library={library} locked={locked} />
+      <HighestCard sprintId={sprintId} impediments={items.impediments} library={library} situations={situations.impediments} locked={locked} />
+      <CuesCard sprintId={sprintId} cues={items.cues} library={library} situations={situations.cues} locked={locked} />
       {goalReached && !locked ? <CompleteCard sprintId={sprintId} measured={measured} cumulative={cumulative} goal={goal} openDays={openDays} /> : null}
       <Celebration text={celebration} cumulative={cumulative} goal={goal} />
       {measured.measurement === "money" && usage.length > 0 ? (
@@ -252,20 +257,22 @@ function MantraCard({ sprintId, initial, streakText }: { sprintId: string; initi
 }
 
 /**
- * The highest impediment: name, then WHEN / THEN / RECOVERED WHEN each on its own row (U1),
- * Change (picker over the
- * sprint's impediments, with proof inputs when the pick is incomplete), Edit proof point,
- * then "Also watching" — the other impediments, with Remove and Add.
+ * The highest impediment: its WHEN (the name), then THEN / RECOVERED WHEN / APPLIES TO
+ * each on its own row (U1, F15), Change (picker over the sprint's impediments, with the
+ * response inputs when the pick is incomplete), Edit response, then "Also watching" —
+ * the other impediments, with Remove and Add.
  */
 function HighestCard({
   sprintId,
   impediments,
   library,
+  situations,
   locked,
 }: {
   sprintId: string;
   impediments: SprintItems["impediments"];
   library: { cues: LibraryItem[]; impediments: LibraryItem[] };
+  situations: SituationItem[];
   locked: boolean;
 }) {
   const highest = impediments.find((i) => i.is_highest) ?? null;
@@ -274,7 +281,6 @@ function HighestCard({
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [pick, setPick] = useState<string | null>(null);
-  const [when, setWhen] = useState("");
   const [then, setThen] = useState("");
   const [recover, setRecover] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -286,7 +292,7 @@ function HighestCard({
     if (wasEditing.current && !editing) editButton.current?.focus();
     wasEditing.current = editing;
   }, [editing]);
-  const filled = Boolean(when.trim() && then.trim() && recover.trim());
+  const filled = Boolean(then.trim() && recover.trim());
   const proofHint = filled ? null : PROOF_HINT;
 
   const picked = impediments.find((i) => i.id === pick) ?? null;
@@ -294,8 +300,7 @@ function HighestCard({
   const pickHint = !pick ? "Pick one impediment." : needsProof && !filled ? PROOF_HINT : null;
 
   /** The picker's inputs start from what the pick already has, so only the missing part needs typing. */
-  function prefill(i: { proof_when: string | null; proof_then: string | null; proof_recover: string | null } | null) {
-    setWhen(i?.proof_when ?? "");
+  function prefill(i: { proof_then: string | null; proof_recover: string | null } | null) {
     setThen(i?.proof_then ?? "");
     setRecover(i?.proof_recover ?? "");
   }
@@ -316,7 +321,7 @@ function HighestCard({
   function confirmChange() {
     if (!pick || pickHint) return;
     start(async () => {
-      const res = await callAction(() => setHighestImpediment(sprintId, pick, needsProof ? { when, then, recover } : undefined));
+      const res = await callAction(() => setHighestImpediment(sprintId, pick, needsProof ? { then, recover } : undefined));
       if (res.error) {
         setError(res.error);
         return;
@@ -328,7 +333,7 @@ function HighestCard({
   function saveProof() {
     if (!highest || proofHint || pending) return;
     start(async () => {
-      const res = await callAction(() => saveProofPoint(highest.id, { when, then, recover }));
+      const res = await callAction(() => saveProofPoint(highest.id, { then, recover }));
       if (res.error) {
         setError(res.error);
         return;
@@ -360,13 +365,10 @@ function HighestCard({
       {highest ? (
         <>
           <div className="r-name" data-testid="highest-name">
-            {highest.name}
+            <span className="r-part">WHEN</span> {highest.name}
           </div>
           {!editing ? (
             <>
-              <div className="r-proof">
-                <span className="r-part">WHEN</span> <span data-testid="proof-when">{highest.proof_when}</span>
-              </div>
               <div className="r-proof">
                 <span className="r-part">THEN</span> <span data-testid="proof-then">{highest.proof_then}</span>
               </div>
@@ -376,13 +378,16 @@ function HighestCard({
                   <span data-testid="proof-recover">{highest.proof_recover}</span>
                 ) : (
                   <span className="r-missing" data-testid="proof-recover-missing">
-                    not set — add it under Edit proof point
+                    not set — add it under Edit response
                   </span>
                 )}
               </div>
+              <div className="r-proof">
+                <span className="r-part">APPLIES TO</span> <span data-testid="highest-situations">{appliesTo(highest) ?? "no situation yet"}</span>
+              </div>
               {!locked ? (
                 <button ref={editButton} type="button" className="j-link mt-10" onClick={openEdit}>
-                  Edit proof point
+                  Edit response
                 </button>
               ) : null}
             </>
@@ -394,7 +399,7 @@ function HighestCard({
                 saveProof();
               }}
             >
-              <ProofInputs idPrefix="hi" when={when} then={then} recover={recover} onWhen={setWhen} onThen={setThen} onRecover={setRecover} placeholderWhen="" placeholderThen="" placeholderRecover="" />
+              <ProofInputs idPrefix="hi" then={then} recover={recover} onThen={setThen} onRecover={setRecover} placeholderThen="" placeholderRecover="" />
               {error ? <ErrorBar className="mt-12">{error}</ErrorBar> : null}
               <div className="j-plan-actions">
                 <span className="hint" id="hi-hint" aria-live="polite">
@@ -417,7 +422,7 @@ function HighestCard({
       <div className="r-rule focus-quiet" data-testid="also-watching" id="also-watching" tabIndex={-1}>
         <div className="r-head">
           <span className="t-prompt">Also watching</span>
-          <span className="r-count">{impediments.length} of 5</span>
+          <span className="r-count">{impediments.length} of 3</span>
         </div>
         {listError ? (
           <ErrorBar className="mt-6" action={{ label: "Dismiss", onClick: () => setListError(null) }}>{listError}</ErrorBar>
@@ -433,7 +438,7 @@ function HighestCard({
             ) : null}
           </div>
         ))}
-        {!locked && impediments.length < 5 ? (
+        {!locked && impediments.length < 3 ? (
           <button type="button" className="j-link mt-6" onClick={() => setAdding(true)}>
             Add impediment
           </button>
@@ -443,15 +448,15 @@ function HighestCard({
       {changing ? (
         <ItemPicker
           title="Change the highest impediment"
-          blurb="The obstacle most likely to cause this sprint to fail. It must carry a WHEN → THEN proof point and a recovery criterion."
-          options={impediments.map((i) => ({ id: i.id, label: i.name, sub: proofSummary(i) ?? "No proof point yet", tag: i.is_highest ? "Current" : null }))}
+          blurb="The obstacle most likely to cause this sprint to fail. Its WHEN must carry a THEN and a recovery criterion."
+          options={impediments.map((i) => ({ id: i.id, label: i.name, sub: proofSummary(i) ?? "No response yet", tag: i.is_highest ? "Current" : null }))}
           single
           selected={pick ? [pick] : []}
           onToggle={(id) => {
             setPick(id);
             prefill(impediments.find((i) => i.id === id) ?? null);
           }}
-          proof={needsProof ? { when, then, recover, onWhen: setWhen, onThen: setThen, onRecover: setRecover } : null}
+          proof={needsProof ? { then, recover, onThen: setThen, onRecover: setRecover } : null}
           hint={pickHint}
           error={error}
           doneLabel="Set as highest"
@@ -460,21 +465,25 @@ function HighestCard({
           onCancel={() => setChanging(false)}
         />
       ) : null}
-      {adding ? <AddItemPicker kind="impediment" sprintId={sprintId} candidates={candidatesFor("impediment", library, impediments)} onClose={() => setAdding(false)} /> : null}
+      {adding ? (
+        <AddItemPicker kind="impediment" sprintId={sprintId} candidates={candidatesFor("impediment", library, impediments)} situations={situations} onClose={() => setAdding(false)} />
+      ) : null}
     </section>
   );
 }
 
-/** The sprint's cues: name + FOCUS tag or "Set as focus", `WHEN {cue_when}`, Remove (never on the focus), Add cue. */
+/** The sprint's cues: name + FOCUS tag or "Set as focus", `WHEN {cue_when}`, `APPLIES TO`, Remove (never on the focus while others remain), Add cue. */
 function CuesCard({
   sprintId,
   cues,
   library,
+  situations,
   locked,
 }: {
   sprintId: string;
   cues: SprintItems["cues"];
   library: { cues: LibraryItem[]; impediments: LibraryItem[] };
+  situations: SituationItem[];
   locked: boolean;
 }) {
   const [adding, setAdding] = useState(false);
@@ -509,16 +518,17 @@ function CuesCard({
                 </span>
               ) : null}
             </span>
-            {!locked && !c.is_focus ? (
+            {!locked && (!c.is_focus || cues.length === 1) ? (
               <span className="j-row-actions">
-                <button type="button" className="j-link" disabled={pending} onClick={() => act(() => setFocusCue(sprintId, c.id))} aria-label={`Set as focus: ${c.name}`}>
-                  Set as focus
-                </button>
-                {cues.length > 1 ? (
-                  <button type="button" className="j-link j-link-muted" disabled={pending} onClick={() => act(() => removeSprintItem(sprintId, "cue" as ItemKind, c.id))} aria-label={`Remove ${c.name}`}>
-                    Remove
+                {!c.is_focus ? (
+                  <button type="button" className="j-link" disabled={pending} onClick={() => act(() => setFocusCue(sprintId, c.id))} aria-label={`Set as focus: ${c.name}`}>
+                    Set as focus
                   </button>
                 ) : null}
+                {/* F15: a sprint may hold no cue, so the last one (focus or not) can go. */}
+                <button type="button" className="j-link j-link-muted" disabled={pending} onClick={() => act(() => removeSprintItem(sprintId, "cue" as ItemKind, c.id))} aria-label={`Remove ${c.name}`}>
+                  Remove
+                </button>
               </span>
             ) : null}
           </div>
@@ -531,14 +541,18 @@ function CuesCard({
               <span className="r-missing">add the moment this should fire on the Cues page</span>
             )}
           </div>
+          <div className="r-cue-when" data-testid="cue-situations-line">
+            <span className="r-part">APPLIES TO</span> {appliesTo(c) ?? "no situation yet"}
+          </div>
         </div>
       ))}
+      {cues.length === 0 ? <div className="t-prompt mt-6">No execution cue in this sprint — optional.</div> : null}
       {!locked && cues.length < 3 ? (
         <button type="button" className="j-link mt-12" onClick={() => setAdding(true)}>
           Add cue
         </button>
       ) : null}
-      {adding ? <AddItemPicker kind="cue" sprintId={sprintId} candidates={candidatesFor("cue", library, cues)} onClose={() => setAdding(false)} /> : null}
+      {adding ? <AddItemPicker kind="cue" sprintId={sprintId} candidates={candidatesFor("cue", library, cues)} situations={situations} onClose={() => setAdding(false)} /> : null}
     </section>
   );
 }

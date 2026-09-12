@@ -6,6 +6,33 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-11 — The 0019 conversion could not copy the proof snapshot: the rule-17 trigger refused its own history rows
+
+**Problem.** F15 moves the Highest's THEN / RECOVERED WHEN snapshot from `sprint_days`
+onto `day_impediment_observations`, and the conversion fills the new columns for every
+legacy row with one UPDATE. `day_impediment_observations_immutable` (0010, rule 17)
+raises `day_closed` on any UPDATE of a row whose day is closed — which is every row
+the conversion needs to touch. Written as a plain UPDATE the migration aborts on the
+first hosted user with a closed day; the local `db reset` (no rows) would never show
+it. The 0019 draft also auto-named an inline CHECK, which collided with the table's own
+`_check` name on reset.
+
+**Fix.** The migration disables that one trigger for the single snapshot UPDATE and
+re-enables it in the next statement (`supabase/migrations/0019_situations.sql`, above
+the `day_impediment_situation_observations` fill); the CHECK is named
+`day_impediment_situation_observations_recovered_needs_occurred`.
+
+**Regression test.** `scripts/rehearse-0019.mjs` seeds a closed day whose highest
+observation exists before the migration, runs 0019 and asserts the snapshot landed on
+that row (`proof snapshot copied onto the highest's observation row`); without the
+disable it exits non-zero on `day_closed`. The smoke test that found it ran the whole
+file inside a rolled-back transaction against seeded legacy rows.
+
+**Where found.** The F15 build, 0019 smoke test on the local stack (2026-09-11), before
+the file was ever applied to a database with rows.
+
+---
+
 ## 2026-09-11 — The skew retry never retried inside a server render: Next.js handed it the memoised 401
 
 **Problem.** `withSkewRetry` (FIX_LOG 2026-09-10) re-issued the refused request

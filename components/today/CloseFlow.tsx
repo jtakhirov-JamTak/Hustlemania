@@ -4,9 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { closeDayAction } from "@/app/(app)/actions/day";
 import { Modal } from "@/components/Modal";
-import { answersHint, closeInput, DayQuestions, EMPTY_ANSWERS, highestOf, type DayAnswers } from "@/components/today/DayQuestions";
+import { DayQuestions } from "@/components/today/DayQuestions";
 import { callAction } from "@/lib/callAction";
 import type { OfferedItems, SprintDay } from "@/lib/data";
+import { answersHint, closeInput, EMPTY_ANSWERS, type DayAnswers } from "@/lib/dayAnswers";
 import { attainmentPct, formatAmount, formatNumber, toBaseUnits, unitLabel, type Measured } from "@/lib/format";
 
 export type CloseOutcome = { days: SprintDay[]; streak: number };
@@ -30,7 +31,7 @@ export function CloseFlow({
   goal: number;
   day: SprintDay;
   offered: OfferedItems;
-  /** The sprint's highest impediment: its occurrence opens the response questions (F7). */
+  /** The sprint's highest impediment: tagged HIGHEST in the questions (F7 / F15). */
   highestId: string | null;
   onCancel: () => void;
   /** After the result screen is dismissed; the rows are the sprint's fresh days. */
@@ -93,15 +94,14 @@ function CloseDialog(props: {
   const actualValid = value !== null && Number.isInteger(value) && value >= 0 && (measured.measurement !== "hours" || Number(minutes || 0) < 60);
   const step1Hint = actualValid ? null : "Enter the actual, zero included.";
 
-  const highest = highestOf(offered, props.highestId);
-  const step2Hint = answersHint(answers, highest);
+  const step2Hint = answersHint(answers, offered);
   const hint = step === 1 ? step1Hint : step2Hint;
   const closeBlocked = Boolean(step2Hint) || pending || error?.closed === true;
 
   function submit() {
     if (closeBlocked || step1Hint || value === null) return;
     start(async () => {
-      const res = await callAction(() => closeDayAction(day.id, props.sprintId, closeInput(answers, offered, highest, value, notes)));
+      const res = await callAction(() => closeDayAction(day.id, props.sprintId, closeInput(answers, offered, value, notes)));
       if (res.error !== undefined) {
         setError({ text: res.error, closed: res.closed === true });
         return;
@@ -177,7 +177,7 @@ function CloseDialog(props: {
               </h2>
               <div className="dialog-blurb">None and Unsure are truthful answers.</div>
 
-              <DayQuestions offered={offered} highest={highest} answers={answers} onChange={setAnswers} />
+              <DayQuestions offered={offered} highestId={props.highestId} answers={answers} onChange={setAnswers} />
 
               <label className="block mt-18">
                 <span className="label-muted">Notes · optional</span>

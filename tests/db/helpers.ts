@@ -55,16 +55,62 @@ export async function insertVision(user: TestUser, body = "A 1-year vision") {
   return res.data as string;
 }
 
-export async function insertCue(user: TestUser, name: string, scope = "global", explanation: string | null = null): Promise<string> {
-  const res = await user.client.from("cues").insert({ user_id: user.id, name, scope, explanation }).select("id").single();
+export type ItemKind = "cue" | "impediment";
+
+/** F15: a situation in the owner's library for one kind (direct INSERT; rank by trigger). */
+export async function insertSituation(user: TestUser, kind: ItemKind, name: string, scope = "global"): Promise<string> {
+  const res = await user.client.from("situations").insert({ user_id: user.id, kind, name, scope }).select("id").single();
   if (res.error) throw new Error(res.error.message);
   return res.data.id as string;
 }
 
+/** F15: replaces an item's attachment set through the one writer of the join tables. */
+export async function setSituations(user: TestUser, kind: ItemKind, itemId: string, situationIds: string[]) {
+  const res = await user.client.rpc("set_item_situations", { p_kind: kind, p_item_id: itemId, p_situation_ids: situationIds });
+  if (res.error) throw new Error(res.error.message);
+}
+
+/** The situation ids attached to an item, in rank order (read as the superuser). */
+export async function situationsOf(kind: ItemKind, itemId: string): Promise<string[]> {
+  const rows =
+    kind === "cue"
+      ? await sql<{ id: string }[]>`select t.id from public.cue_situations a join public.situations t on t.id = a.situation_id where a.cue_id = ${itemId} order by t.rank, t.id`
+      : await sql<{ id: string }[]>`select t.id from public.impediment_situations a join public.situations t on t.id = a.situation_id where a.impediment_id = ${itemId} order by t.rank, t.id`;
+  return rows.map((r) => r.id);
+}
+
+/**
+ * A cue: WHEN (`cue_when`) → REMIND (`name`). By default it gets one situation named
+ * after it (F15: a member needs at least one); pass `situation: false` to leave it bare.
+ */
+export async function insertCue(
+  user: TestUser,
+  name: string,
+  scope = "global",
+  explanation: string | null = null,
+  opts: { situation?: boolean | string; cueWhen?: string | null } = {},
+): Promise<string> {
+  const res = await user.client
+    .from("cues")
+    .insert({ user_id: user.id, name, scope, explanation, cue_when: opts.cueWhen ?? null })
+    .select("id")
+    .single();
+  if (res.error) throw new Error(res.error.message);
+  if (opts.situation !== false) {
+    const sit = await insertSituation(user, "cue", typeof opts.situation === "string" ? opts.situation : name, scope);
+    await setSituations(user, "cue", res.data.id as string, [sit]);
+  }
+  return res.data.id as string;
+}
+
+/**
+ * An impediment: WHEN (`name`) → INTERFERES → THEN → RECOVERED WHEN. By default it gets
+ * one situation named after it; pass `situation: false` to leave it bare.
+ */
 export async function insertImpediment(
   user: TestUser,
   name: string,
-  opts: { scope?: string; proofWhen?: string | null; proofThen?: string | null; proofRecover?: string | null; explanation?: string | null } = {},
+  opts: { scope?: string; proofThen?: string | null; proofRecover?: string | null; explanation?: string | null; situation?: boolean | string } = {},
 ): Promise<string> {
   const res = await user.client
     .from("impediments")
@@ -73,13 +119,16 @@ export async function insertImpediment(
       name,
       scope: opts.scope ?? "global",
       explanation: opts.explanation ?? null,
-      proof_when: opts.proofWhen ?? null,
       proof_then: opts.proofThen ?? null,
       proof_recover: opts.proofRecover ?? null,
     })
     .select("id")
     .single();
   if (res.error) throw new Error(res.error.message);
+  if (opts.situation !== false) {
+    const sit = await insertSituation(user, "impediment", typeof opts.situation === "string" ? opts.situation : name, opts.scope ?? "global");
+    await setSituations(user, "impediment", res.data.id as string, [sit]);
+  }
   return res.data.id as string;
 }
 
@@ -91,17 +140,27 @@ export type SprintItems = {
   p_focus_cue_id?: string | null;
 };
 
-/** One global cue and one global impediment with a complete Proof Point — the minimum start_sprint accepts. */
-export async function seedItems(user: TestUser, scope = "global"): Promise<SprintItems> {
-  const cue = await insertCue(user, "Ask how much this pays", scope);
-  const imp = await insertImpediment(user, "Starting late", {
+/** One global cue and one global impediment with a complete response, each with a situation — the minimum start_sprint accepts. */
+export async function seedItems(user: TestUser, scope = "global"): Promise<SprintItems & { situations: { cue: string; impediment: string } }> {
+  const cue = await insertCue(user, "Ask how much this pays", scope, null, { situation: "Scheduling", cueWhen: "I schedule anything" });
+  const imp = await insertImpediment(user, "I notice myself delaying my first work block", {
     scope,
-    proofWhen: "I notice myself delaying my first work block",
     proofThen: "I start a 10-minute timer on the smallest executable task",
     proofRecover: "The timer is running within 10 minutes",
+    situation: "Starting late",
   });
-  return { p_cue_ids: [cue], p_focus_cue_id: cue, p_impediment_ids: [imp], p_highest_impediment_id: imp };
+  return {
+    p_cue_ids: [cue],
+    p_focus_cue_id: cue,
+    p_impediment_ids: [imp],
+    p_highest_impediment_id: imp,
+    situations: { cue: (await situationsOf("cue", cue))[0], impediment: (await situationsOf("impediment", imp))[0] },
+  };
 }
+
+/** F15 close_day payload helpers: an occurrence with its situations. */
+export const occurred = (item_id: string, situations: { situation_id: string; recovered?: "yes" | "no" | null }[]) => ({ item_id, answer: "yes", situations });
+export const used = (item_id: string, situationIds: string[]) => ({ item_id, answer: "yes", situations: situationIds.map((situation_id) => ({ situation_id })) });
 
 export type StartSprintArgs = SprintItems & {
   p_area: string;
@@ -118,14 +177,19 @@ export type StartSprintArgs = SprintItems & {
   p_tz: string;
   p_start_date: string;
   p_intention?: string | null;
-  p_proof_when?: string | null;
   p_proof_then?: string | null;
   p_proof_recover?: string | null;
   p_targets?: number[] | null;
   p_intentions?: (string | null)[] | null;
 };
 
-export function moneySprintArgs(overrides: Partial<StartSprintArgs> & { p_start_date: string } & SprintItems): StartSprintArgs {
+export function moneySprintArgs(
+  input: Partial<StartSprintArgs> & { p_start_date: string } & SprintItems & { situations?: unknown },
+): StartSprintArgs {
+  // seedItems carries the situation ids beside the RPC arguments; PostgREST matches a
+  // function by its named parameters, so the extra key must not reach the call.
+  const { situations: _situations, ...overrides } = input;
+  void _situations;
   return {
     p_area: "wealth",
     p_outcome: "Save for the emergency fund",

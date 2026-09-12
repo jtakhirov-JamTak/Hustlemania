@@ -1,36 +1,41 @@
 import { describe, expect, it } from "vitest";
-import { daySummaryLine, NO_OBSERVATIONS, quietItems, showedUpTail, type DayObservations } from "@/lib/daySummary";
+import { daySummaryLine, NO_OBSERVATIONS, quietItems, showedUpTail, type DayObservations, type SituationObservation } from "@/lib/daySummary";
 
-const imp = (name: string, occurred: string, was_highest = false) => ({ id: `imp-${name}`, name, occurred, was_highest });
-const cue = (name: string, used: string, was_focus = false) => ({ id: `cue-${name}`, name, used, was_focus });
-const none = { response: null, recovered: null, impact: null };
+const sit = (name: string, occurred: boolean, recovered: string | null = null): SituationObservation => ({ id: `sit-${name}`, name, occurred, recovered });
+const imp = (name: string, occurred: string, was_highest = false, situations: SituationObservation[] = []) => ({ id: `imp-${name}`, name, occurred, was_highest, situations });
+const cue = (name: string, used: string, was_focus = false, applied: string[] = []) => ({
+  id: `cue-${name}`,
+  name,
+  used,
+  was_focus,
+  situations: applied.map((s) => ({ id: `sit-${s}`, name: s, applied: true })),
+});
 
 describe("daySummaryLine", () => {
-  it("joins the four groups with a middle dot, the highest first among the obstacles", () => {
+  it("names each occurred impediment with its ticked situations and answered recoveries, highest first, then the cues used", () => {
     const obs: DayObservations = {
-      impediments: [imp("Phone distraction", "yes"), imp("Starting late", "yes", true)],
-      cues: [cue("Ask how much this pays", "yes", true), cue("Close the laptop at nine", "no")],
+      impediments: [
+        imp("Phone distraction", "yes", false, [sit("Commute", true), sit("Evening", false)]),
+        imp("Starting late", "yes", true, [sit("Monday standup", true, "yes"), sit("Late night", true, "no"), sit("Travel", false)]),
+      ],
+      cues: [cue("Ask how much this pays", "yes", true, ["Scheduling"]), cue("Close the laptop at nine", "no")],
     };
-    expect(daySummaryLine({ response: "yes", recovered: "yes", impact: "some" }, obs)).toBe(
-      "Showed up: Starting late, Phone distraction · Response ran · recovered · Cost: some · Cues used: Ask how much this pays",
-    );
+    expect(daySummaryLine(obs)).toBe("Showed up: Starting late (Monday standup, Late night; recovered 1 of 2), Phone distraction (Commute) · Cues used: Ask how much this pays (Scheduling)");
+  });
+
+  it("leaves the recovery clause out while no recovery was answered, and the situations out when none was ticked (legacy rows)", () => {
+    expect(daySummaryLine({ impediments: [imp("Starting late", "yes", true, [sit("Monday standup", true, null)])], cues: [] })).toBe("Showed up: Starting late (Monday standup)");
+    expect(daySummaryLine({ impediments: [imp("Starting late", "yes", true)], cues: [cue("C", "yes", true)] })).toBe("Showed up: Starting late · Cues used: C");
   });
 
   it("says No obstacles / No cue used when every row is no, and unsure when every row is unsure", () => {
-    expect(daySummaryLine(none, { impediments: [imp("A", "no", true)], cues: [cue("C", "no", true)] })).toBe("No obstacles · No cue used");
-    expect(daySummaryLine(none, { impediments: [imp("A", "unsure", true)], cues: [cue("C", "unsure", true)] })).toBe("Obstacles: unsure · Cues: unsure");
+    expect(daySummaryLine({ impediments: [imp("A", "no", true)], cues: [cue("C", "no", true)] })).toBe("No obstacles · No cue used");
+    expect(daySummaryLine({ impediments: [imp("A", "unsure", true)], cues: [cue("C", "unsure", true)] })).toBe("Obstacles: unsure · Cues: unsure");
   });
 
   it("leaves out a group nobody answered and a day with no rows at all", () => {
-    expect(daySummaryLine(none, { impediments: [imp("A", "unanswered", true)], cues: [cue("C", "yes", true)] })).toBe("Cues used: C");
-    expect(daySummaryLine(none, NO_OBSERVATIONS)).toBe("");
-  });
-
-  it("renders every response and recovery wording", () => {
-    const obs: DayObservations = { impediments: [imp("Starting late", "yes", true)], cues: [] };
-    expect(daySummaryLine({ response: "partially", recovered: "no", impact: "a_lot" }, obs)).toBe("Showed up: Starting late · Response partially ran · didn't recover · Cost: a lot");
-    expect(daySummaryLine({ response: "no", recovered: "unsure", impact: null }, obs)).toBe("Showed up: Starting late · Response didn't run · recovery unsure");
-    expect(daySummaryLine({ response: "unsure", recovered: "yes", impact: "nothing" }, obs)).toBe("Showed up: Starting late · Response unsure · recovered · Cost: nothing");
+    expect(daySummaryLine({ impediments: [imp("A", "unanswered", true)], cues: [cue("C", "yes", true)] })).toBe("Cues used: C");
+    expect(daySummaryLine(NO_OBSERVATIONS)).toBe("");
   });
 });
 

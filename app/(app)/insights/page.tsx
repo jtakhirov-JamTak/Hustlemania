@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { InsightCard } from "@/components/insights/InsightCard";
-import { groupCues, groupFollow, groupImpact, groupRecovery, type Scope } from "@/lib/across";
-import { acrossCueRows, acrossFollowRows, acrossImpactRows, acrossRecoveryRows, coverageAcross, evidenceLine, HOW_TO_READ, suggestedKit } from "@/lib/acrossCards";
+import { groupCues, groupImpact, groupRecovery, groupSituations, type Scope } from "@/lib/across";
+import { acrossCueRows, acrossImpactRows, acrossRecoveryRows, coverageAcross, evidenceLine, HOW_TO_READ, suggestedKit } from "@/lib/acrossCards";
 import { AREAS, areaName, isAreaKey } from "@/lib/areas";
 import { loadAcross } from "@/lib/data";
 import { formatIsoDate } from "@/lib/dates";
@@ -15,7 +15,8 @@ const SCOPES: { key: Scope; label: string }[] = [{ key: "all", label: "All areas
 
 /**
  * Across sprints (F11). Every finished sprint in scope, read through the same per-sprint
- * calculations the postmortem uses, grouped one row per item.
+ * calculations the postmortem uses, grouped one row per item; F15 adds a line per
+ * situation under each item.
  *
  * The scope lives in the URL so this stays a server component and each chip is a link —
  * the page has no state of its own and no action on it. An unknown scope falls back to
@@ -31,20 +32,17 @@ export default async function InsightsPage({ searchParams }: { searchParams: Pro
   if (data.sprints === 0 && scope === "all") return <Placeholder />;
 
   const impact = groupImpact(data.history, scope);
-  const follow = groupFollow(data.history, scope);
   const recovery = groupRecovery(data.history, scope);
+  const situations = groupSituations(data.history, scope);
   const cues = groupCues(data.history, scope);
 
-  const impactRows = acrossImpactRows(impact, scope);
-  const followRows = acrossFollowRows(follow, scope);
+  const impactRows = acrossImpactRows(impact, scope, situations);
   const recoveryRows = acrossRecoveryRows(recovery, scope);
-  const cueRows = acrossCueRows(cues, scope);
+  const cueRows = acrossCueRows(cues, scope, situations);
 
   const impactCover = coverageAcross(data.history.map((h) => h.impact));
   const cueCover = coverageAcross(data.history.map((h) => h.cues));
-  const occurrences = data.history.flatMap((h) => h.follow).reduce((a, r) => a + r.occurrences, 0);
-  const ftAnswered = data.history.flatMap((h) => h.follow).reduce((a, r) => a + r.answered, 0);
-  const responses = data.history.flatMap((h) => h.recovery).reduce((a, r) => a + r.with_response + r.without_response, 0);
+  const occurrences = data.history.flatMap((h) => h.recovery).reduce((a, r) => a + r.occurrences, 0);
   const rcAnswered = data.history.flatMap((h) => h.recovery).reduce((a, r) => a + r.answered, 0);
 
   const area = scope === "all" ? null : areaName(scope);
@@ -88,19 +86,10 @@ export default async function InsightsPage({ searchParams }: { searchParams: Pro
         />
         <InsightCard
           tone="response"
-          title="RESPONSE FOLLOW-THROUGH"
-          coverage={nothing ? "No occurrences" : `${occurrences} occurrences · ${ftAnswered} answered`}
-          question="When the highest impediment showed up, did the WHEN → THEN response run?"
-          empty={followRows.length === 0 ? (emptyReason ?? "The highest impediment never showed up on a logged day.") : null}
-          rows={followRows}
-          testId="card-followthrough"
-        />
-        <InsightCard
-          tone="response"
           title="RESPONSE RECOVERY"
-          coverage={nothing ? "No responses" : `${responses} responses · ${rcAnswered} answered`}
-          question="After the response ran, was the recovery criterion met?"
-          empty={recoveryRows.length === 0 ? (emptyReason ?? "No recovery answer was given on a logged day.") : null}
+          coverage={nothing ? "No occurrences" : `${occurrences} occurrences · ${rcAnswered} answered`}
+          question="When an impediment showed up, was the recovery criterion met?"
+          empty={recoveryRows.length === 0 ? (emptyReason ?? "No impediment showed up on a logged day.") : null}
           rows={recoveryRows}
           testId="card-recovery"
         />
@@ -118,7 +107,7 @@ export default async function InsightsPage({ searchParams }: { searchParams: Pro
       <div className="lg-foot">
         <section className="card lg-suggest" data-testid="suggested-kit">
           <div className="lg-title">Suggested kit for the next sprint</div>
-          <p className="lg-body">{suggestedKit({ impact, follow, recovery, cues, closedDays: data.closedDays })}</p>
+          <p className="lg-body">{suggestedKit({ impact, recovery, cues, closedDays: data.closedDays })}</p>
         </section>
         <section className="card lg-read">
           <div className="lg-title">How to read this</div>

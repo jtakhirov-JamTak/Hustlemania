@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { groupCues, groupFollow, groupImpact, groupRecovery, RECUR_MIN, type SprintInsights, type SprintRef } from "@/lib/across";
-import { acrossCueRows, acrossFollowRows, acrossImpactRows, acrossRecoveryRows, coverageAcross, evidenceLine, HOW_TO_READ, suggestedKit } from "@/lib/acrossCards";
-import type { CueRow, FinishedSprint, FollowThroughRow, ImpactRow, RecoveryRow, ReviewSummary } from "@/lib/data";
+import { groupCues, groupImpact, groupRecovery, groupSituations, RECUR_MIN, type SprintInsights, type SprintRef } from "@/lib/across";
+import { acrossCueRows, acrossImpactRows, acrossRecoveryRows, coverageAcross, evidenceLine, HOW_TO_READ, suggestedKit } from "@/lib/acrossCards";
+import type { CueRow, FinishedSprint, ImpactRow, RecoveryRow, ReviewSummary, SituationRow } from "@/lib/data";
 import { loadReviewStats, mergeMeasures, needsReview, onePerItem } from "@/lib/data";
 
 /**
@@ -26,9 +26,6 @@ const impact = (over: Partial<ImpactRow> = {}): ImpactRow => ({
   median_absent: 0.93,
   delta_pts: -31,
   enough: true,
-  felt_a_lot: 0,
-  felt_some: 0,
-  felt_nothing: 0,
   ...over,
 });
 
@@ -47,35 +44,35 @@ const cue = (over: Partial<CueRow> = {}): CueRow => ({
   ...over,
 });
 
-const follow = (over: Partial<FollowThroughRow> = {}): FollowThroughRow => ({
+/** F15: recovery per impediment — the recovered share of the situation occurrences that were answered. */
+const recovery = (over: Partial<RecoveryRow> = {}): RecoveryRow => ({
   item_id: "i1",
   name: "Starting late",
   proof_then: "set a 10-minute timer",
+  proof_recover: "first task done before 10am",
+  is_highest: true,
   occurrences: 5,
+  verdict_occurrences: 5,
   answered: 4,
-  ran: 3,
+  recovered: 3,
   didnt: 1,
-  partially: 0,
-  unsure: 1,
   rate: 75,
   enough: true,
   ...over,
 });
 
-const recovery = (over: Partial<RecoveryRow> = {}): RecoveryRow => ({
+const situation = (over: Partial<SituationRow> = {}): SituationRow => ({
+  kind: "impediment",
   item_id: "i1",
-  name: "Starting late",
-  proof_recover: "first task done before 10am",
-  with_response: 3,
-  with_recovered: 2,
-  without_response: 1,
-  without_recovered: 0,
-  answered: 4,
+  item_name: "Starting late",
+  situation_id: "st1",
+  situation_name: "Monday standup",
+  occurrences: 4,
+  asked_days: 10,
+  recovered_yes: 2,
+  recovered_answered: 4,
   rate: 50,
   enough: true,
-  median_recovered: 0.96,
-  median_not: 0.58,
-  outcome_enough: true,
   ...over,
 });
 
@@ -83,8 +80,8 @@ const recovery = (over: Partial<RecoveryRow> = {}): RecoveryRow => ({
 const sprintOf = (sprint: SprintRef, over: Partial<Omit<SprintInsights, "sprint">> = {}): SprintInsights => ({
   sprint,
   impact: [],
-  follow: [],
   recovery: [],
+  situations: [],
   cues: [],
   ...over,
 });
@@ -176,18 +173,36 @@ describe("across: grouping keys", () => {
     expect(groupImpact(history, "wealth")).toHaveLength(1);
   });
 
-  it("a rewritten response starts its own row; an unchanged one merges", () => {
-    const rewritten = [sprintOf(AUG, { follow: [follow({ proof_then: "phone in the drawer" })] }), sprintOf(JUL, { follow: [follow({ proof_then: "set a 10-minute timer" })] })];
-    expect(groupFollow(rewritten, "wealth")).toHaveLength(2);
+  it("a rewritten THEN or RECOVERED WHEN starts its own recovery row; an unchanged one merges", () => {
+    const rewrittenThen = [sprintOf(AUG, { recovery: [recovery({ proof_then: "phone in the drawer" })] }), sprintOf(JUL, { recovery: [recovery()] })];
+    expect(groupRecovery(rewrittenThen, "wealth")).toHaveLength(2);
+    const rewrittenRecover = [sprintOf(AUG, { recovery: [recovery({ proof_recover: "back within five" })] }), sprintOf(JUL, { recovery: [recovery()] })];
+    expect(groupRecovery(rewrittenRecover, "wealth")).toHaveLength(2);
 
-    const same = [sprintOf(AUG, { follow: [follow()] }), sprintOf(JUL, { follow: [follow()] })];
-    const merged = groupFollow(same, "wealth");
+    const same = [sprintOf(AUG, { recovery: [recovery()] }), sprintOf(JUL, { recovery: [recovery()] })];
+    const merged = groupRecovery(same, "wealth");
     expect(merged).toHaveLength(1);
     expect(merged[0].sprints).toBe(2);
   });
 
-  it("a highest impediment that never occurred is not a row", () => {
-    expect(groupFollow([sprintOf(AUG, { follow: [follow({ occurrences: 0, answered: 0, ran: 0, didnt: 0 })] })], "wealth")).toHaveLength(0);
+  it("an impediment that never showed up is not a recovery row", () => {
+    expect(groupRecovery([sprintOf(AUG, { recovery: [recovery({ occurrences: 0, verdict_occurrences: 0, answered: 0, recovered: 0, didnt: 0, rate: null, enough: false })] })], "wealth")).toHaveLength(0);
+  });
+
+  it("a situation is the same situation whatever the response text was: one group per (item, situation)", () => {
+    const history = [
+      sprintOf(AUG, { situations: [situation(), situation({ situation_id: "st2", situation_name: "Late night", occurrences: 2, recovered_answered: 2, rate: null, enough: false })] }),
+      sprintOf(JUL, { situations: [situation({ occurrences: 3, recovered_yes: 3, recovered_answered: 3, rate: 100 })] }),
+    ];
+    const groups = groupSituations(history, "wealth");
+    expect(groups.map((g) => [g.row.situation_name, g.sprints])).toEqual([
+      ["Monday standup", 2],
+      ["Late night", 1],
+    ]);
+    // The newest qualifying sprint is quoted; a thin group names none.
+    expect(groups[0].from?.id).toBe(AUG.id);
+    expect(groups[0].row.rate).toBe(50);
+    expect(groups[1].from).toBeNull();
   });
 });
 
@@ -225,44 +240,63 @@ describe("across: the recurring note", () => {
     expect(mixed[0].recurring).toBe("Helped in 1 of 2 sprints with enough days");
   });
 
-  it("the tri-state note counts sprints by the card's own denominator", () => {
-    // answered = 4 (yes|no|partially), ran = 3 → over half in both sprints.
-    const ran = groupFollow([sprintOf(AUG, { follow: [follow()] }), sprintOf(JUL, { follow: [follow({ proof_then: "set a 10-minute timer", ran: 1, didnt: 3 })] })], "wealth");
-    expect(ran[0].recurring).toBe("Ran at least half the time in 1 of 2 sprints");
-
-    const thin = groupFollow([sprintOf(AUG, { follow: [follow({ answered: 1, ran: 1, didnt: 0, enough: false, rate: null })] })], "wealth");
-    expect(thin[0].recurring).toBeNull();
+  it("recovery counts a sprint by its recovered share of answered, the card's own numbers", () => {
+    // 3 of 4 in August, 1 of 4 in July: one sprint over half.
+    const rows = groupRecovery([sprintOf(AUG, { recovery: [recovery()] }), sprintOf(JUL, { recovery: [recovery({ recovered: 1, didnt: 3, rate: 25 })] })], "wealth");
+    expect(rows[0].recurring).toBe("Recovered at least half the time in 1 of 2 sprints");
   });
 
-  it("recovery counts a sprint by its recovered share of answered", () => {
-    const rows = groupRecovery([sprintOf(AUG, { recovery: [recovery()] })], "wealth");
-    expect(rows[0].recurring).toBe("Recovered at least half the time in 1 of 1 sprint");
-  });
-
-  it("the recovery note votes with the rate the tail shows, unsure-response days included", () => {
-    // Three occurrences: response unsure / recovered yes, twice; response yes / recovered no.
-    // The SQL's rate is 2 of 3 = 67%; neither `yes` sits under a with/without bucket.
-    const row = recovery({ answered: 3, rate: 67, enough: true, with_response: 1, with_recovered: 0, without_response: 0, without_recovered: 0 });
+  it("the recovery note votes with the rate the tail shows", () => {
+    const row = recovery({ occurrences: 3, verdict_occurrences: 3, answered: 3, recovered: 2, didnt: 1, rate: 67 });
     const [built] = acrossRecoveryRows(groupRecovery([sprintOf(AUG, { recovery: [row] })], "wealth"), "wealth");
     expect(built.tail).toBe("67% recovered");
     expect(built.note).toContain("Recovered at least half the time in 1 of 1 sprint");
   });
 
-  it("recovery does not vote below the bar the card shows a rate at", () => {
-    const thin = recovery({ answered: 2, rate: null, enough: false, with_response: 2, with_recovered: 2 });
+  it("recovery does not vote below RECUR_MIN answered", () => {
+    const thin = recovery({ answered: 1, recovered: 1, didnt: 0, rate: null, enough: false });
     const rows = groupRecovery([sprintOf(AUG, { recovery: [thin] })], "wealth");
     expect(rows[0].recurring).toBeNull();
   });
 
   it("the recurring line is appended to the row's note, not replacing it", () => {
-    const [row] = acrossFollowRows(groupFollow([sprintOf(AUG, { follow: [follow()] })], "wealth"), "wealth");
-    expect(row.note).toBe("1 unsure · Ran at least half the time in 1 of 1 sprint");
+    // Five occurrences, four answered: one was left blank, and the note keeps saying so.
+    const [row] = acrossRecoveryRows(groupRecovery([sprintOf(AUG, { recovery: [recovery()] })], "wealth"), "wealth");
+    expect(row.note).toBe("1 occurrence left blank · Recovered at least half the time in 1 of 1 sprint");
+  });
+});
+
+describe("across: the situation lines", () => {
+  it("attaches each item's situation lines from the groups that share the item and the Area", () => {
+    const history = [
+      sprintOf(AUG, {
+        impact: [impact()],
+        situations: [situation(), situation({ situation_id: "st2", situation_name: "Late night", occurrences: 2, recovered_answered: 2, rate: null, enough: false }), situation({ item_id: "i2", item_name: "Other", situation_id: "st9" })],
+      }),
+    ];
+    const [row] = acrossImpactRows(groupImpact(history, "wealth"), "wealth", groupSituations(history, "wealth"));
+    expect(row.breakdown).toEqual([
+      { name: "Monday standup", text: "4 occurrences · 50% recovered" },
+      { name: "Late night", text: "2 occurrences · Not enough data" },
+    ]);
+  });
+
+  it("a cue's line counts the days it applied and needs no recovery", () => {
+    const history = [sprintOf(AUG, { cues: [cue()], situations: [situation({ kind: "cue", item_id: "c1", item_name: "First hour is outreach", situation_id: "sc1", situation_name: "Scheduling", occurrences: 6, recovered_yes: 0, recovered_answered: 0, rate: null })] })];
+    const [row] = acrossCueRows(groupCues(history, "wealth"), "wealth", groupSituations(history, "wealth"));
+    expect(row.breakdown).toEqual([{ name: "Scheduling", text: "applied on 6 days" }]);
+  });
+
+  it("on All areas a situation line stays with its own Area's row", () => {
+    const history = [sprintOf(AUG, { impact: [impact()], situations: [situation()] }), sprintOf(JUN, { impact: [impact()], situations: [] })];
+    const rows = acrossImpactRows(groupImpact(history, "all"), "all", groupSituations(history, "all"));
+    expect(rows.map((r) => r.breakdown?.length ?? 0)).toEqual([1, 0]);
   });
 });
 
 describe("across: the suggested kit", () => {
   const kit = (over: Parameters<typeof suggestedKit>[0]) => suggestedKit(over);
-  const empty = { impact: [], follow: [], recovery: [], cues: [] };
+  const empty = { impact: [], recovery: [], cues: [] };
 
   it("asks for days before it suggests anything", () => {
     expect(kit({ ...empty, closedDays: 0 })).toBe("Nothing to suggest yet — close a few days first.");
@@ -273,83 +307,52 @@ describe("across: the suggested kit", () => {
     expect(kit({ ...empty, impact: thin, closedDays: 6 })).toBe("Not enough logged days yet. Each comparison needs 3 days on each side.");
   });
 
-  it("names the worst impediment, the response rate and the best cue", () => {
+  it("names the worst impediment, its recovery rate and the best cue", () => {
     const sentence = kit({
       impact: groupImpact([sprintOf(AUG, { impact: [impact()] })], "wealth"),
-      follow: groupFollow([sprintOf(AUG, { follow: [follow({ rate: 75 })] })], "wealth"),
       recovery: groupRecovery([sprintOf(AUG, { recovery: [recovery({ rate: 60 })] })], "wealth"),
       cues: groupCues([sprintOf(AUG, { cues: [cue()] })], "wealth"),
       closedDays: 12,
     });
     expect(sentence).toBe(
       "Keep Starting late as the highest impediment; days it shows up run 31 points lower. " +
-        "The response for Starting late runs 75% of the time and recovers 67% of the times it ran. " +
+        "You recover from Starting late 60% of the time. " +
         "Keep First hour is outreach — +22 points on the days it's used.",
     );
   });
 
-  it("quotes recovery on the occurrences the response ran, not the row's overall rate", () => {
-    // Recovered 0 of 3 times the response ran and 3 of 3 times it did not: the row's rate
-    // is 50, and the sentence must not attribute that to the response (FIX_LOG 2026-09-11).
-    const never = recovery({ with_response: 3, with_recovered: 0, without_response: 3, without_recovered: 3, answered: 6, rate: 50 });
+  it("quotes the recovery rate of the impediment it just named, not the best rate on the page", () => {
     const sentence = kit({
       ...empty,
-      follow: groupFollow([sprintOf(AUG, { follow: [follow({ rate: 100 })] })], "wealth"),
-      recovery: groupRecovery([sprintOf(AUG, { recovery: [never] })], "wealth"),
+      impact: groupImpact([sprintOf(AUG, { impact: [impact()] })], "wealth"),
+      recovery: groupRecovery([sprintOf(AUG, { recovery: [recovery({ item_id: "i2", name: "Doomscrolling", rate: 90 }), recovery({ rate: 40 })] })], "wealth"),
       closedDays: 12,
     });
-    expect(sentence).toBe("The response for Starting late runs 100% of the time and recovers 0% of the times it ran.");
-  });
-
-  it("quotes a recovery rate only from the sprint the follow-through rate came from", () => {
-    // One response in two sprints. The newest sprint's follow-through qualifies but its
-    // recovery is thin; the older sprint's recovery qualifies. The two groups quote two
-    // sprints, and the older figure must not be attached to the newer rate (FIX_LOG 2026-09-11).
-    const newest = sprintOf(AUG, { follow: [follow({ rate: 100 })], recovery: [recovery({ answered: 2, rate: null, enough: false })] });
-    const older = sprintOf(JUL, { follow: [follow({ rate: 25 })], recovery: [recovery({ rate: 50 })] });
-    const sentence = kit({ ...empty, follow: groupFollow([older, newest], "wealth"), recovery: groupRecovery([older, newest], "wealth"), closedDays: 20 });
-    expect(sentence).toBe("The response for Starting late runs 100% of the time.");
-  });
-
-  it("stays silent on recovery when the response ran fewer than three times, even with enough answers", () => {
-    const ranTwice = recovery({ with_response: 2, with_recovered: 2, without_response: 2, without_recovered: 1, answered: 4, rate: 75 });
-    const sentence = kit({
-      ...empty,
-      follow: groupFollow([sprintOf(AUG, { follow: [follow()] })], "wealth"),
-      recovery: groupRecovery([sprintOf(AUG, { recovery: [ranTwice] })], "wealth"),
-      closedDays: 12,
-    });
-    expect(sentence).toBe("The response for Starting late runs 75% of the time.");
-  });
-
-  it("quotes a recovery rate only for the response it just named", () => {
-    // Newest sprint: highest A, follow-through enough, recovery thin. Older sprint: highest
-    // B with a qualifying 60% recovery. B's figure must not be attached to A's sentence.
-    const newest = sprintOf(AUG, { follow: [follow()], recovery: [recovery({ answered: 2, rate: null, enough: false })] });
-    const older = sprintOf(JUL, {
-      follow: [follow({ item_id: "i2", name: "Doomscrolling", rate: 50 })],
-      recovery: [recovery({ item_id: "i2", name: "Doomscrolling", rate: 60 })],
-    });
-    const sentence = kit({ ...empty, follow: groupFollow([older, newest], "wealth"), recovery: groupRecovery([older, newest], "wealth"), closedDays: 20 });
-    expect(sentence).toBe("The response for Starting late runs 75% of the time.");
+    expect(sentence).toBe("Keep Starting late as the highest impediment; days it shows up run 31 points lower. You recover from Starting late only 40% of the time — make the THEN smaller.");
   });
 
   it("on All areas the same item in another Area is a different response", () => {
-    const wealth = sprintOf(AUG, { follow: [follow()] });
-    const health = sprintOf(JUN, { recovery: [recovery({ rate: 60 })] });
-    const sentence = kit({ ...empty, follow: groupFollow([wealth, health], "all"), recovery: groupRecovery([wealth, health], "all"), closedDays: 20 });
-    expect(sentence).toBe("The response for Starting late runs 75% of the time.");
+    const wealth = sprintOf(AUG, { impact: [impact()], recovery: [recovery({ rate: 60 })] });
+    const health = sprintOf(JUN, { recovery: [recovery({ rate: 20 })] });
+    const sentence = kit({ ...empty, impact: groupImpact([wealth, health], "all"), recovery: groupRecovery([wealth, health], "all"), closedDays: 20 });
+    expect(sentence).toBe("Keep Starting late as the highest impediment; days it shows up run 31 points lower. You recover from Starting late 60% of the time.");
   });
 
-  it("tells a low follow-through rate to make the THEN smaller", () => {
-    const sentence = kit({ ...empty, follow: groupFollow([sprintOf(AUG, { follow: [follow({ rate: 33 })] })], "wealth"), closedDays: 12 });
-    expect(sentence).toBe("The response for Starting late ran on only 33% of occurrences — make the THEN smaller.");
+  it("speaks about recovery alone when no impediment hurt enough", () => {
+    const sentence = kit({ ...empty, recovery: groupRecovery([sprintOf(AUG, { recovery: [recovery({ rate: 75 })] })], "wealth"), closedDays: 12 });
+    expect(sentence).toBe("You recover from Starting late 75% of the time.");
+  });
+
+  it("tells a low recovery rate to make the THEN smaller", () => {
+    const sentence = kit({ ...empty, recovery: groupRecovery([sprintOf(AUG, { recovery: [recovery({ recovered: 1, didnt: 2, answered: 3, rate: 33 })] })], "wealth"), closedDays: 12 });
+    expect(sentence).toBe("You recover from Starting late only 33% of the time — make the THEN smaller.");
   });
 
   it("never speaks from a row whose sample is short", () => {
     const shortImpact = groupImpact([sprintOf(AUG, { impact: [impact({ enough: false, delta_pts: -80 })] })], "wealth");
     const shortCue = groupCues([sprintOf(AUG, { cues: [cue({ enough: false, delta_pts: 90 })] })], "wealth");
-    expect(kit({ ...empty, impact: shortImpact, cues: shortCue, closedDays: 9 })).toBe("Not enough logged days yet. Each comparison needs 3 days on each side.");
+    const shortRecovery = groupRecovery([sprintOf(AUG, { recovery: [recovery({ answered: 2, recovered: 0, didnt: 2, rate: null, enough: false })] })], "wealth");
+    expect(kit({ impact: shortImpact, cues: shortCue, recovery: shortRecovery, closedDays: 9 })).toBe("Not enough logged days yet. Each comparison needs 3 days on each side.");
   });
 
   it("ignores an impediment that hurt by less than ten points", () => {
@@ -433,6 +436,7 @@ describe("across: the header and the explanation", () => {
     expect(HOW_TO_READ).not.toContain("on-target rate");
     expect(HOW_TO_READ).not.toContain("caused");
     expect(HOW_TO_READ).toContain("3 days on each side");
+    expect(HOW_TO_READ).toContain("3 answered recoveries");
     expect(HOW_TO_READ).toContain("most recent sprint that clears that bar");
   });
 

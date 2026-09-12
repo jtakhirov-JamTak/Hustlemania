@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { attainment, coverageLine, cueRows, effectiveClosedDays, followThroughRows, impactRows, recoveryRows } from "@/lib/insightCards";
+import { attainment, breakdownLines, coverageLine, cueRows, effectiveClosedDays, impactRows, recoveryRows } from "@/lib/insightCards";
 import { kitFrom, prefillFromKit } from "@/lib/kit";
-import type { AreaKit, CueRow, FollowThroughRow, ImpactRow, RecoveryRow } from "@/lib/data";
+import type { AreaKit, CueRow, ImpactRow, RecoveryRow, SituationRow } from "@/lib/data";
 
 const impact = (over: Partial<ImpactRow> = {}): ImpactRow => ({
   item_id: "i1",
@@ -15,9 +15,6 @@ const impact = (over: Partial<ImpactRow> = {}): ImpactRow => ({
   median_absent: 1.4,
   delta_pts: -75,
   enough: true,
-  felt_a_lot: 2,
-  felt_some: 2,
-  felt_nothing: 0,
   ...over,
 });
 
@@ -36,35 +33,35 @@ const cue = (over: Partial<CueRow> = {}): CueRow => ({
   ...over,
 });
 
-const follow = (over: Partial<FollowThroughRow> = {}): FollowThroughRow => ({
+/** F15: one recovery row per impediment over its situation rows. */
+const recovery = (over: Partial<RecoveryRow> = {}): RecoveryRow => ({
   item_id: "i1",
   name: "Saying yes",
   proof_then: "I reply with the retainer offer",
+  proof_recover: "back on the outreach list within 15 minutes",
+  is_highest: true,
   occurrences: 4,
+  verdict_occurrences: 4,
   answered: 4,
-  ran: 2,
+  recovered: 2,
   didnt: 2,
-  partially: 1,
-  unsure: 0,
   rate: 50,
   enough: true,
   ...over,
 });
 
-const recovery = (over: Partial<RecoveryRow> = {}): RecoveryRow => ({
+const situation = (over: Partial<SituationRow> = {}): SituationRow => ({
+  kind: "impediment",
   item_id: "i1",
-  name: "Saying yes",
-  proof_recover: "back on the outreach list within 15 minutes",
-  with_response: 2,
-  with_recovered: 1,
-  without_response: 2,
-  without_recovered: 1,
-  answered: 4,
+  item_name: "Saying yes",
+  situation_id: "st1",
+  situation_name: "A one-off request lands",
+  occurrences: 4,
+  asked_days: 9,
+  recovered_yes: 2,
+  recovered_answered: 4,
   rate: 50,
   enough: true,
-  median_recovered: 0.65,
-  median_not: 0.65,
-  outcome_enough: true,
   ...over,
 });
 
@@ -75,18 +72,18 @@ describe("insight card copy", () => {
     expect(attainment(null)).toBe("—");
   });
 
-  it("an impediment row prints both group sizes and the delta in points", () => {
+  it("an impediment row prints both group sizes and the delta in points, and no perceived-cost tally (F15)", () => {
     const [row] = impactRows([impact()]);
     expect(row.tag).toBe("HIGHEST");
     expect(row.tail).toBe("-75 pts");
     expect(row.tailTone).toBe("bad");
     expect(row.sub).toBe("Present on 4 of 9 logged days");
     expect(row.bars.map((b) => b.value)).toEqual(["65%", "140%"]);
-    expect(row.note).toBe("Felt: 2 a lot, 2 some");
+    expect(row.note).toBeNull();
   });
 
   it("a thin sample says what it needs instead of showing a comparison", () => {
-    const [row] = impactRows([impact({ present_days: 2, absent_days: 8, delta_pts: null, enough: false, felt_a_lot: 0, felt_some: 0 })]);
+    const [row] = impactRows([impact({ present_days: 2, absent_days: 8, delta_pts: null, enough: false })]);
     expect(row.tail).toBe("Not enough data");
     expect(row.note).toBe("Needs 3 days with and 3 without · has 2 and 8");
     expect(row.warn).toBe(true);
@@ -100,31 +97,48 @@ describe("insight card copy", () => {
     expect(row.sub).toBe("Used on 6 of 10 logged days");
   });
 
-  it("follow-through reports `partially` separately and never inside `ran`", () => {
-    const [row] = followThroughRows([follow()]);
-    expect(row.tail).toBe("50% ran");
-    expect(row.bars[0]).toMatchObject({ value: "2", label: "ran the response" });
-    expect(row.note).toBe("1 partially");
-  });
-
-  it("follow-through drops an impediment that never occurred", () => {
-    expect(followThroughRows([follow({ occurrences: 0, answered: 0, ran: 0, didnt: 0, partially: 0, rate: null, enough: false })])).toEqual([]);
-  });
-
-  it("recovery compares with the response against without it", () => {
+  it("recovery reports recovered against didn't over the answered situation occurrences", () => {
     const [row] = recoveryRows([recovery()]);
-    expect(row.bars.map((b) => b.label)).toEqual(["recovered with the response", "recovered without it"]);
-    expect(row.bars.map((b) => b.value)).toEqual(["1 of 2", "1 of 2"]);
-    expect(row.note).toContain("Attainment 65% when recovered vs 65% when not");
-  });
-
-  it("recovery hides the attainment line until each side has two days", () => {
-    const [row] = recoveryRows([recovery({ outcome_enough: false })]);
+    expect(row.tag).toBe("HIGHEST");
+    expect(row.tail).toBe("50% recovered");
+    expect(row.sub).toBe("Recovered when back on the outreach list within 15 minutes");
+    expect(row.bars.map((b) => b.label)).toEqual(["recovered", "didn't recover"]);
+    expect(row.bars.map((b) => b.value)).toEqual(["2 of 4", "2 of 4"]);
     expect(row.note).toBeNull();
   });
 
+  it("recovery names the occurrences left blank and the answered count a thin row still needs", () => {
+    const [blank] = recoveryRows([recovery({ occurrences: 6, answered: 4 })]);
+    expect(blank.note).toBe("2 occurrences left blank");
+    const [thin] = recoveryRows([recovery({ occurrences: 2, answered: 2, recovered: 1, didnt: 1, rate: null, enough: false })]);
+    expect(thin.tail).toBe("Not enough data");
+    expect(thin.note).toBe("Needs 3 answered recoveries · has 2");
+    expect(thin.warn).toBe(true);
+  });
+
+  it("recovery drops an impediment that never showed up", () => {
+    expect(recoveryRows([recovery({ occurrences: 0, verdict_occurrences: 0, answered: 0, recovered: 0, didnt: 0, rate: null, enough: false })])).toEqual([]);
+  });
+
+  it("situation lines: occurrences and the recovery rate for an impediment, days applied for a cue, thin rows say so", () => {
+    const rows = [
+      situation(),
+      situation({ situation_id: "st2", situation_name: "Late night", occurrences: 2, recovered_yes: 1, recovered_answered: 2, rate: null, enough: false }),
+      situation({ situation_id: "st3", situation_name: "Never", occurrences: 0, recovered_yes: 0, recovered_answered: 0, rate: null, enough: false }),
+      situation({ kind: "cue", item_id: "c1", situation_id: "sc1", situation_name: "Scheduling", occurrences: 6, recovered_yes: 0, recovered_answered: 0, rate: null, enough: true }),
+      situation({ item_id: "i9", situation_id: "st9", situation_name: "Someone else's" }),
+    ];
+    expect(breakdownLines(rows, "i1", "impediment")).toEqual([
+      { name: "A one-off request lands", text: "4 occurrences · 50% recovered" },
+      { name: "Late night", text: "2 occurrences · Not enough data" },
+      { name: "Never", text: "never showed up" },
+    ]);
+    expect(breakdownLines(rows, "c1", "cue")).toEqual([{ name: "Scheduling", text: "applied on 6 days" }]);
+    expect(breakdownLines(rows, "c1", "impediment")).toEqual([]);
+  });
+
   it("no card ever says `caused`", () => {
-    const text = [...impactRows([impact()]), ...cueRows([cue()]), ...followThroughRows([follow()]), ...recoveryRows([recovery()])]
+    const text = [...impactRows([impact()]), ...cueRows([cue()]), ...recoveryRows([recovery()])]
       .flatMap((r) => [r.sub, r.tail, r.note ?? "", ...r.bars.map((b) => b.label)])
       .join(" ");
     expect(text.toLowerCase()).not.toContain("caused");
@@ -213,7 +227,7 @@ describe("prefilling step 4 from the kit", () => {
     });
   });
 
-  it("trims to the rule 3-4 caps rather than handing start_sprint something it refuses", () => {
+  it("trims to the rule 3-4 caps (F15: three of each) rather than handing start_sprint something it refuses", () => {
     const big = {
       impediments: Array.from({ length: 7 }, (_, i) => ({ id: `i${i}` })),
       cues: Array.from({ length: 5 }, (_, i) => ({ id: `c${i}` })),
@@ -222,7 +236,7 @@ describe("prefilling step 4 from the kit", () => {
       kit({ impedimentIds: big.impediments.map((i) => i.id), cueIds: big.cues.map((c) => c.id), highestId: "i6" }),
       big,
     );
-    expect(out.impedimentIds).toHaveLength(5);
+    expect(out.impedimentIds).toHaveLength(3);
     expect(out.cueIds).toHaveLength(3);
     // The promoted one survives the cap: it leads the list.
     expect(out.impedimentIds[0]).toBe("i6");

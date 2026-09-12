@@ -1,7 +1,7 @@
 "use client";
 
 import { FinishSprint } from "@/components/today/FinishSprint";
-import { Rail } from "@/components/today/Rail";
+import { Rail, type Situations } from "@/components/today/Rail";
 import { Timeline } from "@/components/today/Timeline";
 import { TodayCard } from "@/components/today/TodayCard";
 import { areaName, type AreaKey } from "@/lib/areas";
@@ -24,6 +24,7 @@ export function Journal({
   position,
   items,
   library,
+  situations,
   offered,
   tasks,
   streak,
@@ -35,6 +36,8 @@ export function Journal({
   position: SprintDayPosition;
   items: SprintItems;
   library: { cues: LibraryItem[]; impediments: LibraryItem[] };
+  /** F15: the live situations per kind, for the inline creates in the rail and "Set up tomorrow". */
+  situations: Situations;
   offered: OfferedItems;
   tasks: Task[];
   streak: number;
@@ -120,6 +123,7 @@ export function Journal({
                 observations={observations.get(day.id) ?? { impediments: [], cues: [] }}
                 items={items}
                 library={library}
+                situations={situations}
                 canClose={position.kind === "during" && day.closed_at === null}
                 cannotCloseReason={position.kind === "before" ? "Day 1 begins tomorrow." : undefined}
                 dayOneAhead={position.kind === "before"}
@@ -136,6 +140,7 @@ export function Journal({
         streakText={streakText}
         items={items}
         library={library}
+        situations={situations}
         locked={sprintOver}
         celebration={sprint.celebration}
         measured={measured}

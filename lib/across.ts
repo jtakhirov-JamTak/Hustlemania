@@ -1,9 +1,9 @@
 import type { AreaKey } from "@/lib/areas";
-import type { CueRow, FollowThroughRow, ImpactRow, RecoveryRow } from "@/lib/data";
+import type { CueRow, ImpactRow, RecoveryRow, SituationRow } from "@/lib/data";
 
 /**
  * Across sprints (F11): the per-sprint insight rows F10's SQL already returns, grouped
- * into one row per item so the four cards can be read over a whole history.
+ * into one row per item so the cards can be read over a whole history.
  *
  * Nothing here pools days. A group's two bars are ONE sprint's comparison — the most
  * recent that clears the n≥3 bar — because a median over days drawn from sprints with
@@ -27,12 +27,12 @@ export type SprintRef = {
   end_date: string;
 };
 
-/** One finished sprint's four result sets, as `loadAcross` reads them. */
+/** One finished sprint's result sets, as `loadAcross` reads them. */
 export type SprintInsights = {
   sprint: SprintRef;
   impact: ImpactRow[];
-  follow: FollowThroughRow[];
   recovery: RecoveryRow[];
+  situations: SituationRow[];
   cues: CueRow[];
 };
 
@@ -151,34 +151,30 @@ export function groupCues(history: SprintInsights[], scope: Scope): Grouped<CueR
 
 /**
  * Tri-state note: a sprint votes using the card's own numerator and denominator, so the
- * note and the displayed rate never disagree. Follow-through votes at
- * `answered >= RECUR_MIN` from `ran / answered` (`answered` counts `partially`, 0015).
- * Recovery votes from the SQL's own `rate`: its numerator is every `recovered = 'yes'`
- * regardless of the response answer, and the row carries no such count below the n≥3
- * bar, so recovery votes only where the card shows a rate. Recomputing it from
- * `with_recovered + without_recovered` dropped the days whose response was `unsure`
- * and made the note contradict the tail (FIX_LOG 2026-09-09).
+ * note and the displayed rate never disagree. Recovery votes at `answered >= RECUR_MIN`
+ * from `recovered / answered` — the exact counts the tail is computed from (F15), so no
+ * day can be in one and not the other (FIX_LOG 2026-09-09).
  */
-function triNote(votes: (boolean | null)[], word: "Ran" | "Recovered"): string | null {
+function triNote(votes: (boolean | null)[], word: "Recovered"): string | null {
   const voted = votes.filter((v): v is boolean => v !== null);
   if (voted.length === 0) return null;
   return `${word} at least half the time in ${voted.filter(Boolean).length} of ${voted.length} sprint${voted.length === 1 ? "" : "s"}`;
 }
 
 const triVote = (answered: number, yes: number): boolean | null => (answered >= RECUR_MIN ? yes / answered >= 0.5 : null);
-const rateVote = (rate: number | null): boolean | null => (rate === null ? null : rate >= 50);
 
 /**
- * The response cards group by item **and version** — the sprint's proof text. A rewritten
- * WHEN → THEN is a different intervention, so it starts its own row rather than merging
- * its rate into the old text's. Note the version is the tuple the SQL reports per sprint
- * (`max(proof_then)`), so a rewrite *inside* one sprint cannot be split here.
+ * The recovery card groups by item **and version** — the sprint's THEN and RECOVERED
+ * WHEN text. A rewritten response is a different intervention, so it starts its own row
+ * rather than merging its rate into the old text's. Note the version is the tuple the
+ * SQL reports per sprint (`max(proof_then)`), so a rewrite *inside* one sprint cannot
+ * be split here.
  */
-export function groupFollow(history: SprintInsights[], scope: Scope): Grouped<FollowThroughRow>[] {
+export function groupRecovery(history: SprintInsights[], scope: Scope): Grouped<RecoveryRow>[] {
   const groups = collect(
     history,
-    (s) => s.follow.filter((r) => r.occurrences > 0),
-    (row, sprint) => [row.item_id, row.proof_then ?? "", scope === "all" ? areaOf(sprint) : ""].join("::"),
+    (s) => s.recovery.filter((r) => r.occurrences > 0),
+    (row, sprint) => [row.item_id, row.proof_then ?? "", row.proof_recover ?? "", scope === "all" ? areaOf(sprint) : ""].join("::"),
   );
   return [...groups].map(([key, entries]) => {
     const { row, from } = choose(entries);
@@ -189,31 +185,26 @@ export function groupFollow(history: SprintInsights[], scope: Scope): Grouped<Fo
       area: entries[0].sprint.area,
       sprints: new Set(entries.map((e) => e.sprint.id)).size,
       recurring: triNote(
-        entries.map((e) => triVote(e.row.answered, e.row.ran)),
-        "Ran",
+        entries.map((e) => triVote(e.row.answered, e.row.recovered)),
+        "Recovered",
       ),
     };
   });
 }
 
-export function groupRecovery(history: SprintInsights[], scope: Scope): Grouped<RecoveryRow>[] {
+/**
+ * F15: the per-situation breakdown, one group per (kind, item, situation) — a situation is
+ * the same situation whatever the response text was, so no version in the key. The row
+ * shown is the newest sprint's that clears the bar, like every other card.
+ */
+export function groupSituations(history: SprintInsights[], scope: Scope): Grouped<SituationRow>[] {
   const groups = collect(
     history,
-    (s) => s.recovery.filter((r) => r.answered > 0 || r.with_response > 0 || r.without_response > 0),
-    (row, sprint) => [row.item_id, row.proof_recover ?? "", scope === "all" ? areaOf(sprint) : ""].join("::"),
+    (s) => s.situations,
+    (row, sprint) => [row.kind, row.item_id, row.situation_id, scope === "all" ? areaOf(sprint) : ""].join("::"),
   );
   return [...groups].map(([key, entries]) => {
     const { row, from } = choose(entries);
-    return {
-      key,
-      row,
-      from,
-      area: entries[0].sprint.area,
-      sprints: new Set(entries.map((e) => e.sprint.id)).size,
-      recurring: triNote(
-        entries.map((e) => rateVote(e.row.rate)),
-        "Recovered",
-      ),
-    };
+    return { key, row, from, area: entries[0].sprint.area, sprints: new Set(entries.map((e) => e.sprint.id)).size, recurring: null };
   });
 }
