@@ -6,6 +6,32 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-12 — The code reached production before its migration: `git push` is a deploy
+
+**Problem.** F15's commit was pushed to `main` on the user's word before the production
+gate for migration 0019 had run. The GitHub → Vercel integration deployed the new app
+to hustlemania.app within a minute (Vercel status `success` on the commit) while the
+hosted database was still at 0018, so every signed-in page that embeds `situations` or
+calls the new `close_day` signature failed until the migration landed. Local verify was
+green because the local stack had 0019; nothing in the release order tied the code
+push to the schema push.
+
+**Fix.** Order, not code: the user ran `supabase db push --linked` (0019 applied,
+`migration list --linked` shows 0019 remote, `db diff --linked` clean but for the
+platform's `ensure_rls`, deployed spec 4/4). The rule now recorded in
+`docs/RUNBOOK_RESTORE.md` §Release order and the agent's memory: a commit that carries
+a migration is pushed to GitHub only after the migration is on the hosted project, or
+the push is held until the gate has run.
+
+**Regression test.** None executable; this is a release-procedure defect. The check is
+the runbook step "migration on hosted before `git push`" and the `migration list
+--linked` read that precedes every push of a commit touching `supabase/migrations/`.
+
+**Where found.** Right after the F15 push (2026-09-12 02:50Z), from the Vercel commit
+status; the hosted migration list still ended at 0018.
+
+---
+
 ## 2026-09-11 — The 0019 conversion could not copy the proof snapshot: the rule-17 trigger refused its own history rows
 
 **Problem.** F15 moves the Highest's THEN / RECOVERED WHEN snapshot from `sprint_days`

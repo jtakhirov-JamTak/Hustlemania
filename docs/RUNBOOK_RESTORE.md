@@ -46,6 +46,21 @@ grep -c "COPY \"auth\".\"users\"" "$D/data.sql"     # 1
 grep -c "COPY \"public\".\"sprints\"" "$D/data.sql" # 1
 ```
 
+## Release order when a commit carries a migration
+
+`git push` to `main` **is** a production deploy: the GitHub → Vercel integration builds
+and promotes within a minute, with no manual gate. So the schema must be on the hosted
+project before the code is. In order (FIX_LOG 2026-09-12):
+
+1. Take the dump (above) and restore it into the local stack; apply the new migration
+   on top with `npx supabase migration up`; check the counts.
+2. Production gate: show the migration (and any hand-run script) and wait for the word.
+3. `npx supabase db push --linked`, then `npx supabase migration list --linked` (the new
+   version is `remote`), `npx supabase db diff --linked` (clean but for the platform's
+   `ensure_rls`), and the deployed Playwright project.
+4. Only now `git push`. A code push that lands before step 3 breaks every signed-in page
+   until the migration catches up.
+
 ## Restore into the local stack (the drill)
 
 The drill proves a file can become a running app again. It touches the local stack
@@ -112,4 +127,5 @@ back with it.
 
 | Date (UTC) | Dump folder | Hosted counts (users / sprints / sprint_days / reminder_log) | Local counts after restore | `/login` served | Notes |
 |---|---|---|---|---|---|
+| 2026-09-12 02:52 | `C:\Users\jtakh\backups\hustlemania\2026-09-12` (`roles.sql` 370 B, `data.sql` 44 KB) | not read (dump only; one `auth.users` COPY block, one `public.sprints` block confirmed by grep) | — (no restore: the agent's load of the dump was refused by the permission classifier and the user chose to push 0019 first, production having already received the F15 code) | — | Pre-0019 dump, F15 release. Not a drill — the restore step is still owed for this dump; run it before the next migration. |
 | 2026-09-10 06:10 | `C:\Users\jtakh\backups\hustlemania\2026-09-10` (`roles.sql` 370 B, `data.sql` 19 KB) | 1 / 1 / 14 / 1 (also visions 1, tasks 2, cues 2, impediments 2) | identical, all eight | 200 in 2 s; `/sprints` → 307 `/login` | First drill, F14. `db dump --linked` needed no password (the CLI's login role). The dump carried every `auth` table (users, sessions, refresh tokens, …) and all fourteen `public` tables. Loaded as `supabase_admin` in one transaction, exit 0. Local stack reset to blank afterwards so no production copy lingers. |

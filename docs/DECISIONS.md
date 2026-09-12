@@ -6,6 +6,30 @@ Inclusion test: record it only if a future session would reasonably ask
 
 ---
 
+## 2026-09-12 — F15 release: code before schema, then a full wipe instead of the owner-only delete
+
+**What happened.** "Commit and push" deployed the F15 app to hustlemania.app through the
+Vercel integration before migration 0019 had been pushed (FIX_LOG 2026-09-12). Shown
+the two ways out — roll back the deployment in Vercel, or push 0019 now — the user
+chose to push. The classifier refuses `db push` and the loading of a production dump
+from the agent, so the user ran `supabase db push --linked` by hand; 0019 applied, the
+hosted diff is clean but for the platform's `ensure_rls`, the deployed spec passed 4/4.
+The dump rehearsal did not run first: the dump exists (backups/2026-09-12), the restore
+step is still owed (RUNBOOK_RESTORE drill record).
+
+**The delete.** The 2026-09-11 call was "others have data; delete only mine" with
+`scripts/delete-user-rows.sql`. Asked what deleting other users' data would take, and
+shown three options (per-user script · delete the account · truncate every app table),
+the user chose the third: one TRUNCATE of all nineteen `public` tables, run by the user
+in the SQL editor, `auth.users` kept. Every account now signs in to a blank app. The
+only copy of the pre-F15 rows is that dump, held outside the repo. The per-user script
+stays in `scripts/` for the next such request.
+
+**Rule recorded.** A commit that carries a migration is pushed to GitHub only after the
+migration is on the hosted project (RUNBOOK_RESTORE §Release order).
+
+---
+
 ## 2026-09-11 — F15 situations: the response is the item, situations hang off it
 
 `/interview` in feature mode, escalated to DESIGN → SPECIFY because the change rewrites the
