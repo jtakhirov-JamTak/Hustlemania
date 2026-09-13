@@ -2860,6 +2860,10 @@ green.*
   poster focus rings, chips to 44 px, the query string out of `request.error`, two dead
   server actions gone, `friendlyError` longest-first with a schema-cache guard, the RLS
   sweep, `e2e/auth-callback.spec.ts`, build-env warnings (DECISIONS U9).
+  **Released 2026-09-13:** commit f4b5d84 (F19 + U6–U9 + migration 0023); the owner's
+  `db push --linked` first, verified on the hosted column privilege; `git push`
+  05:54:11Z, Vercel success 05:54:37Z, the served stylesheet and the live CSP header
+  carry the new rules, deployed spec 4/4.
 
 ### F20 — Alerts: the owner is told when the app breaks
 *Specified 2026-09-13 from the full audit (H1 no sink, H2 no cron heartbeat, H3 the
