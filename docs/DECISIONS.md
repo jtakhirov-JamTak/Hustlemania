@@ -105,6 +105,74 @@ keeps `p_intention` (F18 non-goal: no change to the function). The throwaway moc
 page was again not built: 32 real captures in `docs/mockups/f18-wizard-rail/`. The
 `Modal` opener defect (FIX_LOG) cost two wrong fixes before the Strict Mode explanation.
 
+**Build-time calls (2026-09-13, F19).** The intention is stored as the words after
+"Today I will" (F17's parser prompt drops the lead-in) and shown as stored on the line,
+while closing and when closed — no lead-in is re-added, so the three states agree. A
+Save is a frozen plan of steps (intention → archives → creates, in order); after a
+failure the box stays locked and Retry resumes the same plan from the failed step, so an
+edit cannot change what "the rest" means and nothing is written twice. A re-recording
+always rewrites the intention, even when unchanged: one write beats a diff. Re-record
+prefills the intention and the undone tasks only — the done ones stay, so re-saying them
+would duplicate them. Tasks are optional on the first Save, so the e2e saves the
+intention alone first; that is the only state in which "the box shown while an intention
+exists" can turn the test red. The mid-list failure is forced by aborting the third
+server-action POST with `page.route` — the harness's one way to fail a create that then
+succeeds on Retry. The entry's sorts pushed the golden path over the parser's
+ten-a-minute cap in the libraries section; the test clears the user's `parse_log` after
+the Today section rather than slowing down. `TaskList` reports its rows to the host
+(`onRows`) instead of lifting its state: the F4 list keeps its own autosave and the
+host only reads. The throwaway mockup page was not built: 16 real captures in
+`docs/mockups/f19-today-box/`.
+
+**U7 (2026-09-13): the client names a task's id.** The full audit showed Retry could
+duplicate a create whose response was lost after the commit. Three shapes were weighed:
+a batch RPC (needs a decision on the one-write-per-row convention and a migration
+anyway), a text-match reconciliation on Retry (two identical tasks in one list are
+legitimate, so it cannot tell a lost response from a second row), and a client-drawn id
+(one column added to the 0006 INSERT grant, the primary key does the dedup, RLS
+unchanged). The third was chosen: migration 0023, `createTask(dayId, text, id?)`, the
+F4 draft row keeps its id across a Retry. The "creates made parallel" mutation still
+holds — the steps stay sequential; only the id's origin moved.
+
+**U6 (2026-09-13): the mobile floor restated after the menu rules.** `.menu-button` and
+`.menu-item` sat after the phone `.j-link` lift at equal specificity, so the floor lost;
+the fix is the floor restated at the end of the menu section, not a specificity hack,
+and the phone golden path now measures the button and each item.
+
+**U8 (2026-09-13): the reminder pass batches.** One `reminders_claim` for every due
+day (the function already took an array), sends through five workers, one
+`reminders_mark` for the sent ids and one per failed user with its error; the route
+declares `maxDuration = 60`. Five, not more: Resend's limit is per second and the
+provider's latency, not the database, is the cost that grows with users. Not changed:
+the ten-minute retry window and the three attempts (0018), claim-before-send, one email
+per user. A partial claim now reads as one call returning fewer ids, which the unit
+tests pin.
+
+**F20 alerts — interview calls (2026-09-13), specified and kept open.** The owner chose
+email through Resend (already wired, one new `ALERT_TO`) over Sentry or a Vercel drain;
+a heartbeat row written by the reminder route and checked from the signed-in layout
+over a database watchdog or an external monitor; every `report()` kind alerting with a
+database-backed 30-minute cooldown per kind over a named-paths list or a digest; and a
+missing-key alert plus a global ceiling of 500 sorts a day. Then the owner chose to
+keep the build open and fold the audit's easy fixes into F19 instead; the SPEC entry
+stands as specified, unapproved.
+
+**U9 (2026-09-13): the audit's easy fixes ride on F19.** Chosen by return on a small
+change with a red test available, not by severity: eval-12's two P2s (a synchronous
+Save latch beside `pending`; the missing-intention line says so), the three nonce-free
+CSP directives, the menu and poster focus rings, the Today card's title as a heading,
+the confidence chips to 44 px (they wrap to two rows at 390 px, which is fine), the
+query string stripped from `request.error` paths, the two uncalled server actions
+deleted, `friendlyError` longest-code-first with a schema-cache guard, the RLS sweep
+over every policy and every granted table, a request-only landing test, and build-env
+warnings for the four runtime secrets. Left open on purpose: the auth-outage tests
+(H5), the session-guard and cap→model seam tests, the perf loaders, CaptureBox's
+sort-focus (shared component), the empty-row remount (M20), the viewport and dialog
+work (M25–M27), and everything in buckets C and D. A correction to the record: the
+F16 line that says dictation audio never leaves the device is wrong for desktop Chrome
+and Safari — the Web Speech API streams to the browser vendor's servers; the privacy
+notice (open) must say so. The line stays as written; this paragraph is the correction.
+
 ---
 
 ## 2026-09-12 — F16 vision v3: three steps that each save something, all three unlock sprints, INTERFERES and the optional prompts deleted

@@ -1,7 +1,7 @@
 "use client";
 
 import { ErrorBar } from "@/components/ErrorBar";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createTask, removeTask, updateTask } from "@/app/(app)/actions/tasks";
 import { callAction } from "@/lib/callAction";
 import type { Task } from "@/lib/data";
@@ -17,12 +17,30 @@ type Status = { kind: "idle" | "saving" | "saved" | "error"; text?: string; retr
  * an actual or the sprint (rule 15). A closed day renders read-only (rule 17); the DB
  * refuses the write regardless.
  */
-export function TaskList({ dayId, initial, locked, lockedReason }: { dayId: string; initial: Task[]; locked: boolean; lockedReason: string }) {
+export function TaskList({
+  dayId,
+  initial,
+  locked,
+  lockedReason,
+  onRows,
+}: {
+  dayId: string;
+  initial: Pick<Task, "id" | "text" | "done">[];
+  locked: boolean;
+  lockedReason: string;
+  /** F19: the host hears every change to the rows (a tick, a remove), so a re-recording knows which tasks are done. */
+  onRows?: (rows: { id: string; text: string; done: boolean }[]) => void;
+}) {
   const [rows, setRows] = useState<Row[]>(initial.map((t) => ({ id: t.id, text: t.text, saved: t.text, done: t.done })));
+  useEffect(() => {
+    onRows?.(rows.map((r) => ({ id: r.id, text: r.saved, done: r.done })));
+  }, [rows, onRows]);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const draftRef = useRef<HTMLInputElement>(null);
   const adding = useRef(false);
+  // The id the next create will carry; a Retry after a lost response reuses it (audit 2026-09-13 M1).
+  const draftId = useRef<string | null>(null);
 
   async function run(op: () => Promise<{ error?: string }>, retry: () => void) {
     setStatus({ kind: "saving" });
@@ -39,11 +57,13 @@ export function TaskList({ dayId, initial, locked, lockedReason }: { dayId: stri
     const text = draft.trim();
     if (!text || adding.current) return;
     adding.current = true;
+    const id = (draftId.current ??= crypto.randomUUID());
     const ok = await run(
       async () => {
-        const res = await callAction(() => createTask(dayId, text));
+        const res = await callAction(() => createTask(dayId, text, id));
         const task = res.task;
         if (res.error || !task) return { error: res.error ?? GENERIC_SAVE_ERROR };
+        draftId.current = null;
         setRows((r) => [...r, { id: task.id, text: task.text, saved: task.text, done: task.done }]);
         setDraft("");
         return {};

@@ -6,6 +6,57 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-13 — Three clicks in one tick ran F19's Save plan three times; a pre-F19 day showed an empty intention line
+
+**Problem.** `TodayEntry.save()` guarded on `useTransition`'s `pending`, which is false
+until React re-renders, so clicks landing in the same tick each built a plan with fresh
+ids and every task was created three times (eval-12 P2-1; a human double-tap at 60 ms
+was already guarded). Separately, a day holding tasks but no intention — the shape of
+every open day from before F19 — rendered the list under an empty line with nothing
+pointing at Re-record (eval-12 P2-2).
+
+**Fix.** A synchronous `saving` ref is set on Save and cleared when the run completes
+or fails; the line reads "No intention yet — Re-record to say one." (muted, italic,
+`data-missing`) when the intention is blank. The line also takes focus after a Save.
+
+**Regression test.** e2e golden path: the Re-record Save is three `click()` calls in
+one `evaluate` — exactly the two new rows land (red with the latch removed: four extra
+rows); a task inserted directly on day 1 before the first visit → the saved state with
+the missing line and no box, then the box once the task is gone.
+
+**Where found.** `docs/evals/eval-12.md`, on the uncommitted F19 tree; fixed as U9.
+
+---
+
+## 2026-09-13 — F19's Retry could write a task twice: a create that committed but lost its response was re-run as a new row
+
+**Problem.** Today's entry saves its tasks one server action at a time and offers
+Retry after a failure. The e2e forced the failure by aborting the request *before* the
+server, so the feature's own mutations never saw the other half: a create that reaches
+the server and commits, then loses its response (a deploy mid-request, a dropped
+connection). Retry re-ran the step and `createTask` inserted a second identical row —
+the SPEC's "nothing is duplicated" was untrue for that case. Found by the full audit
+(2026-09-13, test audit M1), before any commit.
+
+**Fix.** The client names each task's id up front (`crypto.randomUUID()` in
+`planEntrySteps` and in the F4 draft row) and `createTask` accepts it; a replay hits the
+primary key and the action returns the row that already exists. Migration 0023 widens
+the column-level INSERT grant on `tasks` by `id` (0006 listed three columns, so the
+named insert was `permission denied`), with a self-check on the four columns. RLS is
+unchanged: another user's id cannot be claimed (the key refuses it) or read (the replay
+select runs under RLS).
+
+**Regression test.** e2e `golden-path.spec.ts` day-1 section: the third server-action
+POST is fetched (the server commits) and answered 500 once; the DB holds both rows before
+Retry and still exactly two after it — red on the old code (three rows), green after.
+`tests/db/tasks.test.ts`: a replay of a named id is refused by the key and leaves one
+row; user B cannot claim A's id and reads nothing by it. `tests/db/grants.test.ts` pins
+the four INSERT columns.
+
+**Where found.** `docs/audits/full-audit-2026-09-13.md` M1, on the uncommitted F19 tree.
+
+---
+
 ## 2026-09-12 — A dialog never returned focus to its opener in development: Strict Mode read the opener twice
 
 **Problem.** `components/Modal.tsx` read `document.activeElement` inside its mount

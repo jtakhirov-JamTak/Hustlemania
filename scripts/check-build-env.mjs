@@ -45,4 +45,11 @@ if (hosted && process.env.PARSE_STUB) {
 if (!process.env.ANTHROPIC_API_KEY) {
   console.warn("[build-env] ANTHROPIC_API_KEY is not set; every one-box capture will answer 'Sorting is unavailable' in this build.");
 }
+// Runtime fails closed without these (503 on the cron route, a throw in the admin client), but
+// the first sign would otherwise be at 20:05 local the next evening. Name them at build time.
+if (hosted) {
+  for (const name of ["CRON_SECRET", "RESEND_API_KEY", "REMINDER_FROM", "SUPABASE_SERVICE_ROLE_KEY"]) {
+    if (!process.env[name]) console.warn(`[build-env] ${name} is not set; the reminder path will refuse to run in this build.`);
+  }
+}
 console.log(`[build-env] build targets ${url}${local ? " (local stack — not a deployable build)" : ""}`);

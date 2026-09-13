@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { onRequestError } from "@/instrumentation";
 import { redact, report, safeContext } from "@/lib/observe";
 
 /**
@@ -7,6 +8,15 @@ import { redact, report, safeContext } from "@/lib/observe";
  */
 describe("observe: what reaches the log", () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it("a render error on the login round-trip logs the path without its query string (audit 2026-09-13 M16)", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await onRequestError(new Error("boom"), { path: "/login?sent=1&email=jane@example.com", method: "GET", headers: {} }, { routerKind: "App Router", routePath: "/login", routeType: "render", revalidateReason: undefined });
+    const line = String(spy.mock.calls[0]?.[0]);
+    expect(line).toContain('"path":"/login"');
+    expect(line).not.toContain("email=");
+    expect(line).not.toContain("jane@example.com");
+  });
 
   it("redacts PostgREST's echoed row values and a Postgres failing-row detail", () => {
     expect(redact('duplicate key value violates unique constraint "x" Key (user_id, name)=(abc, My secret plan) already exists')).toBe(

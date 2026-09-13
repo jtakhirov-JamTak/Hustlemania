@@ -56,6 +56,8 @@ describe("public schema access model", () => {
       { table_name: "situations", column_name: "name" },
       { table_name: "situations", column_name: "scope" },
       { table_name: "situations", column_name: "user_id" },
+      // 0023: the client may name the id so a Retry after a lost response replays the same row.
+      { table_name: "tasks", column_name: "id" },
       { table_name: "tasks", column_name: "sprint_day_id" },
       { table_name: "tasks", column_name: "text" },
       { table_name: "tasks", column_name: "user_id" },

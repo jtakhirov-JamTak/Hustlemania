@@ -46,6 +46,9 @@ test.describe("deployed origin", () => {
     expect(headers["x-frame-options"]).toBe("DENY");
     expect(headers["x-content-type-options"]).toBe("nosniff");
     expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+    expect(headers["content-security-policy"]).toContain("base-uri 'none'");
+    expect(headers["content-security-policy"]).toContain("form-action 'self'");
+    expect(headers["content-security-policy"]).toContain("object-src 'none'");
     expect(headers["x-powered-by"]).toBeUndefined();
   });
 

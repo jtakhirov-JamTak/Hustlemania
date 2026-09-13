@@ -15,6 +15,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * Fail closed: an unset secret or, in production, an unset mail provider is 503 and
  * claims nothing. A bad or missing bearer is 401 with an empty body.
  */
+/** The pass must finish inside the function: a cut-off mid-run would leave claimed days unmarked until the retry window. */
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   const auth = authorizeCron(request.headers.get("authorization"), process.env.CRON_SECRET);
   if (auth === "unconfigured") {

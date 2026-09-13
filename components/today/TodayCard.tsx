@@ -3,11 +3,12 @@
 import { ErrorBar } from "@/components/ErrorBar";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { closeDayAction, saveIntention } from "@/app/(app)/actions/day";
+import { closeDayAction } from "@/app/(app)/actions/day";
 import { removeSprintItem } from "@/app/(app)/actions/library";
 import { AddItemPicker, candidatesFor } from "@/components/today/AddItemPicker";
 import { DayQuestions } from "@/components/today/DayQuestions";
 import { TaskList } from "@/components/today/TaskList";
+import { TodayEntry } from "@/components/today/TodayEntry";
 import { callAction } from "@/lib/callAction";
 import type { ItemKind, LibraryItem, OfferedItems, SituationItem, SprintDay, SprintItems, Task } from "@/lib/data";
 import { answersHint, closeInput, EMPTY_ANSWERS, type DayAnswers } from "@/lib/dayAnswers";
@@ -15,7 +16,8 @@ import { daySummaryLine, quietItems, type DayObservations } from "@/lib/daySumma
 import { formatNumber, toBaseUnits, unitLabel, type Measured } from "@/lib/format";
 
 /**
- * The Today card (F8, v8 README): planned in place (intention, tasks), closed in place
+ * The Today card (F8, v8 README): planned in place (F19: one box for the intention and the
+ * tasks), closed in place
  * (the actual, then the F7 questions), then the result, the summary of what happened and
  * "Set up tomorrow". The DB decides what a close means; this card only asks.
  */
@@ -72,9 +74,9 @@ export function TodayCard({
       {state === "planning" ? (
         <>
           <div className="t-head">
-            <span className="t-kicker">
+            <h2 className="t-kicker">
               {dayOneAhead ? "Day 1 target" : "Today's entry"} · target {formatNumber(measured, target)}
-            </span>
+            </h2>
             <span className="t-closes">closes 11:59 PM {tzText}</span>
           </div>
           <div className="heading t-big" data-hero>
@@ -83,8 +85,7 @@ export function TodayCard({
           <div className="t-unit">{unitLabel(measured)} today</div>
           <div className="t-rule">
             <div className="t-prompt">How do I intend to produce today&apos;s target?</div>
-            <Intention key={day.id} dayId={day.id} initial={day.intention ?? ""} locked={false} />
-            <TaskList key={`tasks-${day.id}`} dayId={day.id} initial={tasks} locked={false} lockedReason="" />
+            <TodayEntry key={day.id} dayId={day.id} intention={day.intention ?? ""} tasks={tasks} />
           </div>
           <div className="t-foot">
             <span className="t-foot-hint">At the end of the day, enter the actual and log what showed up.</span>
@@ -142,59 +143,6 @@ export function TodayCard({
           announce={justClosed}
           onDone={() => setJustClosed(false)}
         />
-      ) : null}
-    </div>
-  );
-}
-
-/** The Daily Intention: one borderless line that grows, saved on blur. */
-function Intention({ dayId, initial, locked }: { dayId: string; initial: string; locked: boolean }) {
-  const [text, setText] = useState(initial);
-  const [saved, setSaved] = useState(initial);
-  const [status, setStatus] = useState<{ kind: "idle" | "saving" | "saved" | "error"; text?: string }>({ kind: "idle" });
-  const ref = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [text]);
-
-  async function persist() {
-    if (text.trim() === saved.trim()) return;
-    setStatus({ kind: "saving" });
-    const res = await callAction(() => saveIntention(dayId, text));
-    if (res.error) {
-      setStatus({ kind: "error", text: res.error });
-      return;
-    }
-    setSaved(text);
-    setStatus({ kind: "saved" });
-  }
-
-  if (locked) {
-    return text.trim() ? <div className="t-prompt mt-6" data-testid="intention-locked">{text}</div> : null;
-  }
-
-  return (
-    <div data-testid="intention-card">
-      <textarea
-        ref={ref}
-        id="intention"
-        className="t-intention"
-        rows={1}
-        value={text}
-        aria-label="Daily intention"
-        onChange={(e) => setText(e.target.value)}
-        onBlur={persist}
-        placeholder="Today I will…"
-      />
-      <div className="t-status" data-tone={status.kind === "error" ? "error" : undefined} aria-live="polite">
-        {status.kind === "saving" ? "Saving…" : status.kind === "saved" ? "Saved" : ""}
-      </div>
-      {status.kind === "error" ? (
-        <ErrorBar className="mt-6" action={{ label: "Retry", onClick: persist }}>{status.text}</ErrorBar>
       ) : null}
     </div>
   );
@@ -268,9 +216,9 @@ function Reviewing({
       }}
     >
       <div className="t-head">
-        <span className="t-kicker">
+        <h2 className="t-kicker">
           Closing Day {day.day_index} · target {formatNumber(measured, target)}
-        </span>
+        </h2>
         <span className="t-closes">closes 11:59 PM {tzText}</span>
       </div>
       {measured.measurement === "hours" ? (
@@ -387,7 +335,7 @@ function Closed({
   return (
     <>
       <div className="t-head">
-        <span className="t-kicker">Today&apos;s entry · closed</span>
+        <h2 className="t-kicker">Today&apos;s entry · closed</h2>
         <span className="t-closes">closed</span>
       </div>
       {/* Focus lands on the whole result so the actual and its verdict are read together. */}
@@ -414,7 +362,7 @@ function Closed({
       {setupTomorrow ? (
         <div className="t-tomorrow" data-testid="setup-tomorrow">
           <div className="r-head">
-            <span className="t-kicker">Set up tomorrow · Day {day.day_index + 1}</span>
+            <h3 className="t-kicker">Set up tomorrow · Day {day.day_index + 1}</h3>
             <button type="button" className="j-link" onClick={onDone}>
               Done
             </button>

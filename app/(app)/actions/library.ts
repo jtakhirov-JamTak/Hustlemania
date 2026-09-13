@@ -111,28 +111,6 @@ export async function updateItem(kind: ItemKind, id: string, input: Omit<ItemInp
 }
 
 /** F15: replaces an item's attachment set (the only writer of the join tables). */
-export async function setItemSituations(kind: ItemKind, id: string, situationIds: string[]): Promise<Result> {
-  const supabase = await createClient();
-  const res = await supabase.rpc("set_item_situations", { p_kind: kind, p_item_id: id, p_situation_ids: situationIds });
-  if (res.error) return failed("setItemSituations", res.error, { kind, itemId: id });
-  revalidatePath("/", "layout");
-  return {};
-}
-
-/** F15 / F17: one situation in the library, appended at the end (rank by trigger). */
-export async function createSituation(name: string, scope: ItemScope): Promise<Result<{ id: string }>> {
-  const trimmed = name.trim();
-  if (!trimmed) return { error: friendlyError("situations_name_check") };
-  if (!isItemScope(scope)) return { error: friendlyError("invalid_scope") };
-  const { supabase, user } = await requireUser();
-  if (!user) return { error: friendlyError("not_authenticated") };
-  const rank = undefined as unknown as number;
-  const res = await supabase.from("situations").insert({ user_id: user.id, name: trimmed, scope, rank }).select("id").single();
-  if (res.error) return failed("createSituation", res.error);
-  revalidatePath("/", "layout");
-  return { id: res.data.id };
-}
-
 /**
  * F17: a dictated list of situations, one row each in the order spoken (the DB function
  * ranks them in sequence, skips duplicates within the list and reuses a live same-name

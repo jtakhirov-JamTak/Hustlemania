@@ -10,12 +10,30 @@ import { requireUser } from "@/lib/supabase/server";
 // Every action checks the session first: under RLS an expired session updates zero rows
 // instead of erroring, which would read as "try again" forever.
 
-export async function createTask(dayId: string, text: string): Promise<Result<{ task: Task }>> {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * `id` is optional and chosen by the client (`crypto.randomUUID()`): a retry after a lost
+ * response carries the same id, the insert hits the primary key, and the row that already
+ * committed is returned instead of a second one. A foreign id cannot be claimed — the
+ * select runs under RLS, so a collision with another user's row reads as a plain failure.
+ */
+export async function createTask(dayId: string, text: string, id?: string): Promise<Result<{ task: Task }>> {
   const body = text.trim();
   if (!body) return { error: friendlyError("tasks_text_check") };
+  if (id !== undefined && !UUID.test(id)) return { error: GENERIC_SAVE_ERROR };
   const { supabase, user } = await requireUser();
   if (!user) return { error: friendlyError("not_authenticated") };
-  const res = await supabase.from("tasks").insert({ user_id: user.id, sprint_day_id: dayId, text: body }).select("*").single();
+  const res = await supabase
+    .from("tasks")
+    .insert({ ...(id ? { id } : {}), user_id: user.id, sprint_day_id: dayId, text: body })
+    .select("*")
+    .single();
+  if (res.error?.code === "23505" && id) {
+    const existing = await supabase.from("tasks").select("*").eq("id", id).eq("sprint_day_id", dayId).maybeSingle();
+    if (existing.error) return failed("createTask", existing.error, { dayId });
+    if (existing.data) return { task: existing.data };
+  }
   if (res.error) return failed("createTask", res.error, { dayId });
   return { task: res.data };
 }

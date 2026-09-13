@@ -64,6 +64,35 @@ describe("RLS isolation", () => {
     expect(d.data).toEqual([]);
   });
 
+  it("every policy on every public table binds the row to auth.uid() (audit 2026-09-13 M3)", async () => {
+    const rows = await sql<{ tablename: string; policyname: string; qual: string | null; with_check: string | null }[]>`
+      select tablename, policyname, qual, with_check from pg_policies where schemaname = 'public' order by 1, 2`;
+    expect(rows.length).toBeGreaterThanOrEqual(30);
+    for (const r of rows) {
+      const preds = [r.qual, r.with_check].filter((x): x is string => typeof x === "string");
+      expect(preds.length, `${r.tablename}.${r.policyname} has no predicate`).toBeGreaterThan(0);
+      for (const p of preds) expect(p, `${r.tablename}.${r.policyname}`).toMatch(/auth\.uid\(\)/);
+    }
+  });
+
+  it("user B reads zero rows from every table authenticated may select, on tables where A has rows (audit 2026-09-13 M3)", async () => {
+    const granted = await sql<{ table_name: string }[]>`
+      select distinct g.table_name from information_schema.role_table_grants g
+      join information_schema.columns c on c.table_schema = g.table_schema and c.table_name = g.table_name and c.column_name = 'user_id'
+      where g.table_schema = 'public' and g.grantee = 'authenticated' and g.privilege_type = 'SELECT' order by 1`;
+    expect(granted.length).toBeGreaterThanOrEqual(18);
+    const populated: string[] = [];
+    for (const { table_name } of granted) {
+      const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from ${sql("public." + table_name)} where user_id = ${a.id}`;
+      if (n > 0) populated.push(table_name);
+      const res = await b.client.from(table_name).select("*").limit(5);
+      expect(res.error, table_name).toBeNull();
+      expect(res.data, table_name).toEqual([]);
+    }
+    // The sweep measures RLS only where A actually has rows: a started sprint fills at least these.
+    expect(populated).toEqual(expect.arrayContaining(["visions", "sprints", "sprint_days", "cues", "impediments", "situations", "sprint_cues", "sprint_impediments"]));
+  });
+
   it("user B cannot update A's mantra or intention (0 rows affected, no error leak)", async () => {
     const s = await b.client.from("sprints").update({ mantra: "hijacked" }).eq("id", sprintId).select("id");
     expect(s.error).toBeNull();

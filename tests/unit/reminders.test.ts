@@ -181,19 +181,44 @@ describe("runReminders: one email per user, claim before send, outcome recorded"
     return { transport, sent };
   }
 
-  it("groups a user's days into one email and marks them sent", async () => {
+  it("groups a user's days into one email; one claim for every due day, one mark for everything sent", async () => {
     const { db, marks, claims } = fakeDb();
     const { transport, sent } = recorder();
     const summary = await runReminders(db, transport, "http://localhost:3000");
     expect(summary).toEqual({ due: 3, users: 2, sent: 2, failed: 0 });
-    expect(claims).toEqual([["d1", "d2"], ["d3"]]);
+    expect(claims).toEqual([["d1", "d2", "d3"]]);
     expect(sent.map((e) => e.to)).toEqual(["a@example.com", "b@example.com"]);
     expect(sent[0].subject).toBe("2 sprint days are still open");
     expect(sent[1].subject).toBe("Health · Day 2 is still open");
-    expect(marks).toEqual([
-      [["d1", "d2"], null],
-      [["d3"], null],
-    ]);
+    expect(marks).toEqual([[["d1", "d2", "d3"], null]]);
+  });
+
+  it("sends a few at a time, never all at once and never one by one (audit 2026-09-13 H4)", async () => {
+    const many = Array.from({ length: 12 }, (_, i) => row(`u${i}`, "health", 2, `x${i}`));
+    const db: ReminderDb = {
+      async due() {
+        return many;
+      },
+      async claim(ids) {
+        return ids;
+      },
+      async mark() {},
+    };
+    let inFlight = 0;
+    let peak = 0;
+    const transport: Transport = {
+      name: "log",
+      async send() {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight -= 1;
+        return { ok: true };
+      },
+    };
+    const summary = await runReminders(db, transport, "http://x");
+    expect(summary).toEqual({ due: 12, users: 12, sent: 12, failed: 0 });
+    expect(peak).toBe(5);
   });
 
   it("a user whose claim comes back empty is skipped: no email, no mark, not a failure", async () => {
@@ -210,7 +235,7 @@ describe("runReminders: one email per user, claim before send, outcome recorded"
     const { transport, sent } = recorder();
     await runReminders(db, transport, "http://localhost:3000");
     expect(sent[0].subject).toBe("Wealth · Day 3 is still open");
-    expect(marks[0]).toEqual([["d2"], null]);
+    expect(marks[0]).toEqual([["d2", "d3"], null]);
   });
 
   it("a failed send stores the error on those days, reports it with ids only, and counts as failed", async () => {
@@ -219,9 +244,10 @@ describe("runReminders: one email per user, claim before send, outcome recorded"
     const { transport } = recorder((e) => (e.to === "a@example.com" ? "resend 422: Invalid `from` field" : null));
     const summary = await runReminders(db, transport, "http://localhost:3000");
     expect(summary).toEqual({ due: 3, users: 2, sent: 1, failed: 1 });
+    // The sent group is marked first in one call; each failure carries its own error.
     expect(marks).toEqual([
-      [["d1", "d2"], "resend 422: Invalid `from` field"],
       [["d3"], null],
+      [["d1", "d2"], "resend 422: Invalid `from` field"],
     ]);
     const line = String(spy.mock.calls.find((c) => String(c[0]).includes("reminder.send_failed"))?.[0]);
     expect(line).toContain('"userId":"a"');

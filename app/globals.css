@@ -1905,34 +1905,31 @@ body:has(dialog[open]) {
   color: var(--muted);
 }
 
-.t-intention {
-  display: block;
-  width: 100%;
-  font: inherit;
+/* F19: the intention as a line once saved; the box and Re-record under the prompt. */
+.t-intention-line {
   font-size: 16px;
   line-height: 1.45;
-  border: none;
-  background: none;
   color: var(--ink);
-  padding: 10px 0;
-  outline: none;
-  resize: none;
-  overflow: hidden;
-  border-radius: 0;
+  padding: 10px 0 6px;
+  overflow-wrap: anywhere;
 }
 
-.t-intention::placeholder {
+.t-entry .capture {
+  margin-top: 10px;
+}
+
+/* A day with tasks but no intention (a pre-F19 day): the line says so instead of standing empty. */
+.t-intention-missing {
   color: var(--muted);
   font-style: italic;
 }
 
-.t-intention:focus-visible {
-  box-shadow: 0 2px 0 var(--accent);
-}
-
-.t-intention:disabled {
-  color: var(--ink);
-  opacity: 1;
+.t-rerecord {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
 }
 
 .t-status {
@@ -2286,6 +2283,11 @@ body:has(dialog[open]) {
 .poster .btn-primary {
   background: var(--panel);
   color: var(--accent-ink);
+}
+
+/* The poster is filled with the accent, so the global accent ring would vanish on it. */
+.poster :focus-visible {
+  outline-color: var(--on-accent);
 }
 
 .poster .btn-primary:hover {
@@ -2944,7 +2946,7 @@ body:has(dialog[open]) {
 }
 
 .wz-conf {
-  min-width: 40px;
+  min-width: 44px;
   justify-content: center;
 }
 
@@ -4065,7 +4067,7 @@ body:has(dialog[open]) {
 
 .v-chip-n {
   min-width: 44px;
-  min-height: 40px;
+  min-height: 44px;
   justify-content: center;
 }
 
@@ -4267,15 +4269,33 @@ body:has(dialog[open]) {
   cursor: pointer;
 }
 
-.menu-item:hover,
+.menu-item:hover {
+  background: var(--faint);
+}
+
+/* SC 2.4.7: the tint alone is ~1.1:1 on the panel; the ring is what a keyboard user sees. */
 .menu-item:focus-visible {
   background: var(--faint);
-  outline: none;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .menu-item:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* MOBILE-FLOOR: `.menu-button` and `.menu-item` above follow the phone `.j-link` lift at
+   equal specificity, so the floor is restated after both (44 px on the tappable axis). */
+@media (max-width: 940px), (pointer: coarse) {
+  .menu-button {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0 10px;
+  }
+  .menu-item {
+    min-height: 44px;
+  }
 }
 
 .r-head-side {

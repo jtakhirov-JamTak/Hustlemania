@@ -127,6 +127,27 @@ describe("tasks", () => {
       expect(row).toEqual({ done: false, archived_at: null });
     });
 
+    it("0023: the owner may name the id; a replay of the same id is refused by the primary key and leaves one row", async () => {
+      const id = crypto.randomUUID();
+      const first = await a.client.from("tasks").insert({ id, user_id: a.id, sprint_day_id: day1, text: "Named once" }).select("id").single();
+      expect(first.error).toBeNull();
+      expect(first.data!.id).toBe(id);
+      const again = await a.client.from("tasks").insert({ id, user_id: a.id, sprint_day_id: day1, text: "Named once" }).select("id").single();
+      expect(again.error?.code).toBe("23505");
+      const [row] = await sql<{ n: number }[]>`select count(*)::int as n from public.tasks where id = ${id}`;
+      expect(row.n).toBe(1);
+    });
+
+    it("0023: user B cannot claim A's task id — the insert hits the key, the row is A's unchanged, and B reads nothing by that id", async () => {
+      const res = await b.client.from("tasks").insert({ id: aTask, user_id: b.id, sprint_day_id: bDay1, text: "hijack" }).select("id");
+      expect(res.error?.code).toBe("23505");
+      const [row] = await sql<{ user_id: string; text: string }[]>`select user_id, text from public.tasks where id = ${aTask}`;
+      expect(row).toEqual({ user_id: a.id, text: "Private to A" });
+      const read = await b.client.from("tasks").select("id").eq("id", aTask);
+      expect(read.error).toBeNull();
+      expect(read.data).toEqual([]);
+    });
+
     it("user B cannot insert a task as A (the lock trigger runs before WITH CHECK and cannot see A's day)", async () => {
       const res = await b.client.from("tasks").insert({ user_id: a.id, sprint_day_id: day1, text: "forged" }).select("id");
       expect(res.error).not.toBeNull();

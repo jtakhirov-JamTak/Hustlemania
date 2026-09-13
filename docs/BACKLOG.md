@@ -2,6 +2,17 @@
 
 (Deferred work, production issues, non-blocking findings. One line per item.)
 
+## Deferred from the full audit (2026-09-13) — `docs/audits/full-audit-2026-09-13.md`
+
+- **F20 alerts**: specified in the SPEC, not approved, not built (H1–H3, M28).
+- **Privacy notice and terms** (H6) with the processor facts (H8, M13, M14) and a
+  deletion runbook (H7): scoped for the next session.
+- The rest of the report's buckets B, C and D, and from bucket A: the auth-outage tests
+  (H5), the session-guard and cap→model seam tests (M4, M7), the active-loader
+  `archived_at` filters and `revalidatePath` narrowing (M10, LOW), CaptureBox's
+  sort-focus and the empty-row remount (M20, M21 half), the menu items' spacing and the
+  viewport / dialog / manifest work (M24–M27). Both eval-12 P2s were fixed in U9.
+
 ## Deferred from F17 (2026-09-12)
 
 - **One spoken sentence per kind against the real model in the app is still owed.**

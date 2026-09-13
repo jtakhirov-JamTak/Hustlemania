@@ -8,7 +8,8 @@ import { report } from "@/lib/observe";
  */
 export const onRequestError: Instrumentation.onRequestError = (error, request, context) => {
   report("request.error", error, {
-    path: request.path,
+    // The path only: the login round-trip carries the address as `?email=` (audit 2026-09-13 M16).
+    path: request.path.split("?")[0],
     method: request.method,
     route: context.routePath,
     routeType: context.routeType,

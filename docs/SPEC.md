@@ -1888,6 +1888,12 @@ user** listing each open sprint as `Area · Day N`.
 - **Evaluator.** migration creating a user-data table (`reminder_log`) · a definer
   function that reads `auth.users` · scheduled network egress from the database. One run.
 - **UI.** none.
+- **U8 (2026-09-13, full audit H4).** The pass ran claim → send → mark per user in
+  series and would have outlived the function at a few hundred users due in one hour,
+  leaving the tail unmailed. Now one `reminders_claim` for every due day, five sends in
+  flight at a time, one `reminders_mark` for the sent ids and one per failed user, and
+  `maxDuration = 60` on the route. The unit suite pins the single claim, the peak of
+  five and the mark shapes; the route e2e is unchanged and green.
 
 ### F14 — Pre-release: deploy, install check, reminders live, restore drill (was F10; export withdrawn 2026-09-06)
 Interviewed 2026-09-10 in feature mode; eight calls settled (DECISIONS 2026-09-10):
@@ -2800,6 +2806,145 @@ green.*
 - **UI.** As F17; references `docs/mockups/today/` and the f8 journal. Mockup: the Today
   box and its saved state added to `app/mockup/capture/` and captured before the screen
   changes.
+- **As built (2026-09-13; no evaluator trigger, no migration).** `components/today/TodayEntry.tsx`
+  replaces the Today card's blur-saving `Intention` textarea and hosts `TaskList`: the box
+  (`capture-box[data-kind=today]`, `CaptureBox` unchanged) shows while the day's intention
+  is blank and the live rows are empty; afterwards the intention is a line
+  (`intention-line`) over the list, with Re-record and its line "Done tasks stay; the
+  rest are replaced." `lib/todayEntry.ts` plans one Save as steps — the intention, an
+  archive per undone existing task, a create per task in order — and names what a
+  failed run already wrote (`savedSoFar`, 3 unit tests in `tests/unit/todayEntry.test.ts`);
+  the host runs them one by one, keeps what landed, locks the box and resumes from the
+  failed step on Retry, then `router.refresh()`. A first Save may be the intention alone
+  (tasks optional). Re-record reopens the box prefilled with the intention and the undone
+  tasks; Cancel returns to the list with its live rows. `TaskList` gained an optional
+  `onRows` report so a re-recording sees ticks made since the page loaded; its edit /
+  check / remove / draft row are unchanged, and so are the closing and closed states
+  (`intention-locked`, the locked list), `close_day`, the F5 backfill and the insight
+  paths. The intention is stored as the words after "Today I will" (the parser drops the
+  lead-in, F17's prompt) and shown as stored everywhere. Found and fixed on the way: after
+  Re-record → Cancel the list remounted from the rows the box had saved, losing a task
+  added since — the live rows are now the list's restart source (caught by the e2e's
+  Cancel step, not a separate FIX_LOG entry: it never reached a commit). Look: the box
+  under the card's prompt, `.t-intention-line` 16px, `.t-rerecord` a ghost button and a
+  hint; the dead `.t-intention` rules removed. e2e (desktop + phone): the box's hint and
+  refused Save · the stub sentence sorted into the three parts · a third row added and
+  removed · the intention alone saved, the box away after a reload · Re-record prefilled ·
+  the third server-action POST aborted once by `page.route` — "The intention and 1 of 2
+  tasks are saved.", the DB holds one task, Retry writes the second, four POSTs in all,
+  rows in order · F4's tick and draft row · Re-record with a new sentence — the done task's
+  id unchanged, the two undone archived, the new rows created in order, the same after a
+  reload · the close and locked assertions on the new texts; the entry's sorts count
+  against F17's ten-a-minute cap, so the test clears the user's `parse_log` before the
+  libraries section. Visual pass by Playwright: 16 captures
+  (`docs/mockups/f19-today-box/`), Dusk + Night × 1138 + 390, no horizontal overflow —
+  the box, the sorted parts, the saved state with a ticked task, the Re-record state. Live
+  mutations, all red and restored byte-identical: the done-kept rule removed (unit and e2e
+  line 688) · the creates made parallel (e2e line 631, the error text) · the box shown
+  while an intention exists (e2e line 591). `npm run verify` green (see PROGRESS). The
+  throwaway mockup page was not built; the real screens were captured (the F16–F18
+  precedent).
+  **U7, same day, before the commit (full audit 2026-09-13 M1).** A create that committed
+  but lost its response was re-run by Retry as a second row. Now the client names each
+  task's id (`planEntrySteps` draws it; the F4 draft row keeps one across a Retry) and
+  `createTask(dayId, text, id?)` returns the existing row on a primary-key replay;
+  migration 0023 adds `id` to the tasks INSERT grant (self-checked), RLS unchanged. The
+  e2e's forced failure now lets the server commit and drops the response: two rows
+  before Retry, two after (FIX_LOG 2026-09-13); `tests/db/tasks.test.ts` pins the replay
+  and that user B cannot claim A's id.
+  **U9, same day (eval-12 P2-1 / P2-2 and the audit's bucket A).** A synchronous Save
+  latch (three clicks in one tick → one plan, e2e); the missing-intention line "No
+  intention yet — Re-record to say one." with `data-missing` (e2e on a pre-F19 day
+  shape); the line takes focus after a Save; the card's title is an `h2` in every state.
+  Around it, not F19's own: CSP `base-uri` / `form-action` / `object-src`, the menu and
+  poster focus rings, chips to 44 px, the query string out of `request.error`, two dead
+  server actions gone, `friendlyError` longest-first with a schema-cache guard, the RLS
+  sweep, `e2e/auth-callback.spec.ts`, build-env warnings (DECISIONS U9).
+
+### F20 — Alerts: the owner is told when the app breaks
+*Specified 2026-09-13 from the full audit (H1 no sink, H2 no cron heartbeat, H3 the
+parser key absent is silent, M28 no AI-spend signal). Interview calls recorded in
+`docs/DECISIONS.md` (same date). **Status: specified, not approved, not built — the
+owner chose to keep it open on 2026-09-13; its metric row was removed and reopens when
+the build starts.***
+
+- **Behavior.** Every failure the app already reports (`report()` in `lib/observe.ts`:
+  auth mail and callback failures, refused writes and reads, the parser, the reminder
+  pass, render errors) also reaches the owner as an email — at most one per kind every
+  30 minutes, so an outage sends a handful, not thousands. The reminder job leaves a
+  heartbeat every run; when a signed-in page finds it older than two hours the owner is
+  emailed once per cooldown. A blank parser key alerts instead of looking like a
+  feature, and the parser refuses above 500 sorts a day across all users and alerts.
+  The user-facing app does not change.
+- **Acceptance criteria.**
+  - Migration `0024_alerts.sql`, additive, no user data: `alert_log(kind text primary
+    key, sent_at timestamptz)` and `heartbeats(name text primary key, beat_at
+    timestamptz)`, RLS on, no policies, service-role only; `alert_permit(p_kind text,
+    p_cooldown interval) returns boolean` (true and stamps when no row or `sent_at`
+    older than the cooldown, else false; per-kind advisory lock; service role only);
+    `heartbeat_beat(p_name text)` (service role only, upsert now()); `heartbeat_age(p_name
+    text) returns interval` (null when never; executable by authenticated — it reads no
+    user data); `parse_permit` replaced: after the per-user counts, `count(*)` of
+    `parse_log` in the last day across all users ≥ 500 → returns `rate_limited_global`
+    without inserting. `db reset` clean; the end-of-file self-check names the four
+    functions and the two tables.
+  - `lib/observe.ts`: `report()` also hands the event to a registered sink
+    (`setReportSink`); with no sink registered it behaves as today. The sink never throws
+    into the caller and never awaits in the request path.
+  - `lib/alerts.server.ts` (server-only), registered from `instrumentation.ts`
+    `register()` on the Node runtime: `shouldCapture(kind)` (the existing five-minute
+    in-process latch) → `alert_permit(kind, '30 minutes')` through the admin client → one
+    email to `ALERT_TO` through the reminders' transport (`selectTransport`): subject
+    `[Hustlemania] <kind>`, body = the event's fields (kind, at, name, code, status,
+    digest, redacted message, context ids) and the deployment URL. Never user text: the
+    body is built from the same redacted event `report` logs. `ALERT_TO` unset in
+    production → `emit("alert.unconfigured")` once per process and no send;
+    `scripts/check-build-env.mjs` warns. Locally the log transport prints
+    `alert.logged` with the kind.
+  - `app/api/cron/reminders/route.ts` calls `heartbeat_beat('reminders')` after every
+    authorised run, on success and on `reminder.run_failed` alike (the beat says the job
+    reached the app; the failure alert says what happened). `app/(app)/layout.tsx` reads
+    `heartbeat_age('reminders')`; null or more than two hours → `report(
+    "reminder.heartbeat_stale", { ageMinutes })` (the cooldown makes it one mail per 30
+    minutes). The read never blocks the page: a failed read is itself reported and the
+    page renders.
+  - `lib/capture.server.ts`: a blank key → `report("capture.unavailable")` (cooled down)
+    before returning `parser_unavailable`. `app/(app)/actions/capture.ts`: a
+    `rate_limited_global` permit → `report("capture.ceiling")` and the user sees
+    "Sorting is paused for today — fill the parts by hand." (`parser_ceiling`, new
+    friendly error); the per-user `rate_limited` copy is unchanged.
+  - Tests. Unit: `report` calls the sink and survives a sink that throws; the email
+    builder drops any context value over 64 chars and contains no `text`/`intention`/
+    `body` field; `heartbeatStale(age)` at 119 / 120 / 121 minutes and null. DB:
+    `alert_permit` true → false within the cooldown → true after (clock injected by the
+    test's own `sent_at` update); anon and authenticated cannot execute `alert_permit` /
+    `heartbeat_beat`; authenticated can execute `heartbeat_age` and cannot read the
+    tables; `parse_permit` returns `rate_limited_global` once 500 rows sit in the last day
+    across two users, and the caller's own row is not inserted. e2e (`reminders.spec.ts`):
+    after the authorised run `heartbeats.reminders` is within a minute of now; after the
+    first signed-in page with no beat, `alert_log` holds `reminder.heartbeat_stale` and
+    the dev log carries `alert.logged`. `npm run verify` green.
+  - Live mutations: the cooldown removed from `alert_permit` (DB test red) · the sink's
+    try/catch removed (unit red) · the global count removed from `parse_permit` (DB test
+    red) · the beat call removed from the route (e2e red).
+- **Non-goals.** A dashboard or an error tracker (Sentry stays a later option) · a daily
+  digest · alerting from the browser (`action.threw` stays in devtools) · an external
+  uptime monitor · per-user or per-kind opt-outs · a health route · the auth-outage
+  branch's tests (audit H5, separate) · the reminder opt-out (M30, a design call).
+- **Risks.** (1) The alert mailer is the outage — Resend down or the key rotated: the
+  `reminder.send_failed` alert cannot be mailed either; mitigation, every event is still
+  in the runtime log, and `alert.send_failed` is emitted so the log names it. (2) A bad
+  deploy floods: the two latches (five minutes in process, 30 minutes in the DB) cap it
+  at one mail per kind per 30 minutes across all instances. (3) The heartbeat check runs
+  only when someone opens the app: a dead job on a night nobody visits is noticed the
+  next morning; acceptable for seven users, and the external monitor is the named upgrade.
+- **Evaluator.** none — both tables hold operator state, no user data; no auth or RLS
+  behaviour changes (one new definer function readable by authenticated returns an
+  interval and reads no user row).
+- **UI.** none.
+- **Founder step at release.** Set `ALERT_TO` (your address) on Vercel beside
+  `RESEND_API_KEY` / `REMINDER_FROM`; the migration goes through the release runbook's
+  gate (`db push` is yours).
 
 ## 4. Explicit v1 non-goals
 AI-written insights or reviews · push notifications · native apps · offline mode ·

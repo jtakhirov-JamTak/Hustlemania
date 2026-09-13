@@ -96,9 +96,16 @@ export const GENERIC_SAVE_ERROR = "That did not save. Your input is still here â
 /** Rule 22 on the Impediments page: a proof edit that would leave the highest of an active sprint incomplete. */
 export const HIGHEST_PROOF_EDIT_ERROR = "This is the highest impediment of an active sprint: THEN and RECOVERED WHEN are both required.";
 
+// Longest code first, so `item_not_in_sprint` is not read as `not_in_sprint`.
+const CODES = Object.entries(MESSAGES).sort((x, y) => y[0].length - x[0].length);
+
 export function friendlyError(message: string | undefined | null): string {
   if (!message) return GENERIC_SAVE_ERROR;
-  for (const [code, copy] of Object.entries(MESSAGES)) {
+  // A PostgREST schema-cache miss names a function, and a function name can contain a
+  // code (`set_vision_obstacle` â†’ the obstacle copy, FIX_LOG 2026-09-07). It is a deploy
+  // skew, never the user's error.
+  if (/schema cache/i.test(message)) return GENERIC_SAVE_ERROR;
+  for (const [code, copy] of CODES) {
     if (message.includes(code)) return copy;
   }
   return GENERIC_SAVE_ERROR;

@@ -472,8 +472,15 @@ test.describe("golden path", () => {
     // removes it again (the incomplete one stays disabled in the picker); Fix the response
     // rewrites RECOVERED WHEN in the one box.
     const highestEdit = page.getByTestId("highest-edit").getByRole("button", { name: "Edit" });
+    if (isPhone) {
+      // MOBILE-FLOOR: the Edit button and each menu item are at least 44 px tall on a phone (audit 2026-09-13 H9).
+      expect((await highestEdit.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
     await highestEdit.click();
     await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText(["Change the Highest", "Fix the response", "Add or remove"]);
+    if (isPhone) {
+      for (const item of await page.getByRole("menu").getByRole("menuitem").all()) expect((await item.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
     await page.getByRole("menuitem", { name: "Add or remove" }).click();
     const members = page.getByTestId("highest-members");
     await expect(members.getByTestId("member-row")).toHaveCount(1);
@@ -568,43 +575,161 @@ test.describe("golden path", () => {
     await page.getByRole("button", { name: "Cancel" }).click();
     await page.screenshot({ path: `test-results/today-${testInfo.project.name}.png`, fullPage: true });
 
-    // Daily Intention — the first line of the Today card — autosaves on blur and survives a reload.
-    await page.getByLabel("Daily intention").fill("Today I will move the $600 before lunch.");
-    await page.getByLabel("Daily intention").blur();
-    await expect(page.getByTestId("intention-card").getByText("Saved")).toBeVisible();
+    // F19: Today's entry is one box — the intention and the tasks, sorted by the stub, saved in order.
+    const entry = page.getByTestId("today-entry");
+    await expect(entry).toHaveAttribute("data-state", "box");
+    await expect(page.getByTestId("intention-line")).toHaveCount(0);
+    // A pre-F19 day — tasks written through the old list, no intention — shows the list
+    // under a line that says so (eval-12 P2-2), not an empty line and not the box.
+    const day1Row = await admin.from("sprint_days").select("id").eq("user_id", user.id).eq("day_index", 1).single();
+    const preTask = await admin.from("tasks").insert({ user_id: user.id, sprint_day_id: day1Row.data!.id, text: "From before" }).select("id").single();
+    if (preTask.error) throw new Error(preTask.error.message);
     await page.reload();
-    await expect(page.getByLabel("Daily intention")).toHaveValue("Today I will move the $600 before lunch.");
+    await expect(entry).toHaveAttribute("data-state", "saved");
+    await expect(page.getByTestId("intention-line")).toHaveAttribute("data-missing", "true");
+    await expect(page.getByTestId("intention-line")).toHaveText("No intention yet — Re-record to say one.");
+    await expect(page.getByRole("textbox", { name: "Today's entry" })).toHaveCount(0);
+    const gone = await admin.from("tasks").delete().eq("id", preTask.data.id);
+    if (gone.error) throw new Error(gone.error.message);
+    await page.reload();
+    await expect(entry).toHaveAttribute("data-state", "box");
+    const todayBox = entry.getByRole("textbox", { name: "Today's entry", exact: true });
+    await expect(todayBox).toHaveAttribute("placeholder", "Today I will … My tasks are …");
+    await expect(entry.getByRole("button", { name: "Save" })).toHaveAttribute("aria-disabled", "true");
+    await expect(entry.locator("#today-hint")).toHaveText("Say what you intend to do today.");
+    const dbTasks = async () => {
+      const r = await admin.from("tasks").select("text, done, archived_at").eq("user_id", user.id).order("created_at");
+      return r.data?.map((t) => `${t.text} | done=${t.done} | archived=${t.archived_at !== null}`);
+    };
+    const dbIntention = async () => (await admin.from("sprint_days").select("intention").eq("user_id", user.id).eq("day_index", 1).single()).data!.intention;
+    // The intention alone first: tasks are optional, and the box stays away while an intention exists.
+    await todayBox.fill("Today I will move the $600 before lunch.");
+    await entry.getByRole("button", { name: "Sort into parts" }).click();
+    await expect(entry.getByTestId("capture-box")).toHaveAttribute("data-phase", "parsed");
+    await expect(entry.getByLabel("Daily intention")).toHaveValue("move the $600 before lunch");
+    await expect(entry.getByRole("textbox", { name: "Task 1", exact: true })).toHaveValue("");
+    await entry.getByRole("button", { name: "Save" }).click();
+    await expect(entry).toHaveAttribute("data-state", "saved");
+    await expect(page.getByTestId("intention-line")).toHaveText("move the $600 before lunch");
+    // The form is gone; focus lands on the line so the result is announced (audit a11y M21).
+    await expect(page.getByTestId("intention-line")).toBeFocused();
+    await expect(page.getByTestId("tasks-card").getByTestId("task-row")).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Today's entry" })).toHaveCount(0);
+    expect(await dbIntention()).toBe("move the $600 before lunch");
+    expect(await dbTasks()).toEqual([]);
+    await page.reload();
+    await expect(page.getByTestId("today-entry")).toHaveAttribute("data-state", "saved");
+    await expect(page.getByRole("textbox", { name: "Today's entry" })).toHaveCount(0);
+    await expect(page.getByTestId("intention-line")).toHaveText("move the $600 before lunch");
 
-    // F4: tasks. Enter adds and re-offers a blank row; blur adds too; done toggles;
-    // remove archives; everything survives a reload; the target hero never moves.
+    // Re-record with the tasks: the box comes back with the intention, sorted into the intention and two tasks.
+    await entry.getByRole("button", { name: "Re-record" }).click();
+    await expect(entry).toHaveAttribute("data-state", "rerecording");
+    await expect(todayBox).toHaveValue("Today I will move the $600 before lunch.");
+    await todayBox.fill("Today I will move the $600 before lunch. My tasks are call the bank about the fee and move the $600.");
+    await entry.getByRole("button", { name: "Sort into parts" }).click();
+    await expect(entry.getByTestId("capture-box")).toHaveAttribute("data-phase", "parsed");
+    await expect(entry.getByLabel("Daily intention")).toHaveValue("move the $600 before lunch");
+    // A third row can be added and removed before saving; tasks stay optional.
+    await entry.getByRole("button", { name: "+ Add another" }).click();
+    await expect(entry.getByRole("textbox", { name: "Task 3", exact: true })).toHaveValue("");
+    await entry.getByRole("button", { name: "Remove task 3" }).click();
+    await expect(entry.getByRole("textbox", { name: "Task 3", exact: true })).toHaveCount(0);
+    // The writes run in order — the intention, then one create per task. The third server-action
+    // POST (the second create) reaches the server and commits, but its response is dropped once
+    // (audit 2026-09-13 M1: the case an abort before the server cannot cover): what landed stays,
+    // the error names it, Retry writes the rest and the committed create is not written twice.
+    let actionPosts = 0;
+    await page.route("**/*", async (route) => {
+      const req = route.request();
+      if (req.method() === "POST" && req.headers()["next-action"]) {
+        actionPosts += 1;
+        if (actionPosts === 3) {
+          await route.fetch();
+          await route.fulfill({ status: 500, body: "" });
+          return;
+        }
+      }
+      await route.continue();
+    });
+    await entry.getByRole("button", { name: "Save" }).click();
+    await expect(entry.getByRole("alert")).toContainText("The intention and 1 of 2 tasks are saved.");
+    await expect(entry).toHaveAttribute("data-state", "rerecording");
+    // The second create did commit: two rows before Retry, still two after it.
+    await expect.poll(dbTasks).toEqual(["call the bank about the fee | done=false | archived=false", "move the $600 | done=false | archived=false"]);
+    await entry.getByRole("button", { name: "Retry" }).click();
+    await expect(entry).toHaveAttribute("data-state", "saved");
+    await page.unroute("**/*");
+    expect(actionPosts).toBe(4);
+    await expect(page.getByTestId("intention-line")).toHaveText("move the $600 before lunch");
+    await expect(page.getByRole("textbox", { name: "Today's entry" })).toHaveCount(0);
     const tasks = page.getByTestId("tasks-card");
-    await expect(tasks.getByTestId("task-row")).toHaveCount(0);
-    await tasks.getByLabel("New task").fill("Call the bank about the fee");
-    await tasks.getByLabel("New task").press("Enter");
-    await expect(tasks.getByTestId("task-row")).toHaveCount(1);
-    await expect(tasks.getByLabel("New task")).toHaveValue("");
-    await expect(tasks.getByLabel("New task")).toBeFocused();
-    await tasks.getByLabel("New task").fill("Move the $600");
-    await tasks.getByLabel("New task").blur();
     await expect(tasks.getByTestId("task-row")).toHaveCount(2);
-    await expect(tasks.getByTestId("tasks-hint")).toHaveText("Saved");
-    const bankDone = tasks.getByRole("checkbox", { name: "Done: Call the bank about the fee" });
+    await expect(tasks.getByLabel("Task 1")).toHaveValue("call the bank about the fee");
+    await expect(tasks.getByLabel("Task 2")).toHaveValue("move the $600");
+    await expect.poll(dbTasks).toEqual(["call the bank about the fee | done=false | archived=false", "move the $600 | done=false | archived=false"]);
+    expect(await dbIntention()).toBe("move the $600 before lunch");
+
+    // F4 unchanged: done toggles, the draft row still adds, remove archives.
+    const bankDone = tasks.getByRole("checkbox", { name: "Done: call the bank about the fee" });
     await bankDone.click();
     await expect(bankDone).toHaveAttribute("aria-checked", "true");
-    await tasks.getByRole("button", { name: "Remove task: Move the $600" }).click();
-    await expect(tasks.getByTestId("task-row")).toHaveCount(1);
-    // The rows update optimistically; wait for both writes to land (the remove is an
-    // archive, not a delete — History keeps the row) before the reload aborts them.
-    await expect
-      .poll(async () => {
-        const r = await admin.from("tasks").select("text, done, archived_at").eq("user_id", user.id).order("created_at");
-        return r.data?.map((t) => `${t.text} | done=${t.done} | archived=${t.archived_at !== null}`);
-      })
-      .toEqual(["Call the bank about the fee | done=true | archived=false", "Move the $600 | done=false | archived=true"]);
+    await tasks.getByLabel("New task").fill("Pay the fee");
+    await tasks.getByLabel("New task").press("Enter");
+    await expect(tasks.getByTestId("task-row")).toHaveCount(3);
+    await expect(tasks.getByLabel("New task")).toHaveValue("");
+    await expect(tasks.getByTestId("tasks-hint")).toHaveText("Saved");
+    await expect.poll(dbTasks).toEqual([
+      "call the bank about the fee | done=true | archived=false",
+      "move the $600 | done=false | archived=false",
+      "Pay the fee | done=false | archived=false",
+    ]);
+    const bankRow = await admin.from("tasks").select("id").eq("user_id", user.id).eq("text", "call the bank about the fee").single();
+
+    // Re-record: the box reopens with the intention and the undone tasks; the new recording
+    // replaces the intention, keeps the done task (same id), archives the undone ones and
+    // creates the new list in order.
+    await expect(entry.getByText("Done tasks stay; the rest are replaced.")).toBeVisible();
+    await entry.getByRole("button", { name: "Re-record" }).click();
+    await expect(entry).toHaveAttribute("data-state", "rerecording");
+    await expect(todayBox).toHaveValue("Today I will move the $600 before lunch. My tasks are move the $600, Pay the fee.");
+    await entry.getByRole("button", { name: "Cancel" }).click();
+    await expect(entry).toHaveAttribute("data-state", "saved");
+    await expect(tasks.getByTestId("task-row")).toHaveCount(3);
+    await entry.getByRole("button", { name: "Re-record" }).click();
+    await todayBox.fill("Today I will move the $600 before lunch. My tasks are move the $600 and email the accountant.");
+    await entry.getByRole("button", { name: "Sort into parts" }).click();
+    await expect(entry.getByRole("textbox", { name: "Task 2", exact: true })).toHaveValue("email the accountant");
+    // Three clicks in one tick (eval-12 P2-1): one plan runs, not three.
+    await entry.getByRole("button", { name: "Save" }).evaluate((el: HTMLButtonElement) => {
+      el.click();
+      el.click();
+      el.click();
+    });
+    await expect(entry).toHaveAttribute("data-state", "saved");
+    await expect(tasks.getByTestId("task-row")).toHaveCount(3);
+    await expect.poll(dbTasks).toEqual([
+      "call the bank about the fee | done=true | archived=false",
+      "move the $600 | done=false | archived=true",
+      "Pay the fee | done=false | archived=true",
+      "move the $600 | done=false | archived=false",
+      "email the accountant | done=false | archived=false",
+    ]);
+    const bankAfter = await admin.from("tasks").select("id").eq("user_id", user.id).eq("text", "call the bank about the fee").is("archived_at", null).single();
+    expect(bankAfter.data!.id).toBe(bankRow.data!.id);
+    // Reload: the box stays away while an intention exists; the line and the live rows come back in order.
     await page.reload();
-    await expect(page.getByTestId("tasks-card").getByTestId("task-row")).toHaveCount(1);
-    await expect(page.getByTestId("tasks-card").getByLabel("Task 1")).toHaveValue("Call the bank about the fee");
-    await expect(page.getByTestId("tasks-card").getByRole("checkbox", { name: "Done: Call the bank about the fee" })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByTestId("today-entry")).toHaveAttribute("data-state", "saved");
+    await expect(page.getByRole("textbox", { name: "Today's entry" })).toHaveCount(0);
+    await expect(page.getByTestId("intention-line")).toHaveText("move the $600 before lunch");
+    await expect(page.getByTestId("tasks-card").getByTestId("task-row")).toHaveCount(3);
+    await expect(page.getByTestId("tasks-card").getByLabel("Task 1")).toHaveValue("call the bank about the fee");
+    await expect(page.getByTestId("tasks-card").getByRole("checkbox", { name: "Done: call the bank about the fee" })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByTestId("tasks-card").getByLabel("Task 3")).toHaveValue("email the accountant");
+    // The entry's sorts count against the parser's ten-a-minute cap (F17); the libraries
+    // section below sorts again within that minute, so the test user's log is cleared here.
+    await admin.from("parse_log").delete().eq("user_id", user.id);
+
     // Rule 15: a completed task changed no total.
     await expect(hero).toHaveText("572");
     await expect(page.getByTestId("sprint-progress")).toContainText("0%");
@@ -699,15 +824,15 @@ test.describe("golden path", () => {
     await page.reload();
     await expect(page.getByTestId("today-card")).toHaveAttribute("data-state", "closed");
     await expect(page.getByTestId("day-summary")).toHaveText(summaryLine);
-    await expect(page.getByTestId("intention-locked")).toHaveText("Today I will move the $600 before lunch.");
-    await expect(page.getByLabel("Daily intention")).toHaveCount(0);
+    await expect(page.getByTestId("intention-locked")).toHaveText("move the $600 before lunch");
+    await expect(page.getByTestId("today-entry")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Close the day" })).toHaveCount(0);
     await expect(page.getByTestId("setup-tomorrow")).toHaveCount(0);
     await noOverflow();
     const lockedTasks = page.getByTestId("tasks-card");
     await expect(lockedTasks.getByTestId("tasks-hint")).toHaveText("Locked with the closed day");
     await expect(lockedTasks.getByLabel("Task 1")).toBeDisabled();
-    await expect(lockedTasks.getByRole("checkbox", { name: "Done: Call the bank about the fee" })).toBeDisabled();
+    await expect(lockedTasks.getByRole("checkbox", { name: "Done: call the bank about the fee" })).toBeDisabled();
     await expect(lockedTasks.getByLabel("New task")).toHaveCount(0);
     await expect(lockedTasks.getByRole("button", { name: "Add task" })).toHaveCount(0);
     await expect(lockedTasks.getByRole("button", { name: /Remove task/ })).toHaveCount(0);
