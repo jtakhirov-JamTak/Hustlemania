@@ -2755,6 +2755,8 @@ green.*
   tickable (e2e line 305) · `why` sent in `StartSprintInput` (tsc) · the menu's Escape
   handler removed (e2e line 416). The throwaway mockup page was again not built; the
   real screens were captured (the F16 / F17 precedent).
+  **Released 2026-09-13:** commit 30a33b5 pushed 00:10:40Z, Vercel success 00:11:07Z,
+  deployed spec 4/4; no migration, so nothing on the hosted database changed.
 
 ### F19 — Today's entry as one box: the intention and the tasks
 *Specified 2026-09-12 with F17 (same interview, same plan of record). Built after F18 is
