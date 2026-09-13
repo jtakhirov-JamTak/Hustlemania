@@ -6,6 +6,32 @@ would also hit; APP_FIX_LOG.md = the rest.)
 
 ---
 
+## 2026-09-12 — A dialog never returned focus to its opener in development: Strict Mode read the opener twice
+
+**Problem.** `components/Modal.tsx` read `document.activeElement` inside its mount
+effect to remember what to focus on close. React Strict Mode runs that effect twice in
+development, and by the second run the focus is already on the dialog's own heading
+(`initialFocus`), so the "opener" it kept was an element that unmounts with the dialog:
+`opener.isConnected` was false at close and focus fell to `<body>`. Every picker and
+sheet since F2 behaved so under `next dev`; the e2e suite never asserted the return.
+Production, where the effect runs once, is not affected by this mechanism — not
+verified separately.
+
+**Fix.** The opener is read once into a ref (the rehearsal run and the real run share
+it), and the return is deferred with `setTimeout(0)` until the dialog node is out of the
+document, so the rehearsal cleanup, with the dialog still connected, moves nothing.
+
+**Regression test.** `e2e/golden-path.spec.ts` (F18 rail flow): open the Cues card's
+Edit menu → Add or remove → Close → `expect(cuesEdit).toBeFocused()`. Red before the
+fix ("inactive"), green after.
+
+**Found.** F18 build, the first rail e2e run. Two fixes aimed at a wrong theory first
+(the page still inert when the cleanup focuses; both red — the second one also closed
+the dialog in the rehearsal cleanup and dismissed it outright). The third tested a
+different explanation, per the two-failed-fixes rule.
+
+---
+
 ## 2026-09-12 — A constant exported from a `"use server"` module took every page down, and `tsc` said nothing
 
 **Problem.** `app/(app)/actions/capture.ts` (F17) exported `CAPTURE_TEXT_MAX` next to

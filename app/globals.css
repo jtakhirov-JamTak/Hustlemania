@@ -2834,12 +2834,43 @@ body:has(dialog[open]) {
   display: flex;
   gap: 4px;
   margin-top: 16px;
-  max-width: 420px;
+  max-width: 560px;
 }
 
 .wz-card {
   margin-top: 22px;
-  padding: 24px 26px;
+  max-width: 800px;
+  border-radius: 22px;
+  padding: 22px 28px;
+}
+
+/* F18: the five step names under the segments, the current one in ink. */
+.wz-steps {
+  max-width: 560px;
+  gap: 10px;
+}
+
+.wz-question {
+  font-size: 14px;
+  line-height: 1.45;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* F18: "Create new" under each list of step 5 — a disclosure that opens the one-box capture. */
+.wz-create-new {
+  margin-top: 12px;
+}
+
+.wz-create-form {
+  margin-top: 10px;
+  background: var(--faint);
+  border-radius: 16px;
+  padding: 14px 16px;
+}
+
+.wz-create-form .capture {
+  margin-top: 8px;
 }
 
 .wz-vision {
@@ -2973,37 +3004,6 @@ body:has(dialog[open]) {
   line-height: 1.5;
 }
 
-.wz-intentions {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px 12px;
-  margin-top: 10px;
-  align-items: center;
-}
-
-.wz-day {
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.wz-input-tight {
-  padding: 8px 12px;
-}
-
-.wz-align {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 22px;
-  min-height: 44px;
-  padding: 8px 0;
-  cursor: pointer;
-}
-
-.wz-align-text {
-  font-size: 14px;
-}
-
 .wz-foot {
   display: flex;
   justify-content: space-between;
@@ -3031,6 +3031,15 @@ body:has(dialog[open]) {
   }
   .wz-cols {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .wz-card {
+    padding: 18px 16px;
+  }
+  .wz-steps span:not(.v-step-on) {
+    display: none;
   }
 }
 
@@ -4214,4 +4223,95 @@ body:has(dialog[open]) {
   resize: none;
   field-sizing: content;
   min-height: 42px;
+}
+
+/* ---------------------------------------------------------------------------
+   F18 — the rail's Edit menus and the members dialog.
+   --------------------------------------------------------------------------- */
+.menu {
+  position: relative;
+  flex: none;
+}
+
+.menu-button {
+  min-height: 28px;
+  padding: 0 4px;
+}
+
+.menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 210px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--divider);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+.menu-item {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--faint);
+  outline: none;
+}
+
+.menu-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.r-head-side {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.r-fix {
+  margin-top: 10px;
+}
+
+.r-member {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--divider);
+  font-size: 14px;
+}
+
+.r-member:first-of-type {
+  border-top: none;
+}
+
+.r-member-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.r-member-note {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-style: italic;
 }

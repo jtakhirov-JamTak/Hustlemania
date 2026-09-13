@@ -32,8 +32,6 @@ export type StartSprintInput = {
   proofRecover: string | null;
   /** F3: a custom plan in base units (14 entries summing to `amount`), or null for Goal ÷ 14. */
   targets: number[] | null;
-  /** Day 1's intention, optional (F17: days 2–14 are written on their own day). */
-  intention: string | null;
 };
 
 /** Calls start_sprint; on success redirects to the new sprint's Today. */
@@ -70,7 +68,6 @@ export async function startSprintAction(input: StartSprintInput): Promise<{ erro
     p_proof_then: input.proofThen?.trim() || undefined,
     p_proof_recover: input.proofRecover?.trim() || undefined,
     p_targets: input.targets ?? undefined,
-    p_intention: input.intention?.trim() || undefined,
   });
   if (res.error) return failed("startSprint", res.error, { area: input.area, measurement: input.measurement });
 

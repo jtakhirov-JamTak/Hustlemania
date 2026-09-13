@@ -94,8 +94,9 @@ test.describe("golden path", () => {
     await page.getByRole("textbox", { name: "Goal and proof", exact: true }).fill("In a year I run three times a week and sleep seven hours. The observable proof will be three runs a week held for a quarter.");
     await page.getByRole("button", { name: "Sort into parts" }).click();
     await expect(page.getByTestId("capture-box")).toHaveAttribute("data-phase", "parsed");
-    await expect(page.getByRole("textbox", { name: "Goal", exact: true })).toHaveValue("In a year I run three times a week and sleep seven hours");
-    await expect(page.getByRole("textbox", { name: "Proof", exact: true })).toHaveValue("three runs a week held for a quarter");
+    // F18: one label convention across the vision steps and the wizard — the part's short label is the accessible name.
+    await expect(page.getByLabel("Goal", { exact: true })).toHaveValue("In a year I run three times a week and sleep seven hours");
+    await expect(page.getByLabel("Proof", { exact: true })).toHaveValue("three runs a week held for a quarter");
     await expect(page.getByText("Pick a confidence from 0 to 10.")).toBeVisible();
     await page.getByRole("button", { name: "Confidence 5" }).click();
     // F17: the band advice under the chips.
@@ -170,7 +171,8 @@ test.describe("golden path", () => {
     await expect(page.getByTestId("wizard-vision")).toContainText("In a year I run three times a week");
     await noOverflow();
 
-    // Step 1
+    // Step 1 of 5 (F18)
+    await expect(page.getByText("New sprint · Step 1 of 5")).toBeVisible();
     await page.getByLabel("Sprint outcome").fill("Save $8,000 toward the emergency fund");
     await page.getByRole("button", { name: "Continue" }).click();
     // Step 2 (money, USD)
@@ -179,15 +181,23 @@ test.describe("golden path", () => {
     await page.getByLabel("Usage 1 label").fill("Rent");
     await page.getByLabel("Usage 1 amount").fill("2800");
     await page.getByRole("button", { name: "Continue" }).click();
-    // Step 3
+    // Step 3 (F18): the confidence question heads the chips, the band advice answers the pick, the mantra explains itself.
     await noOverflow();
+    await expect(page.getByText("New sprint · Step 3 of 5")).toBeVisible();
+    await expect(page.getByRole("group", { name: "How confident are you that you will be able to achieve the Sprint goal?" })).toBeVisible();
+    await expect(page.getByTestId("confidence-advice")).toHaveCount(0);
     await page.getByRole("button", { name: "Confidence 7" }).click();
-    // F17: "Why this sprint matters" is gone from the wizard and the database.
+    await expect(page.getByTestId("confidence-advice")).toHaveText("Sweet spot: you are pushing yourself and it is still attainable.");
+    await expect(page.getByTestId("confidence-advice")).toHaveAttribute("data-band", "sweet");
+    // F17 / F18: "Why this sprint matters" and the vision checkbox are gone from the wizard and the database.
     await expect(page.getByLabel("Why this sprint matters")).toHaveCount(0);
+    await expect(page.locator("#why")).toHaveCount(0);
     await page.getByLabel(/Celebration/).fill("Dinner at the lake");
     await page.getByLabel(/Mantra/).fill("Boring money is the money that stays.");
+    await expect(page.getByTestId("mantra-hint")).toHaveText("A quote, a saying, or anything that inspires you or lifts you up when you are down.");
     await page.getByRole("button", { name: "Continue" }).click();
-    // Step 4: 14 targets sum to the goal; rounding note present (8000 / 14 is uneven).
+    // Step 4 (F18): the plan alone — 14 targets sum to the goal; rounding note present (8000 / 14 is uneven).
+    await expect(page.getByText("New sprint · Step 4 of 5")).toBeVisible();
     const summary = page.getByTestId("plan-summary");
     await expect(summary).toContainText("Planned 8,000 USD");
     await expect(summary).toContainText("Goal · locked 8,000 USD");
@@ -196,7 +206,7 @@ test.describe("golden path", () => {
     await noOverflow();
 
     // F3: Custom mode — every day is editable before the start, today included. Zeroing
-    // day 7 leaves the plan 571 short; nothing is redistributed, and Start stays off
+    // day 7 leaves the plan 571 short; nothing is redistributed, and Continue stays off
     // until the user loads the difference onto another day.
     await page.getByRole("button", { name: "Custom", exact: true }).click();
     await expect(page.getByLabel("Day 1 target")).toHaveValue("572");
@@ -206,45 +216,73 @@ test.describe("golden path", () => {
     await expect(page.getByTestId("plan-delta")).toHaveAttribute("data-state", "below");
     await expect(page.getByLabel("Day 8 target")).toHaveValue("571");
     await expect(page.getByText("The 14 targets must add up to the goal.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
     await page.getByLabel("Day 8 target").fill("1143");
     await expect(page.getByTestId("plan-delta")).toHaveText("+1 USD above goal");
     await page.getByLabel("Day 8 target").fill("1142");
     await expect(page.getByTestId("plan-delta")).toHaveText("Balanced");
     await expect(page.getByText("The 14 targets must add up to the goal.")).toHaveCount(0);
 
-    // F17: the days 2–14 pre-planning is gone; day 1's box stays.
+    // F17 / F18: no intention box, no pre-planning and no items on the plan step.
     await expect(page.getByTestId("intentions-toggle")).toHaveCount(0);
-    await expect(page.getByLabel(/^Day 1 intention/)).toBeVisible();
+    await expect(page.locator("#intention-1")).toHaveCount(0);
+    await expect(page.getByTestId("wizard-impediments")).toHaveCount(0);
+    await page.getByRole("button", { name: "Continue" }).click();
 
-    // F2 / F15: the sprint cannot start without 1–3 impediments and a highest with THEN → RECOVERED WHEN; cues are optional.
+    // Step 5 (F18): impediments and cues by WHEN. F2 / F15: the sprint cannot start without
+    // 1–3 impediments and a highest with THEN → RECOVERED WHEN; cues are optional.
+    await expect(page.getByText("New sprint · Step 5 of 5")).toBeVisible();
+    await noOverflow();
     const start = page.getByRole("button", { name: "Start sprint" });
     await expect(start).toBeDisabled();
     await expect(page.getByText("Select 1–3 impediments.")).toBeVisible();
     // F9: the vision's obstacle is a global impediment with its rule and, since the library step above, a situation.
     const impSetup = page.getByTestId("wizard-impediments");
-    await impSetup.getByRole("checkbox", { name: /I notice myself delaying/ }).click();
-    await expect(impSetup.getByRole("checkbox", { name: /I notice myself delaying/ })).toHaveAttribute("aria-checked", "true");
-    await expect(impSetup.getByRole("checkbox", { name: /I notice myself delaying/ })).toContainText("applies to: Starting late");
+    const obstacleRow = impSetup.getByRole("checkbox", { name: /I notice myself delaying/ });
+    await expect(obstacleRow).toContainText("WHEN I notice myself delaying my first work block");
+    await expect(obstacleRow).not.toHaveAttribute("aria-disabled", "true");
+    await obstacleRow.click();
+    await expect(obstacleRow).toHaveAttribute("aria-checked", "true");
+    await expect(obstacleRow).toContainText("applies to: Starting late");
     await expect(page.getByText("Designate the highest impediment.")).toBeVisible();
     await page.getByTestId("wizard-highest").getByRole("radio", { name: /I notice myself delaying/ }).click();
     // The rule written on the Vision tab is complete, so no response inputs open; there is no WHEN input anywhere in it.
     await expect(page.getByTestId("wizard-highest").getByLabel("THEN", { exact: true })).toHaveCount(0);
     await expect(page.getByTestId("wizard-highest").getByLabel("WHEN", { exact: true })).toHaveCount(0);
-    // Cues are optional (F15): with the highest complete the sprint could start now.
+    // Cues are optional (F15) and the alignment checkbox is gone (F18): with the highest complete the sprint can start now.
     await expect(page.getByText("Select 1–3 execution cues.")).toHaveCount(0);
-    await expect(page.getByText("Confirm the outcome advances the vision.")).toBeVisible();
-    // A second impediment created inline needs its WHEN and at least one situation.
-    const createImp = impSetup.getByRole("button", { name: "Create" });
-    await impSetup.getByLabel("WHEN", { exact: true }).fill("Phone distraction");
-    await expect(createImp).toBeDisabled();
-    await expect(impSetup.getByText("WHEN and at least one situation are needed.")).toBeVisible();
-    await impSetup.getByRole("textbox", { name: "Situations", exact: true }).fill("Phone on the desk");
-    await impSetup.getByRole("textbox", { name: "Situations", exact: true }).press("Enter");
-    await impSetup.getByRole("button", { name: /^Add all/ }).click();
-    await expect(impSetup.getByRole("checkbox", { name: "Phone on the desk" })).toHaveAttribute("aria-checked", "true");
-    await expect(createImp).toBeEnabled();
+    await expect(page.getByText("Confirm the outcome advances the vision.")).toHaveCount(0);
+    await expect(page.getByRole("checkbox", { name: "Vision alignment" })).toHaveCount(0);
+    await expect(start).toBeEnabled();
+
+    // F18: "Create new" is collapsed by default and opens the one box; a second impediment
+    // said as its WHEN alone needs at least one situation before Create.
+    const createImpBox = impSetup.getByTestId("create-new-impediment");
+    const impBox = page.locator('[data-testid="capture-box"][data-kind="impediment"]');
+    await expect(createImpBox.getByRole("button", { name: "Create new" })).toHaveAttribute("aria-expanded", "false");
+    await expect(impBox).toHaveCount(0);
+    await createImpBox.getByRole("button", { name: "Create new" }).click();
+    await expect(createImpBox.getByRole("button", { name: "Close" })).toHaveAttribute("aria-expanded", "true");
+    await expect(impBox).toBeVisible();
+    await noOverflow();
+    const createImp = createImpBox.getByRole("button", { name: "Create", exact: true });
+    await impBox.getByRole("textbox", { name: "Impediment", exact: true }).fill("Phone distraction");
+    await impBox.getByRole("textbox", { name: "Impediment", exact: true }).press("Enter");
+    await expect(impBox).toHaveAttribute("data-phase", "parsed");
+    await expect(impBox.getByLabel("WHEN", { exact: true })).toHaveValue("Phone distraction");
+    await expect(createImp).toHaveAttribute("aria-disabled", "true");
+    await expect(createImpBox.getByText("Tick at least one situation it applies to.")).toBeVisible();
+    await createImpBox.getByRole("textbox", { name: "Situations", exact: true }).fill("Phone on the desk");
+    await createImpBox.getByRole("textbox", { name: "Situations", exact: true }).press("Enter");
+    await createImpBox.getByRole("button", { name: /^Add all/ }).click();
+    await expect(createImpBox.getByRole("checkbox", { name: "Phone on the desk" })).toHaveAttribute("aria-checked", "true");
+    await expect(createImp).toHaveAttribute("aria-disabled", "false");
     await createImp.click();
-    await expect(impSetup.getByRole("checkbox", { name: /^Phone distraction/ })).toHaveAttribute("aria-checked", "true");
+    // The box collapses and the new row is ticked.
+    await expect(createImpBox.getByRole("button", { name: "Create new" })).toHaveAttribute("aria-expanded", "false");
+    const phoneRow = impSetup.getByRole("checkbox", { name: /Phone distraction/ });
+    await expect(phoneRow).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByTestId("wizard-impediments")).toContainText("2 of 3");
     // Its response is still blank: it joined as a watched impediment, so the highest stays and the hint asks for its THEN.
     await expect(page.getByTestId("wizard-highest").getByRole("radio", { name: /I notice myself delaying/ })).toHaveAttribute("aria-checked", "true");
     await expect(page.getByText(/Phone distraction needs a THEN and a RECOVERED WHEN/)).toBeVisible();
@@ -252,38 +290,79 @@ test.describe("golden path", () => {
     await expect(page.getByText("The highest impediment needs THEN and a recovery criterion.")).toBeVisible();
     await page.getByTestId("wizard-highest").getByLabel("THEN", { exact: true }).fill("I put the phone in the drawer");
     await page.getByTestId("wizard-highest").getByLabel("RECOVERED WHEN").fill("The drawer is shut within a minute");
-    await expect(page.getByText("Confirm the outcome advances the vision.")).toBeVisible();
+    await expect(start).toBeEnabled();
     // Back to the vision's obstacle as the highest: Phone distraction's response is still typed only, so the hint returns.
     await page.getByTestId("wizard-highest").getByRole("radio", { name: /I notice myself delaying/ }).click();
     await expect(page.getByText(/Phone distraction needs a THEN and a RECOVERED WHEN/)).toBeVisible();
-    // Untick it: the sprint carries the obstacle alone.
-    await impSetup.getByRole("checkbox", { name: /^Phone distraction/ }).click();
-    await expect(page.getByText("Confirm the outcome advances the vision.")).toBeVisible();
-    // F6 / F15: a cue is a WHEN → REMIND pair with a situation; Create waits for all three.
+    // Untick it: the sprint carries the obstacle alone. Unticked, the row lacks its response, so it
+    // is aria-disabled, says which page finishes it, and a press changes nothing (F18).
+    await phoneRow.click();
+    await expect(phoneRow).toHaveAttribute("aria-checked", "false");
+    await expect(phoneRow).toHaveAttribute("aria-disabled", "true");
+    await expect(phoneRow).toContainText("finish it on the Impediments page");
+    // Playwright will not press an aria-disabled control on its own; forced, the press must still change nothing.
+    await phoneRow.click({ force: true });
+    await expect(phoneRow).toHaveAttribute("aria-checked", "false");
+    await expect(page.getByTestId("wizard-impediments")).toContainText("1 of 3");
+    await expect(start).toBeEnabled();
+
+    // A third impediment said in full — WHEN, THEN and RECOVERED WHEN in one breath — joins
+    // watched with its response complete; unticked, it waits in the library for the rail.
+    await createImpBox.getByRole("button", { name: "Create new" }).click();
+    await impBox.getByRole("textbox", { name: "Impediment", exact: true }).fill("When the inbox is open then I close the tab. Recovered when the tab is closed within a minute.");
+    await impBox.getByRole("textbox", { name: "Impediment", exact: true }).press("Enter");
+    await expect(impBox.getByLabel("WHEN", { exact: true })).toHaveValue("the inbox is open");
+    await expect(impBox.getByLabel("THEN", { exact: true })).toHaveValue("I close the tab");
+    await expect(impBox.getByLabel("RECOVERED WHEN")).toHaveValue("the tab is closed within a minute");
+    await createImpBox.getByRole("checkbox", { name: "Phone on the desk" }).click();
+    await createImp.click();
+    const inboxRow = impSetup.getByRole("checkbox", { name: /the inbox is open/ });
+    await expect(inboxRow).toHaveAttribute("aria-checked", "true");
+    await expect(inboxRow).toContainText("THEN I close the tab · RECOVERED the tab is closed within a minute");
+    await expect(page.getByText(/needs a THEN and a RECOVERED WHEN/)).toHaveCount(0);
+    await inboxRow.click();
+    await expect(inboxRow).toHaveAttribute("aria-checked", "false");
+    await expect(inboxRow).not.toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByTestId("wizard-impediments")).toContainText("1 of 3");
+
+    // F6 / F15 / F18: a cue is a WHEN → REMIND pair with a situation, said into the one box; Create waits for all three.
     const cueSetup = page.getByTestId("wizard-cues");
-    const createCue = cueSetup.getByRole("button", { name: "Create" });
-    await cueSetup.getByLabel("REMIND").fill("Ask how much this pays");
-    await expect(createCue).toBeDisabled();
-    await cueSetup.getByLabel("WHEN", { exact: true }).fill("I schedule anything");
-    await expect(createCue).toBeDisabled();
-    await expect(cueSetup.getByText("WHEN, REMIND and at least one situation are needed.")).toBeVisible();
-    await cueSetup.getByRole("textbox", { name: "Situations", exact: true }).fill("Scheduling");
-    await cueSetup.getByRole("textbox", { name: "Situations", exact: true }).press("Enter");
-    await cueSetup.getByRole("button", { name: /^Add all/ }).click();
-    await expect(cueSetup.getByRole("checkbox", { name: "Scheduling" })).toHaveAttribute("aria-checked", "true");
-    await expect(createCue).toBeEnabled();
+    const createCueBox = cueSetup.getByTestId("create-new-cue");
+    const cueBox = page.locator('[data-testid="capture-box"][data-kind="cue"]');
+    await expect(cueBox).toHaveCount(0);
+    await createCueBox.getByRole("button", { name: "Create new" }).click();
+    await expect(cueBox).toBeVisible();
+    const createCue = createCueBox.getByRole("button", { name: "Create", exact: true });
+    await cueBox.getByRole("textbox", { name: "Execution cue", exact: true }).fill("When I schedule anything remind me to ask how much this pays");
+    await cueBox.getByRole("textbox", { name: "Execution cue", exact: true }).press("Enter");
+    await expect(cueBox.getByLabel("WHEN", { exact: true })).toHaveValue("I schedule anything");
+    await expect(cueBox.getByLabel("REMIND")).toHaveValue("ask how much this pays");
+    await cueBox.getByLabel("REMIND").fill("Ask how much this pays");
+    await expect(createCue).toHaveAttribute("aria-disabled", "true");
+    await expect(createCueBox.getByText("Tick at least one situation it applies to.")).toBeVisible();
+    await createCueBox.getByRole("textbox", { name: "Situations", exact: true }).fill("Scheduling");
+    await createCueBox.getByRole("textbox", { name: "Situations", exact: true }).press("Enter");
+    await createCueBox.getByRole("button", { name: /^Add all/ }).click();
+    await expect(createCueBox.getByRole("checkbox", { name: "Scheduling" })).toHaveAttribute("aria-checked", "true");
+    await expect(createCue).toHaveAttribute("aria-disabled", "false");
     await createCue.click();
-    await expect(cueSetup.getByRole("checkbox", { name: "Ask how much this pays" })).toHaveAttribute("aria-checked", "true");
-    await expect(cueSetup.getByRole("checkbox", { name: "Ask how much this pays" })).toContainText("WHEN I schedule anything · applies to: Scheduling");
+    const cueRow = cueSetup.getByRole("checkbox", { name: "Ask how much this pays" });
+    await expect(cueRow).toHaveAttribute("aria-checked", "true");
+    await expect(cueRow).toContainText("WHEN I schedule anything");
+    await expect(cueRow).toContainText("REMIND Ask how much this pays · applies to: Scheduling");
     // F7: the first picked cue is the focus by default; the radio is there to change it.
     await expect(page.getByTestId("wizard-focus").getByRole("radio", { name: "Ask how much this pays" })).toHaveAttribute("aria-checked", "true");
-    await expect(page.getByText("Confirm the outcome advances the vision.")).toBeVisible();
-    await page.getByRole("checkbox", { name: "Vision alignment" }).click();
+    await noOverflow();
     await expect(start).toBeEnabled();
     await start.click();
 
     // Today, Day 1 — the journal (F8): title, progress block, timeline, Today card, rail.
     await expect(page).toHaveURL(/\/sprints\/health$/);
+    // F18: the wizard writes no intention — every day starts blank (the Today card writes day 1's).
+    const startedSprint = await admin.from("sprints").select("id").eq("user_id", user.id).eq("area", "health").eq("status", "active").single();
+    const startedDays = await admin.from("sprint_days").select("intention").eq("sprint_id", startedSprint.data!.id);
+    expect(startedDays.data).toHaveLength(14);
+    expect(startedDays.data!.every((r) => r.intention === null)).toBe(true);
     await expect(page.getByTestId("journal-title")).toHaveText("Save $8,000 toward the emergency fund");
     expect(await page.getByTestId("journal-title").evaluate((el) => getComputedStyle(el).fontSize)).toBe("30px");
     await expect(page.getByTestId("day-label")).toHaveText("Day 1 of 14");
@@ -318,12 +397,38 @@ test.describe("golden path", () => {
     await expect(page.getByTestId("sprint-items").getByText("Ask how much this pays")).toBeVisible();
     await expect(page.getByTestId("sprint-items").getByText("WHEN I schedule anything")).toBeVisible();
     await expect(page.getByTestId("sprint-items").getByTestId("cue-situations-line")).toContainText("Scheduling");
-    // F7 / F15: the focus cue carries the tag; as the sprint's only cue it can still be removed (0–3 cues).
+    // F7 / F15 / F18: the focus cue carries the tag; the per-row links are gone — each card's one Edit menu holds every change.
     const focusRow = page.getByTestId("sprint-items").getByTestId("sprint-item").filter({ hasText: "Ask how much this pays" });
     await expect(focusRow.getByTestId("focus-tag")).toHaveText("FOCUS");
-    await expect(focusRow.getByRole("button", { name: "Remove Ask how much this pays" })).toBeVisible();
-    // F6 / F15: the Today Add-cue picker's create row is a WHEN + REMIND pair with a situation tick too.
-    await page.getByRole("button", { name: "Add cue" }).click();
+    await expect(page.getByTestId("sprint-items").getByRole("button", { name: /^Remove|Set as focus|Add cue/ })).toHaveCount(0);
+    await expect(highest.getByRole("button", { name: /^Change$|Edit response|Add impediment|^Remove/ })).toHaveCount(0);
+
+    // F18: the menu — Escape closes it and focus returns to Edit.
+    const cuesEdit = page.getByTestId("cues-edit").getByRole("button", { name: "Edit" });
+    await expect(cuesEdit).toHaveAttribute("aria-haspopup", "menu");
+    await expect(cuesEdit).toHaveAttribute("aria-expanded", "false");
+    await cuesEdit.click();
+    await expect(cuesEdit).toHaveAttribute("aria-expanded", "true");
+    const cuesMenu = page.getByRole("menu");
+    await expect(cuesMenu.getByRole("menuitem")).toHaveText(["Change the focus", "Add or remove"]);
+    await expect(cuesMenu.getByRole("menuitem", { name: "Change the focus" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(cuesEdit).toBeFocused();
+    await expect(cuesEdit).toHaveAttribute("aria-expanded", "false");
+
+    // Add a cue: Edit → Add or remove → the members dialog (FOCUS tag; the only cue may go) → Add cue swaps it for the picker.
+    await cuesEdit.click();
+    await page.getByRole("menuitem", { name: "Add or remove" }).click();
+    const cueMembers = page.getByTestId("cue-members");
+    await expect(cueMembers).toBeVisible();
+    await expect(cueMembers.getByTestId("member-row")).toHaveCount(1);
+    await expect(cueMembers.getByTestId("member-row").first()).toContainText("FOCUS");
+    await expect(cueMembers.getByRole("button", { name: "Remove Ask how much this pays" })).toBeVisible();
+    await page.getByRole("dialog").getByRole("button", { name: "Add cue" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    await expect(page.getByTestId("cue-members")).toHaveCount(0);
+    // F6 / F15: the picker's create row is a WHEN + REMIND pair with a situation tick too.
     const picker = page.getByRole("dialog");
     const createInPicker = picker.getByRole("button", { name: "Create" });
     await picker.getByLabel("REMIND").fill("Close the laptop at nine");
@@ -335,18 +440,75 @@ test.describe("golden path", () => {
     await createInPicker.click();
     await expect(picker.getByRole("radio", { name: /Close the laptop at nine/ })).toHaveAttribute("aria-checked", "true");
     await picker.getByRole("button", { name: "Add to sprint" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByTestId("sprint-items")).toContainText("2 of 3");
     await expect(page.getByTestId("sprint-items").getByText("WHEN the clock shows 9 pm")).toBeVisible();
-    // With a second cue in the sprint the focus is guarded again.
-    await expect(focusRow.getByRole("button", { name: /^Remove/ })).toHaveCount(0);
-    // F7: "Set as focus" moves the tag to the new cue and frees the old one.
-    await page.getByRole("button", { name: "Set as focus: Close the laptop at nine" }).click();
+    // With a second cue in the sprint the focus is guarded again: no Remove on it in the members dialog; Close returns focus to Edit.
+    await cuesEdit.click();
+    await page.getByRole("menuitem", { name: "Add or remove" }).click();
+    await expect(page.getByTestId("cue-members").getByRole("button", { name: "Remove Ask how much this pays" })).toHaveCount(0);
+    await expect(page.getByTestId("cue-members").getByRole("button", { name: "Remove Close the laptop at nine" })).toBeVisible();
+    await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(cuesEdit).toBeFocused();
+    // F7 / F18: Change the focus moves the tag to the new cue and frees the old one.
+    await cuesEdit.click();
+    await page.getByRole("menuitem", { name: "Change the focus" }).click();
+    await expect(page.getByRole("dialog").getByRole("radio", { name: /Ask how much this pays/ })).toHaveAttribute("aria-checked", "true");
+    await page.getByRole("dialog").getByRole("radio", { name: /Close the laptop at nine/ }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Set as focus" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     const newFocusRow = page.getByTestId("sprint-items").getByTestId("sprint-item").filter({ hasText: "Close the laptop at nine" });
     await expect(newFocusRow.getByTestId("focus-tag")).toHaveText("FOCUS");
     await expect(focusRow.getByTestId("focus-tag")).toHaveCount(0);
-    await expect(focusRow.getByRole("button", { name: "Remove Ask how much this pays" })).toBeVisible();
-    await page.getByRole("button", { name: "Set as focus: Ask how much this pays" }).click();
+    await cuesEdit.click();
+    await page.getByRole("menuitem", { name: "Change the focus" }).click();
+    await page.getByRole("dialog").getByRole("radio", { name: /Ask how much this pays/ }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Set as focus" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(focusRow.getByTestId("focus-tag")).toHaveText("FOCUS");
+
+    // F18: the Highest card's Edit — Add or remove adds the library's complete impediment and
+    // removes it again (the incomplete one stays disabled in the picker); Fix the response
+    // rewrites RECOVERED WHEN in the one box.
+    const highestEdit = page.getByTestId("highest-edit").getByRole("button", { name: "Edit" });
+    await highestEdit.click();
+    await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText(["Change the Highest", "Fix the response", "Add or remove"]);
+    await page.getByRole("menuitem", { name: "Add or remove" }).click();
+    const members = page.getByTestId("highest-members");
+    await expect(members.getByTestId("member-row")).toHaveCount(1);
+    await expect(members.getByTestId("member-row").first()).toContainText("HIGHEST");
+    await expect(members.getByRole("button", { name: /^Remove/ })).toHaveCount(0);
+    await page.getByRole("dialog").getByRole("button", { name: "Add impediment" }).click();
+    await expect(page.getByTestId("highest-members")).toHaveCount(0);
+    const impPicker = page.getByRole("dialog");
+    await expect(impPicker.getByRole("radio", { name: /Phone distraction/ })).toBeDisabled();
+    await impPicker.getByRole("radio", { name: /the inbox is open/ }).click();
+    await impPicker.getByRole("button", { name: "Add to sprint" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(highest.getByTestId("also-watching")).toContainText("2 of 3");
+    await expect(highest.getByTestId("also-watching")).toContainText("the inbox is open");
+    await highestEdit.click();
+    await page.getByRole("menuitem", { name: "Add or remove" }).click();
+    await page.getByTestId("highest-members").getByRole("button", { name: "Remove the inbox is open" }).click();
+    await expect(page.getByTestId("highest-members").getByTestId("member-row")).toHaveCount(1);
+    await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(highest.getByTestId("also-watching")).toContainText("1 of 3");
+    await expect(highest.getByTestId("also-watching")).not.toContainText("the inbox is open");
+    await highestEdit.click();
+    await page.getByRole("menuitem", { name: "Fix the response" }).click();
+    const fix = highest.locator('[data-testid="capture-box"][data-kind="response"]');
+    await expect(fix).toBeVisible();
+    await expect(fix.getByLabel("THEN", { exact: true })).toHaveValue("I start a 10-minute timer on the smallest executable task");
+    await fix.getByLabel("RECOVERED WHEN").fill("");
+    await expect(highest.getByRole("button", { name: "Save" })).toHaveAttribute("aria-disabled", "true");
+    await expect(highest.getByText("Say what you would observe to know you are back on track (RECOVERED WHEN).")).toBeVisible();
+    await fix.getByLabel("RECOVERED WHEN").fill("The timer is running within five minutes");
+    await highest.getByRole("button", { name: "Save" }).click();
+    await expect(fix).toHaveCount(0);
+    await expect(highest.getByTestId("proof-recover")).toHaveText("The timer is running within five minutes");
+    await noOverflow();
 
     // F3: the plan lives on the timeline's future rows. The sprint started custom; day 1
     // is today, day 7 is the zero the wizard saved.
@@ -515,7 +677,12 @@ test.describe("golden path", () => {
     expect(dayRow.data).toMatchObject({ response: null, recovered: null, impact: null, proof_recover: null });
     expect(dayRow.data!.highest_impediment_id).not.toBeNull();
     const impRows = await admin.from("day_impediment_observations").select("id, name, occurred, was_highest, proof_recover").eq("sprint_day_id", dayRow.data!.id).order("name");
-    expect(impRows.data!.map((r) => ({ name: r.name, occurred: r.occurred, was_highest: r.was_highest, proof_recover: r.proof_recover }))).toEqual([{ name: "I notice myself delaying my first work block", occurred: "yes", was_highest: true, proof_recover: "The timer is running within 10 minutes" }]);
+    // F18: the snapshot carries the RECOVERED WHEN rewritten under Fix the response, and the
+    // impediment added and removed today is still offered today (F15: removed on or after the day).
+    expect(impRows.data!.map((r) => ({ name: r.name, occurred: r.occurred, was_highest: r.was_highest, proof_recover: r.proof_recover }))).toEqual([
+      { name: "I notice myself delaying my first work block", occurred: "yes", was_highest: true, proof_recover: "The timer is running within five minutes" },
+      { name: "the inbox is open", occurred: "unanswered", was_highest: false, proof_recover: "the tab is closed within a minute" },
+    ]);
     const sitRows = await admin.from("day_impediment_situation_observations").select("name, occurred, recovered").eq("observation_id", impRows.data![0].id);
     expect(sitRows.data).toEqual([{ name: "Starting late", occurred: true, recovered: "yes" }]);
     const cueRows = await admin.from("day_cue_observations").select("id, name, used, was_focus").eq("sprint_day_id", dayRow.data!.id).order("name");
@@ -604,9 +771,10 @@ test.describe("golden path", () => {
     await expect(item.locator("[data-part=when]")).toHaveText("I notice myself delaying my first work block");
     // F16: INTERFERES is gone from the card.
     await expect(item.locator("[data-part=interferes]")).toHaveCount(0);
-    await expect(item.locator("[data-part=recovered]")).toHaveText("The timer is running within 10 minutes");
+    // F18: the rail's Fix the response wrote through to the library row; the two wizard creates are here too.
+    await expect(item.locator("[data-part=recovered]")).toHaveText("The timer is running within five minutes");
     await expect(item.locator("[data-part=applies-to]")).toHaveText("Starting late");
-    await expect(page.getByTestId("library-count")).toHaveText("2 · 0 archived");
+    await expect(page.getByTestId("library-count")).toHaveText("3 · 0 archived");
     await item.getByRole("button", { name: "Archive" }).click();
     // F9: the vision's obstacle is guarded before any sprint rule is consulted.
     await expect(item.getByRole("alert")).toContainText("This impediment is the vision's main obstacle.");
@@ -934,6 +1102,10 @@ test.describe("golden path", () => {
     await page.getByLabel(/Celebration/).fill("New shoes");
     await page.getByLabel(/Mantra/).fill("Slow is still a run.");
     await page.getByRole("button", { name: "Continue" }).click();
+    // F18: the plan is its own step; the kit pre-checks step 5.
+    await expect(page.getByText("New sprint · Step 4 of 5")).toBeVisible();
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page.getByText("New sprint · Step 5 of 5")).toBeVisible();
 
     await expect(page.getByTestId("wizard-kit")).toContainText("Pre-filled from your last Relationships review");
     await expect(page.getByTestId("wizard-impediments").getByRole("checkbox", { name: /Late meetings/ })).toHaveAttribute("aria-checked", "true");

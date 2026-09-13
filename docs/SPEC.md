@@ -2717,6 +2717,45 @@ green.*
   the step-5 and rail-menu states added to `app/mockup/capture/` and captured before
   the screens change.
 
+- **As built (2026-09-12; no evaluator trigger).** `components/NewSprintWizard.tsx` 778 →
+  ~300 lines: it keeps the draft, `stepHints`, submit, header, progress bar and footer;
+  `components/wizard/draft.ts` (the Draft type without `why` / `intention` / `aligned`,
+  `STEPS`, `planHint`, `stepHints`, the three copy constants) and `StepArea` /
+  `StepMeasure` / `StepConfidence` / `StepTargets` / `StepItems`. `tests/unit/wizard.test.ts`
+  enumerates the ladder (9 tests). `StartSprintInput` also drops `intention` (the
+  wizard writes no day-1 intention any more; `start_sprint` untouched, `p_intention`
+  simply not sent) — the e2e reads all 14 `sprint_days.intention` null after the start.
+  `OptionRow` gained `ariaDisabled` (focusable, explained by its sub line, a press does
+  nothing); a library row lacking a situation or, for an impediment, its response is
+  disabled that way while unticked; an item created in the box still joins the sprint
+  as before, so the Highest's ProofInputs and the "needs a THEN" hint remain for a
+  created impediment without a response. Step 5 rows read `WHEN {name}` (a cue: `WHEN
+  {cue_when}` with `REMIND {name}` in the sub line). Rail: `components/Menu.tsx` (one
+  button, `role="menu"`, arrows / Home / End / Escape, outside press closes, the button
+  is focused before the item's action so a dialog it opens returns focus there); the
+  Highest card's menu → Change the Highest (the picker), Fix the response (inline
+  `capture-box[data-kind=response]`, fields mode when a THEN exists, Save →
+  `saveProofPoint`), Add or remove (`highest-members`: HIGHEST tag, Remove on the
+  others, "Add impediment" swaps to the AddItemPicker and returns to the card); the
+  Cues card's menu → Change the focus (single picker, "Set as focus") / Add or remove
+  (`cue-members`, FOCUS tag, the focus keeps no Remove while another cue remains). The
+  card bodies read only. Found and fixed on the way: `Modal` never returned focus to
+  its opener under Strict Mode (FIX_LOG 2026-09-12). Look: `.wz-card` 800 / 22 / 22px
+  28px, five segments + names (`.v-steps`), the current name alone under 480px, the
+  menu popover and the members rows styled in `globals.css`. e2e: both wizard runs
+  through five steps, Create new collapsed → expanded → created, the aria-disabled row
+  forced and unchanged, the DB read, the four rail flows, Escape and focus return; the
+  Goal / Proof pins by `getByLabel`. The day-close snapshot now also carries the
+  rewritten RECOVERED WHEN and the impediment added and removed that day (offered by
+  the F15 rule). `npm run verify` green (see PROGRESS). Visual pass by Playwright: 32
+  captures (`docs/mockups/f18-wizard-rail/`), Dusk + Night × 1138 + 390, no horizontal
+  overflow — step 3, step 5 collapsed (the disabled row) and expanded, the rail, its
+  menu, both members dialogs, the response box. Live mutations, all red and restored:
+  the celebration rung dropped from `stepHints` (unit) · the aria-disabled row made
+  tickable (e2e line 305) · `why` sent in `StartSprintInput` (tsc) · the menu's Escape
+  handler removed (e2e line 416). The throwaway mockup page was again not built; the
+  real screens were captured (the F16 / F17 precedent).
+
 ### F19 — Today's entry as one box: the intention and the tasks
 *Specified 2026-09-12 with F17 (same interview, same plan of record). Built after F18 is
 green.*

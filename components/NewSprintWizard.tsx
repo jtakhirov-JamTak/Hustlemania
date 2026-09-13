@@ -1,65 +1,41 @@
 "use client";
 
-import { ProofInputs } from "@/components/ProofInputs";
 import { ErrorBar } from "@/components/ErrorBar";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { createItem, createSituations } from "@/app/(app)/actions/library";
+import { createSituations } from "@/app/(app)/actions/library";
 import { startSprintAction, type StartSprintInput } from "@/app/(app)/actions/sprint";
-import { OptionRow } from "@/components/OptionRow";
-import { effectivePlan, PlanGrid, type PlanCell } from "@/components/PlanGrid";
-import { SituationPicker, type SituationOption } from "@/components/SituationPicker";
+import { effectivePlan, type PlanCell } from "@/components/PlanGrid";
+import type { SituationOption } from "@/components/SituationPicker";
 import { useDeviceToday } from "@/components/useDeviceToday";
+import { type Draft, planHint, STEPS, stepHints } from "@/components/wizard/draft";
+import { StepArea, type AreaOption } from "@/components/wizard/StepArea";
+import { StepConfidence } from "@/components/wizard/StepConfidence";
+import { StepItems, type CreateSituations } from "@/components/wizard/StepItems";
+import { StepMeasure } from "@/components/wizard/StepMeasure";
+import { StepTargets } from "@/components/wizard/StepTargets";
 import { areaName, type AreaKey } from "@/lib/areas";
 import { callAction } from "@/lib/callAction";
-import { appliesTo, cueSummary, eligibleFor, joinBlocker, proofComplete, proofSummary, type AreaKit, type ItemKind, type LibraryItem, type SituationItem } from "@/lib/data";
+import { eligibleFor, joinBlocker, proofComplete, type AreaKit, type LibraryItem, type SituationItem } from "@/lib/data";
 import { prefillFromKit } from "@/lib/kit";
-import { formatIsoDate } from "@/lib/dates";
-import { toBaseUnits, unitLabel, type Measurement, type Measured } from "@/lib/format";
+import { toBaseUnits, type Measured } from "@/lib/format";
 import { addDays, localDateIn } from "@/lib/sprintDay";
-import { formatTargetInput, hasRoundingDifference, measurementStep, parseTargetInput, planDelta, sameDailyTargets } from "@/lib/targets";
-
-type AreaOption = { key: AreaKey; name: string; hasSprint: boolean };
-
-type Draft = {
-  area: AreaKey | null;
-  outcome: string;
-  measurement: Measurement;
-  goalWhole: string;
-  goalHours: string;
-  goalMinutes: string;
-  currency: string;
-  unit: string;
-  usage: { label: string; amount: string }[];
-  startsTomorrow: boolean;
-  confidence: number | null;
-  celebration: string;
-  mantra: string;
-  /** F17: day 1 only; the days 2–14 pre-planning left with the wizard. */
-  intention: string;
-  mode: "same" | "custom";
-  /** Raw custom-target inputs by day; parsed with parseTargetInput. */
-  custom: string[];
-  impedimentIds: string[];
-  highestId: string | null;
-  proofThen: string;
-  proofRecover: string;
-  cueIds: string[];
-  /** F7: one of cueIds; follows the picks so it is never stale. */
-  focusId: string | null;
-  aligned: boolean;
-};
+import { formatTargetInput, measurementStep, parseTargetInput, planDelta, sameDailyTargets } from "@/lib/targets";
 
 type Library = { cues: LibraryItem[]; impediments: LibraryItem[] };
-type Situations = SituationOption[];
 
-const STEPS = ["Area & outcome", "Measure & goal", "Confidence & mantra", "Plan & start"];
+const LAST = STEPS.length - 1;
 
 /**
+ * F18: five steps — Area & outcome · Measure & goal · Confidence & mantra · Daily targets ·
+ * Impediments & cues. This component keeps the draft, derives the hints (`stepHints`),
+ * submits and renders the header, the progress bar and the footer; each step's fields
+ * live in `components/wizard/Step*.tsx`.
+ *
  * F9: `vision` is the account's one vision (its text) or null; without it no Area can
- * start. F10: `kits` carries each Area's last postmortem decisions, which pre-check
- * step 4 — picking an Area re-reads its own kit, so switching Areas never carries the
- * previous one's items across. F15: `situations` feeds the inline creates' APPLIES TO.
+ * start. F10: `kits` carries each Area's last postmortem decisions, which pre-check step
+ * 5 — picking an Area re-reads its own kit, so switching Areas never carries the previous
+ * one's items across. F15 / F17: `situations` feeds the inline creates' APPLIES TO.
  */
 export function NewSprintWizard({
   areas,
@@ -79,16 +55,10 @@ export function NewSprintWizard({
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [library, setLibrary] = useState<Library>(initialLibrary);
-  const [sits, setSits] = useState<Situations>(initialSituations.map((s) => ({ id: s.id, name: s.name })));
-  const [newImp, setNewImp] = useState("");
-  const [newImpSits, setNewImpSits] = useState<string[]>([]);
-  const [newCue, setNewCue] = useState("");
-  const [newCueWhen, setNewCueWhen] = useState("");
-  const [newCueSits, setNewCueSits] = useState<string[]>([]);
-  const [creating, setCreating] = useState<"cue" | "impediment" | null>(null);
+  const [sits, setSits] = useState<SituationOption[]>(initialSituations.map((s) => ({ id: s.id, name: s.name })));
   const [pending, start] = useTransition();
   /**
-   * Step 4's starting picks for an Area: the kit from its last postmortem, filtered to
+   * Step 5's starting picks for an Area: the kit from its last postmortem, filtered to
    * what that Area's library still offers — and, F15, to what can still join a sprint
    * (a situation on every item; a complete response on every impediment).
    */
@@ -100,17 +70,14 @@ export function NewSprintWizard({
     });
   };
 
-  /** F17: situations named inline (a spoken list) are saved to the library (global scope) and ticked for the item being created. */
-  async function createSituationInline(kind: ItemKind, names: string[]): Promise<string | null> {
+  /** F17: situations named inline (a spoken list) are saved to the one library (global scope); the step ticks them. */
+  const createSituationsInline: CreateSituations = async (names) => {
     const res = await callAction(() => createSituations(names, "global"));
-    if (res.error || !res.ids) return res.error ?? "That did not save.";
+    if (res.error || !res.ids) return { error: res.error ?? "That did not save." };
     const ids = res.ids;
     setSits((s) => [...s, ...ids.map((id, i) => ({ id, name: names[i] ?? "" })).filter((n) => !s.some((x) => x.id === n.id))]);
-    const tick = (t: string[]) => [...t, ...ids.filter((id) => !t.includes(id))];
-    if (kind === "cue") setNewCueSits(tick);
-    else setNewImpSits(tick);
-    return null;
-  }
+    return { ids };
+  };
 
   const [d, setD] = useState<Draft>({
     area: initialArea,
@@ -126,19 +93,16 @@ export function NewSprintWizard({
     confidence: null,
     celebration: "",
     mantra: "",
-    intention: "",
     mode: "same",
     custom: Array(14).fill(""),
     proofThen: "",
     proofRecover: "",
     ...(initialArea ? prefillFor(initialArea) : { impedimentIds: [], highestId: null, cueIds: [], focusId: null }),
-    aligned: false,
   });
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
   // F7: the focus cue is one of the picked cues; it defaults to the first pick and moves when that pick goes.
   const setCues = (next: string[]) => setD((p) => ({ ...p, cueIds: next, focusId: p.focusId && next.includes(p.focusId) ? p.focusId : (next[0] ?? null) }));
   const heading = useRef<HTMLHeadingElement>(null);
-  const addUsage = useRef<HTMLButtonElement>(null);
   const mounted = useRef(false);
   useEffect(() => {
     if (mounted.current) heading.current?.focus();
@@ -177,15 +141,7 @@ export function NewSprintWizard({
   const customParsed = d.custom.map((raw) => parseTargetInput(d.measurement, raw));
   const customPlan = d.mode === "custom" ? effectivePlan(planCells, true, customParsed) : null;
   const targets = d.mode === "custom" ? customPlan : sameTargets;
-  const planDeltaValue = targets && amount !== null ? planDelta(targets, amount) : null;
-  const planHint =
-    d.mode !== "custom"
-      ? null
-      : customPlan === null
-        ? "Every day needs a whole-number target."
-        : planDeltaValue !== 0
-          ? "The 14 targets must add up to the goal."
-          : null;
+  const plan = planHint({ mode: d.mode, customPlan, delta: targets && amount !== null ? planDelta(targets, amount) : null });
 
   function pickMode(mode: "same" | "custom") {
     if (mode === "custom" && sameTargets && d.custom.every((v) => v.trim() === "")) {
@@ -209,41 +165,32 @@ export function NewSprintWizard({
   const usageRows = d.usage.filter((u) => u.label.trim() || u.amount !== "");
   const usageValid = d.measurement !== "money" || usageRows.every((u) => u.label.trim() && Number(u.amount) > 0);
 
-  const stepHint: (string | null)[] = [
-    !vision ? "Finish the vision first." : !d.area ? "Choose an area without an active sprint." : !d.outcome.trim() ? "Describe the outcome." : null,
-    !amountValid
-      ? "Enter a whole-number goal above zero."
-      : d.measurement === "money" && !/^[A-Za-z]{3}$/.test(d.currency)
-        ? "Currency is a 3-letter code."
-        : d.measurement === "quantity" && !d.unit.trim()
-          ? "Name the unit."
-          : !usageValid
-            ? "Each usage row needs a label and an amount."
-            : null,
-    d.confidence === null ? "Pick a confidence from 1 to 10." : !d.celebration.trim() ? "Name a celebration." : !d.mantra.trim() ? "A mantra is required." : null,
-    planHint
-      ? planHint
-      : d.impedimentIds.length === 0
-        ? "Select 1–3 impediments."
-        : !d.highestId
-          ? "Designate the highest impediment."
-          : !proofOk
-            ? "The highest impediment needs THEN and a recovery criterion."
-            : incomplete
-              ? `${incomplete.name} needs a THEN and a RECOVERED WHEN — make it the highest and complete it here, or finish it on the Impediments page.`
-              : !d.aligned
-                ? "Confirm the outcome advances the vision."
-                : null,
-  ];
-  const canNext = stepHint[step] === null;
+  const hints = stepHints({
+    vision: Boolean(vision),
+    area: Boolean(d.area),
+    outcome: d.outcome,
+    amountValid,
+    measurement: d.measurement,
+    currency: d.currency,
+    unit: d.unit,
+    usageValid,
+    confidence: d.confidence,
+    celebration: d.celebration,
+    mantra: d.mantra,
+    plan,
+    impediments: d.impedimentIds.length,
+    highest: Boolean(d.highestId),
+    proofOk,
+    incomplete: incomplete?.name ?? null,
+  });
+  const hint = hints[step] ?? null;
+  const canNext = hint === null;
 
   function submit() {
     if (!canNext || pending || !d.area || !amountValid || amount === null || !targets || !device) return;
     // The date is read at the moment of submitting, so a wizard left open across
     // midnight starts today, not yesterday (#16).
     const now = localDateIn(device.tz, new Date());
-    const startDate = d.startsTomorrow ? addDays(now, 1) : now;
-    const tz = device.tz;
     const input: StartSprintInput = {
       area: d.area,
       outcome: d.outcome,
@@ -255,9 +202,8 @@ export function NewSprintWizard({
       celebration: d.celebration,
       mantra: d.mantra,
       usageOfFunds: d.measurement === "money" ? usageRows.map((u) => ({ label: u.label.trim(), amount: toBaseUnits("money", { whole: Number(u.amount) }) })) : [],
-      tz,
-      startDate,
-      intention: d.intention.trim() || null,
+      tz: device.tz,
+      startDate: d.startsTomorrow ? addDays(now, 1) : now,
       targets: d.mode === "custom" ? targets : null,
       cueIds: d.cueIds,
       focusCueId: d.cueIds.length > 0 ? d.focusId : null,
@@ -273,49 +219,21 @@ export function NewSprintWizard({
     });
   }
 
-  const newCueReady = Boolean(newCue.trim() && newCueWhen.trim()) && newCueSits.length > 0;
-  const newImpReady = Boolean(newImp.trim()) && newImpSits.length > 0;
-
-  async function createInline(kind: "cue" | "impediment") {
-    const name = (kind === "cue" ? newCue : newImp).trim();
-    const cueWhen = newCueWhen.trim();
-    const situationIds = kind === "cue" ? newCueSits : newImpSits;
-    if (!name || (kind === "cue" && !cueWhen) || situationIds.length === 0) return;
-    setCreating(kind);
-    setError(null);
-    const res = await callAction(() => createItem(kind, { name, scope: "global", cueWhen: kind === "cue" ? cueWhen : undefined, situationIds }));
-    setCreating(null);
-    if (res.error || !res.id) {
-      setError(res.error ?? "That did not save. Your input is still here — try again.");
-      return;
-    }
-    const item: LibraryItem = {
-      id: res.id,
-      kind,
-      name,
-      scope: "global",
-      rank: 0,
-      archived_at: null,
-      cue_when: kind === "cue" ? cueWhen : null,
-      proof_then: null,
-      proof_recover: null,
-      situations: sits.filter((s) => situationIds.includes(s.id)),
-      used: false,
-      active: false,
-    };
-    if (kind === "cue") {
+  /** A created item lands in the library list and joins the sprint at once (a new impediment as the highest when there is none). */
+  function created(item: LibraryItem) {
+    if (item.kind === "cue") {
       setLibrary((l) => ({ ...l, cues: [...l.cues, item] }));
-      setNewCue("");
-      setNewCueWhen("");
-      setNewCueSits([]);
       if (d.cueIds.length < 3) setCues([...d.cueIds, item.id]);
     } else {
       setLibrary((l) => ({ ...l, impediments: [...l.impediments, item] }));
-      setNewImp("");
-      setNewImpSits([]);
-      // A new impediment has no response yet: it joins as the highest, whose THEN and
-      // RECOVERED WHEN are written below, when there is room and no highest yet.
-      if (d.impedimentIds.length < 3) setD((p) => ({ ...p, impedimentIds: [...p.impedimentIds, item.id], highestId: p.highestId ?? item.id, proofThen: p.highestId ? p.proofThen : "", proofRecover: p.highestId ? p.proofRecover : "" }));
+      if (d.impedimentIds.length < 3)
+        setD((p) => ({
+          ...p,
+          impedimentIds: [...p.impedimentIds, item.id],
+          highestId: p.highestId ?? item.id,
+          proofThen: p.highestId ? p.proofThen : (item.proof_then ?? ""),
+          proofRecover: p.highestId ? p.proofRecover : (item.proof_recover ?? ""),
+        }));
     }
   }
 
@@ -327,7 +245,7 @@ export function NewSprintWizard({
 
   return (
     <div>
-      <span className="tag tag-accent">New sprint · Step {step + 1} of 4</span>
+      <span className="tag tag-accent">New sprint · Step {step + 1} of {STEPS.length}</span>
       <h1 ref={heading} tabIndex={-1} className="heading page-title page-title-lg mt-12 wz-title">
         {STEPS[step]}
       </h1>
@@ -336,403 +254,77 @@ export function NewSprintWizard({
           <span key={s} className={`v-seg ${i <= step ? "v-seg-on" : ""}`} />
         ))}
       </div>
+      <div className="v-steps wz-steps" aria-hidden="true">
+        {STEPS.map((s, i) => (
+          <span key={s} className={i === step ? "v-step-on" : ""}>
+            {s}
+          </span>
+        ))}
+      </div>
 
       <div className="card wz-card">
         {step === 0 ? (
-          <>
-            {vision ? (
-              <div className="wz-vision" data-testid="wizard-vision">
-                <span className="label-accent">The vision</span>
-                <div className="wz-vision-text">{vision}</div>
-              </div>
-            ) : (
-              <p className="wz-blocked" data-testid="wizard-blocked">
-                A sprint has to advance the vision, and its three steps are not all saved.{" "}
-                <Link href="/vision" className="wz-strong">
-                  Write the vision
-                </Link>{" "}
-                first; it takes three short steps.
-              </p>
-            )}
-            <div className="label-accent" id="area-label">
-              Area
-            </div>
-            <div className="pill-row" role="group" aria-labelledby="area-label">
-              {areas.map((a) => {
-                const disabled = !vision || a.hasSprint;
-                return (
-                  <button
-                    key={a.key}
-                    type="button"
-                    className={`chip ${d.area === a.key ? "chip-on" : ""}`}
-                    aria-pressed={d.area === a.key}
-                    disabled={disabled}
-                    // Only a CHANGE of Area re-seeds step 4; re-clicking the selected chip
-                    // would wipe the user's picks (full review 2026-09-09, #21).
-                    onClick={() => setD((p) => (p.area === a.key ? p : { ...p, area: a.key, ...prefillFor(a.key) }))}
-                    title={a.hasSprint ? "A sprint is already active here" : undefined}
-                  >
-                    {a.name}
-                    {a.hasSprint ? " · active" : ""}
-                  </button>
-                );
-              })}
-            </div>
-            {vision && areas.every((a) => a.hasSprint) ? <p className="hint mt-10">Every area already has a sprint running.</p> : null}
-            <label className="label-accent block mt-22" htmlFor="outcome">
-              Sprint outcome
-            </label>
-            <input id="outcome" className="input mt-6" value={d.outcome} onChange={(e) => set("outcome", e.target.value)} placeholder="Save $8,000 toward the emergency fund" />
-          </>
+          <StepArea
+            vision={vision}
+            areas={areas}
+            area={d.area}
+            outcome={d.outcome}
+            // Only a CHANGE of Area re-seeds step 5; re-clicking the selected chip would
+            // wipe the user's picks (full review 2026-09-09, #21).
+            onArea={(key) => setD((p) => (p.area === key ? p : { ...p, area: key, ...prefillFor(key) }))}
+            onOutcome={(v) => set("outcome", v)}
+          />
         ) : null}
 
-        {step === 1 ? (
-          <>
-            <div className="label-accent" id="measurement-label">
-              Measurement
-            </div>
-            <div className="pill-row" role="group" aria-labelledby="measurement-label">
-              {(["money", "hours", "quantity"] as Measurement[]).map((m) => (
-                <button key={m} type="button" className={`chip ${d.measurement === m ? "chip-on" : ""}`} aria-pressed={d.measurement === m} onClick={() => set("measurement", m)}>
-                  {m[0].toUpperCase() + m.slice(1)}
-                </button>
-              ))}
-            </div>
-
-            <div className="wz-cols">
-              {d.measurement === "hours" ? (
-                <div className="wz-pair">
-                  <label className="grow">
-                    <span className="label-accent">Goal · hours</span>
-                    <input className="input mt-6" type="number" min={0} step={1} inputMode="numeric" value={d.goalHours} onChange={(e) => set("goalHours", e.target.value)} />
-                  </label>
-                  <label className="grow">
-                    <span className="label-accent">minutes</span>
-                    <input className="input mt-6" type="number" min={0} max={59} step={1} inputMode="numeric" value={d.goalMinutes} onChange={(e) => set("goalMinutes", e.target.value)} />
-                  </label>
-                </div>
-              ) : (
-                <label>
-                  <span className="label-accent">Sprint goal · whole {d.measurement === "money" ? "currency units" : "numbers"}</span>
-                  <input id="goal" className="input mt-6" type="number" min={1} step={1} inputMode="numeric" value={d.goalWhole} onChange={(e) => set("goalWhole", e.target.value)} placeholder={d.measurement === "money" ? "8000" : "12"} />
-                </label>
-              )}
-              {d.measurement === "money" ? (
-                <label>
-                  <span className="label-accent">Currency</span>
-                  <input className="input mt-6 wz-upper" value={d.currency} maxLength={3} onChange={(e) => set("currency", e.target.value.toUpperCase())} />
-                </label>
-              ) : d.measurement === "quantity" ? (
-                <label>
-                  <span className="label-accent">Unit name</span>
-                  <input className="input mt-6" value={d.unit} onChange={(e) => set("unit", e.target.value)} placeholder="workouts" />
-                </label>
-              ) : (
-                <div />
-              )}
-            </div>
-
-            {d.measurement === "money" ? (
-              <div className="mt-22">
-                <div className="label-accent">Usage of funds · if I earn this, what is it for?</div>
-                <div className="wz-row mt-8" aria-hidden="true">
-                  <span className="label-muted wz-two">Label</span>
-                  <span className="label-muted grow">Amount</span>
-                  <span className="wz-spacer" />
-                </div>
-                {d.usage.map((u, i) => (
-                  <div key={i} className="wz-row mt-8">
-                    <input className="input wz-two" placeholder="Rent" aria-label={`Usage ${i + 1} label`} value={u.label} onChange={(e) => set("usage", d.usage.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
-                    <input className="input grow" type="number" min={1} step={1} inputMode="numeric" placeholder="2800" aria-label={`Usage ${i + 1} amount`} value={u.amount} onChange={(e) => set("usage", d.usage.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))} />
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      aria-label={`Remove usage ${i + 1}`}
-                      onClick={() => {
-                        set("usage", d.usage.filter((_, j) => j !== i));
-                        addUsage.current?.focus();
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-                <button ref={addUsage} type="button" className="btn btn-ghost mt-8" onClick={() => set("usage", [...d.usage, { label: "", amount: "" }])}>
-                  Add a use
-                </button>
-              </div>
-            ) : null}
-
-            <div className="mt-22">
-              <div className="label-accent" id="start-label">
-                Start
-              </div>
-              <div className="pill-row" role="group" aria-labelledby="start-label">
-                <button type="button" className={`chip ${!d.startsTomorrow ? "chip-on" : ""}`} aria-pressed={!d.startsTomorrow} onClick={() => set("startsTomorrow", false)}>
-                  Today{today ? ` · ${formatIsoDate(today, { weekday: "short", month: "short", day: "numeric" })}` : ""}
-                </button>
-                <button type="button" className={`chip ${d.startsTomorrow ? "chip-on" : ""}`} aria-pressed={d.startsTomorrow} onClick={() => set("startsTomorrow", true)}>
-                  Tomorrow{today ? ` · ${formatIsoDate(addDays(today, 1), { weekday: "short", month: "short", day: "numeric" })}` : ""}
-                </button>
-              </div>
-              <div className="wz-note mt-8">Days turn at midnight in {tz.replace("_", " ")}; the zone locks with the sprint.</div>
-            </div>
-          </>
-        ) : null}
+        {step === 1 ? <StepMeasure d={d} set={set} today={today} tz={tz} /> : null}
 
         {step === 2 ? (
-          <>
-            <div className="label-accent" id="confidence-label">
-              Confidence · 6–8 is the ideal stretch
-            </div>
-            <div className="wz-chips" role="group" aria-labelledby="confidence-label">
-              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  className={`chip wz-conf ${d.confidence === n ? "chip-on" : n >= 6 && n <= 8 ? "wz-conf-ideal" : ""}`}
-                  aria-label={`Confidence ${n}`}
-                  aria-pressed={d.confidence === n}
-                  onClick={() => set("confidence", n)}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-            <label className="label-accent block mt-22" htmlFor="celebration">
-              Celebration when the goal lands
-            </label>
-            <input id="celebration" className="input mt-6" value={d.celebration} onChange={(e) => set("celebration", e.target.value)} />
-            <label className="label-accent block mt-18" htmlFor="mantra">
-              Mantra · shown on Today every day
-            </label>
-            <input id="mantra" className="input mt-6" value={d.mantra} onChange={(e) => set("mantra", e.target.value)} placeholder="An inspirational phrase" />
-          </>
+          <StepConfidence
+            confidence={d.confidence}
+            celebration={d.celebration}
+            mantra={d.mantra}
+            onConfidence={(n) => set("confidence", n)}
+            onCelebration={(v) => set("celebration", v)}
+            onMantra={(v) => set("mantra", v)}
+          />
         ) : null}
 
-        {step === 3 && sameTargets ? (
-          <>
-            <div className="wz-between">
-              <div className="label-accent">14 daily targets · {d.mode === "same" ? "same each day" : "custom"}</div>
-              <div className="wz-modes" role="group" aria-label="Target mode">
-                <button type="button" className={`chip ${d.mode === "same" ? "chip-on" : ""}`} aria-pressed={d.mode === "same"} onClick={() => pickMode("same")}>
-                  Same
-                </button>
-                <button type="button" className={`chip ${d.mode === "custom" ? "chip-on" : ""}`} aria-pressed={d.mode === "custom"} onClick={() => pickMode("custom")}>
-                  Custom
-                </button>
-              </div>
-            </div>
-            <div className="mt-12">
-              <PlanGrid
-                measured={measured}
-                goal={amount!}
-                cells={planCells}
-                editing={d.mode === "custom"}
-                values={d.custom}
-                parsed={customParsed}
-                onChange={(i, raw) => set("custom", d.custom.map((x, j) => (j === i ? raw : x)))}
-              />
-            </div>
-            <div className="wz-note wz-narrow mt-10">
-              {d.mode === "custom"
-                ? `Each day stands alone — zero is fine for a day off. Start is available once the plan totals the goal.${d.measurement === "hours" ? " Enter hours as h:mm." : ""}`
-                : hasRoundingDifference(sameTargets)
-                  ? `The goal does not split evenly, so the first days carry one extra ${unitLabel(measured)}.`
-                  : "Goal ÷ 14, the same every day. Choose Custom to set days individually."}
-            </div>
+        {step === 3 && sameTargets && amount !== null ? (
+          <StepTargets
+            mode={d.mode}
+            onMode={pickMode}
+            measured={measured}
+            amount={amount}
+            cells={planCells}
+            values={d.custom}
+            parsed={customParsed}
+            onValue={(i, raw) => set("custom", d.custom.map((x, j) => (j === i ? raw : x)))}
+            sameTargets={sameTargets}
+          />
+        ) : null}
 
-            {d.area && kits[d.area] ? (
-              <div className="wz-kit" data-testid="wizard-kit">
-                Pre-filled from your last {areaName(d.area)} review. Change anything you like.
-              </div>
-            ) : null}
-
-            <div className="wz-section" data-testid="wizard-impediments">
-              <div className="wz-between">
-                <span className="wz-group-title">
-                  Impediments <span className={`wz-count ${d.impedimentIds.length > 0 ? "wz-count-on" : ""}`}>{d.impedimentIds.length} of 3</span>
-                </span>
-                <span className="wz-note">What is most likely to get in the way?</span>
-              </div>
-              <div role="group" aria-label="Impediments" className="mt-6">
-                {impOptions.map((i) => {
-                  const noSituation = joinBlocker(i) === "situation";
-                  return (
-                    <OptionRow
-                      key={i.id}
-                      on={d.impedimentIds.includes(i.id)}
-                      disabled={noSituation || (!d.impedimentIds.includes(i.id) && d.impedimentIds.length >= 3)}
-                      label={i.name}
-                      sub={noSituation ? "No situation yet — add one on the Impediments page" : [proofSummary(i), appliesTo(i) && `applies to: ${appliesTo(i)}`].filter(Boolean).join(" · ") || null}
-                      tag={i.scope === "global" ? "Global" : null}
-                      onPick={() => toggleImpediment(i.id)}
-                    />
-                  );
-                })}
-              </div>
-              <label htmlFor="new-impediment" className="label-accent block mt-12">
-                Create a new impediment
-              </label>
-              <div className="proof-grid mt-6">
-                <label htmlFor="new-impediment" className="label-accent proof-label">
-                  WHEN
-                </label>
-                <input
-                  id="new-impediment"
-                  className="input input-compact"
-                  value={newImp}
-                  onChange={(e) => setNewImp(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInline("impediment"); } }}
-                  placeholder="I notice myself delaying my first work block"
-                />
-              </div>
-              <SituationPicker
-                idPrefix="new-impediment"
-                options={sits}
-                selected={newImpSits}
-                onToggle={(id) => setNewImpSits((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id]))}
-                onCreate={(names) => createSituationInline("impediment", names)}
-                compact
-              />
-              <div className="wz-row mt-8">
-                <span className="hint grow" id="new-impediment-hint" aria-live="polite">
-                  {newImpReady ? "" : "WHEN and at least one situation are needed."}
-                </span>
-                <button type="button" className="btn btn-ghost wz-create" disabled={!newImpReady || creating !== null} onClick={() => createInline("impediment")} aria-describedby={newImpReady ? undefined : "new-impediment-hint"}>
-                  {creating === "impediment" ? "Creating…" : "Create"}
-                </button>
-              </div>
-            </div>
-
-            {d.impedimentIds.length > 0 ? (
-              <div className="wz-highest" data-testid="wizard-highest">
-                <div className="wz-group-title">Highest impediment</div>
-                <div className="wz-blurb">The obstacle most likely to cause this sprint to fail. Its WHEN must carry a THEN and a recovery criterion.</div>
-                <div role="radiogroup" aria-label="Highest impediment">
-                  {impOptions
-                    .filter((i) => d.impedimentIds.includes(i.id))
-                    .map((i) => (
-                      <OptionRow
-                        key={i.id}
-                        single
-                        on={d.highestId === i.id}
-                        label={i.name}
-                        sub={proofComplete(i) ? null : proofSummary(i) ? "Response incomplete — complete it below" : "No response yet — write one below"}
-                        onPick={() => setD((p) => ({ ...p, highestId: i.id, proofThen: i.proof_then ?? "", proofRecover: i.proof_recover ?? "" }))}
-                      />
-                    ))}
-                </div>
-                {highestNeedsProof ? (
-                  <ProofInputs
-                    idPrefix="proof"
-                    then={d.proofThen}
-                    recover={d.proofRecover}
-                    onThen={(v) => set("proofThen", v)}
-                    onRecover={(v) => set("proofRecover", v)}
-                    placeholderThen="I start a 10-minute timer on the smallest executable task"
-                    placeholderRecover="The timer is running within 10 minutes"
-                    className="mt-14"
-                  />
-                ) : null}
-              </div>
-            ) : null}
-
-            <div className="mt-22" data-testid="wizard-cues">
-              <div className="wz-between">
-                <span className="wz-group-title">
-                  Execution cues <span className={`wz-count ${d.cueIds.length > 0 ? "wz-count-on" : ""}`}>{d.cueIds.length} of 3</span>
-                </span>
-                <span className="wz-note">Optional · what should I remember to help me succeed?</span>
-              </div>
-              <div role="group" aria-label="Execution cues" className="mt-6">
-                {cueOptions.map((c) => {
-                  const noSituation = joinBlocker(c) === "situation";
-                  return (
-                    <OptionRow
-                      key={c.id}
-                      on={d.cueIds.includes(c.id)}
-                      disabled={noSituation || (!d.cueIds.includes(c.id) && d.cueIds.length >= 3)}
-                      label={c.name}
-                      sub={noSituation ? "No situation yet — add one on the Cues page" : [cueSummary(c), appliesTo(c) && `applies to: ${appliesTo(c)}`].filter(Boolean).join(" · ") || null}
-                      tag={c.scope === "global" ? "Global" : null}
-                      onPick={() => setCues(d.cueIds.includes(c.id) ? d.cueIds.filter((x) => x !== c.id) : [...d.cueIds, c.id])}
-                    />
-                  );
-                })}
-              </div>
-              {d.cueIds.length > 0 ? (
-                <div className="mt-12" data-testid="wizard-focus">
-                  <div className="wz-between">
-                    <span id="focus-label" className="wz-group-title">
-                      Focus cue
-                    </span>
-                    <span className="wz-note">Its use is asked first at every Day Close.</span>
-                  </div>
-                  <div role="radiogroup" aria-labelledby="focus-label" className="mt-6">
-                    {cueOptions
-                      .filter((c) => d.cueIds.includes(c.id))
-                      .map((c) => (
-                        <OptionRow key={c.id} single on={d.focusId === c.id} label={c.name} onPick={() => set("focusId", c.id)} />
-                      ))}
-                  </div>
-                </div>
-              ) : null}
-              <div className="label-accent mt-12" id="new-cue-label">
-                Create a new execution cue
-              </div>
-              <div className="proof-grid mt-6" role="group" aria-labelledby="new-cue-label">
-                <label htmlFor="new-cue-when" className="label-accent proof-label">
-                  WHEN
-                </label>
-                <input
-                  id="new-cue-when"
-                  className="input input-compact"
-                  value={newCueWhen}
-                  onChange={(e) => setNewCueWhen(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInline("cue"); } }}
-                  placeholder="I schedule anything"
-                />
-                <label htmlFor="new-cue" className="label-accent proof-label">
-                  REMIND
-                </label>
-                <input
-                  id="new-cue"
-                  className="input input-compact"
-                  value={newCue}
-                  onChange={(e) => setNewCue(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createInline("cue"); } }}
-                  placeholder='ask "How much does this pay?"'
-                />
-              </div>
-              <SituationPicker
-                idPrefix="new-cue"
-                options={sits}
-                selected={newCueSits}
-                onToggle={(id) => setNewCueSits((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id]))}
-                onCreate={(names) => createSituationInline("cue", names)}
-                compact
-              />
-              <div className="wz-row mt-8">
-                <span className="hint grow" id="new-cue-hint" aria-live="polite">
-                  {newCueReady ? "" : "WHEN, REMIND and at least one situation are needed."}
-                </span>
-                <button type="button" className="btn btn-ghost wz-create" disabled={!newCueReady || creating !== null} onClick={() => createInline("cue")} aria-describedby={newCueReady ? undefined : "new-cue-hint"}>
-                  {creating === "cue" ? "Creating…" : "Create"}
-                </button>
-              </div>
-            </div>
-
-            <label className="label-accent block mt-22" htmlFor="intention-1">
-              Day 1 intention · optional
-            </label>
-            <textarea id="intention-1" className="input mt-6" rows={2} value={d.intention} onChange={(e) => set("intention", e.target.value)} placeholder="Today I will…" />
-
-            <label className="wz-align">
-              <input type="checkbox" className="check" aria-label="Vision alignment" checked={d.aligned} onChange={(e) => set("aligned", e.target.checked)} />
-              <span className="wz-align-text">This outcome meaningfully advances my vision.</span>
-            </label>
-          </>
+        {step === 4 ? (
+          <StepItems
+            kitNote={d.area && kits[d.area] ? `Pre-filled from your last ${areaName(d.area)} review. Change anything you like.` : null}
+            impOptions={impOptions}
+            cueOptions={cueOptions}
+            impedimentIds={d.impedimentIds}
+            highestId={d.highestId}
+            proofThen={d.proofThen}
+            proofRecover={d.proofRecover}
+            highestNeedsProof={highestNeedsProof}
+            cueIds={d.cueIds}
+            focusId={d.focusId}
+            sits={sits}
+            onToggleImpediment={toggleImpediment}
+            onPickHighest={(i) => setD((p) => ({ ...p, highestId: i.id, proofThen: i.proof_then ?? "", proofRecover: i.proof_recover ?? "" }))}
+            onProofThen={(v) => set("proofThen", v)}
+            onProofRecover={(v) => set("proofRecover", v)}
+            onToggleCue={(id) => setCues(d.cueIds.includes(id) ? d.cueIds.filter((x) => x !== id) : [...d.cueIds, id])}
+            onFocus={(id) => set("focusId", id)}
+            onCreated={created}
+            onCreateSituations={createSituationsInline}
+          />
         ) : null}
 
         {error ? (
@@ -751,9 +343,9 @@ export function NewSprintWizard({
           )}
           <div className="wz-foot-actions">
             <span className="hint" id="wizard-hint" aria-live="polite">
-              {stepHint[step] ?? ""}
+              {hint ?? ""}
             </span>
-            {step < 3 ? (
+            {step < LAST ? (
               <button
                 type="button"
                 className="btn btn-primary"

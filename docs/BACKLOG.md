@@ -43,15 +43,12 @@
 - **The legacy vision's step count.** The one hosted vision from before F16 reads
   `2 of 3` and `Locked` until its owner saves the picture (DECISIONS 2026-09-12 F16).
   Nothing to do unless a second legacy row ever appears.
-- **Wizard blocked-line copy** (eval-10 P2-1): the SPEC quotes "A sprint has to advance
-  the vision; finish its three steps first."; the wizard says "…and its three steps are
-  not all saved. Write the vision first; it takes three short steps." Same behaviour;
-  align the sentence when the wizard is next touched. *Taken by F18 (SPEC 2026-09-12).*
-- **Accessible names on the Goal and Obstacle steps** (eval-10 P2-2): the proof input's
-  name is "Proof" and the WHEN input's is "WHEN" while the SPEC writes the visible label
-  text and "When". Sighted users see the SPEC wording; only `getByLabel` by the long
-  text misses. Pick one convention across the three steps. *Taken by F18 (SPEC
-  2026-09-12).*
+- ~~**Wizard blocked-line copy** (eval-10 P2-1)~~ Done in F18 (2026-09-12): the wizard
+  says the SPEC's sentence (`BLOCKED_LINE` in `components/wizard/draft.ts`, unit-pinned).
+- ~~**Accessible names on the Goal and Obstacle steps** (eval-10 P2-2)~~ Done in F18
+  (2026-09-12): one convention — the part's short label (Goal, Proof, WHEN, THEN,
+  RECOVERED WHEN, REMIND) is the accessible name everywhere; the e2e pins Goal / Proof by
+  `getByLabel`.
 
 ## Deferred from F15 (2026-09-11)
 
@@ -263,14 +260,12 @@
 
 ## Found during audit remediation phases 4–6 (2026-09-06), not fixed there
 
-- **#43 wizard split by step.** `components/NewSprintWizard.tsx` is ~600 lines across
-  four steps in one component. A refactor with no behaviour change; deferred rather
-  than done inside a fix pass. Actions were split by domain in phase 3. *Taken by F18
-  (SPEC 2026-09-12): `components/wizard/Step*.tsx`.*
+- ~~**#43 wizard split by step.**~~ Done in F18 (2026-09-12): `components/wizard/Step*.tsx`
+  and `draft.ts`; the wizard keeps state, hints, submit and footer.
 - ~~**Tailwind keep or drop** (audit bucket D)~~ Dropped 2026-09-07 in the enabling
   pass (DECISIONS); its preflight is inlined in `app/globals.css`.
 - **Inline styles remain in the components the redesign rewrites** (`TodayView`,
-  `CloseFlow`, `LibraryPage`, `NewSprintWizard`, `VisionForm` and the Today cards, ~280
+  `CloseFlow`, `LibraryPage`, `VisionForm` and the Today cards (`NewSprintWizard` rewritten without them in F18), ~280
   of them): each moves to classes when its feature (F6–F9) replaces the component. The
   shell moved on 2026-09-07. F6 rewrote `LibraryPage` on 2026-09-07 but kept its inline
   styles (not in the F6 acceptance list); the move to classes is still owed.
@@ -421,10 +416,8 @@ The ranked backlog itself is `docs/audits/full-audit-2026-09-05.md` (47 findings
 
 ## Hustlemania — from eval-01 (F1, 2026-09-05), all P2
 
-- **Wizard step 4: clicking the confirmation label text does not toggle** — the box is a
-  `<span role="checkbox">` inside a `<label>` with no control; only the 18px square
-  *(the checkbox itself is removed by F18, SPEC 2026-09-12)*
-  responds. `components/NewSprintWizard.tsx`.
+- ~~**Wizard step 4: clicking the confirmation label text does not toggle**~~ Closed by
+  construction in F18 (2026-09-12): the alignment checkbox is gone.
 - **Close dialog: primary stays enabled for a fractional actual** (`1.5`); native
   `step=1` stops submission, not the SPEC's hint-beside-disabled-primary pattern.
   `components/today/CloseCard.tsx`.

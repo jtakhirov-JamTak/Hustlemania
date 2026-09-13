@@ -90,6 +90,21 @@ caret-hiding style landing mid-hydration, not an app mismatch. The visual pass i
 tripped the parser's 10-a-minute cap (four sorts per pass, four passes): the capture
 script purges the seed user's `parse_log` per pass.
 
+**Build-time calls (2026-09-12, F18).** A library row that could not join — no
+situation, or an impediment without its response — is `aria-disabled` while unticked
+(the SPEC), but an item created in the step's box still joins the sprint at once, as the
+inline creates always did, so the Highest's response inputs stay for a created impediment
+without a THEN; a ticked row is always toggleable. "Add impediment" / "Add cue" swap the
+members dialog for the picker and return to the card, not to the dialog — the card shows
+the result. The dialog's × is named "Close the dialog" so the footer's Close is the one
+Close. Playwright refuses to press an `aria-disabled` control on its own; the e2e forces
+the press and asserts nothing changed. An impediment added and removed on the same day
+is still offered at that day's close (F15's `removed_at >= date`) — pinned in the e2e
+snapshot rather than changed. `StartSprintInput` drops `intention` while `start_sprint`
+keeps `p_intention` (F18 non-goal: no change to the function). The throwaway mockup
+page was again not built: 32 real captures in `docs/mockups/f18-wizard-rail/`. The
+`Modal` opener defect (FIX_LOG) cost two wrong fixes before the Strict Mode explanation.
+
 ---
 
 ## 2026-09-12 — F16 vision v3: three steps that each save something, all three unlock sprints, INTERFERES and the optional prompts deleted

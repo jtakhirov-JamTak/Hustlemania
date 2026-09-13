@@ -5,11 +5,14 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { removeSprintItem, saveProofPoint, setFocusCue, setHighestImpediment } from "@/app/(app)/actions/library";
 import { completeSprint, endSprintEarly } from "@/app/(app)/actions/review";
 import { saveMantra } from "@/app/(app)/actions/sprint";
+import { CaptureBox, focusMissingPart, type CapturePhase } from "@/components/CaptureBox";
 import { ItemPicker } from "@/components/ItemPicker";
-import { ProofInputs } from "@/components/ProofInputs";
+import { Menu } from "@/components/Menu";
+import { Modal } from "@/components/Modal";
 import { AddItemPicker, candidatesFor } from "@/components/today/AddItemPicker";
 import { TwoTap } from "@/components/TwoTap";
 import { callAction } from "@/lib/callAction";
+import { missingPart, partText, type Parts } from "@/lib/capture";
 import { appliesTo, proofComplete, proofSummary, type ItemKind, type LibraryItem, type SituationItem, type SprintItems } from "@/lib/data";
 import { formatAmount, type Measured } from "@/lib/format";
 import { celebrationState } from "@/lib/sprintDay";
@@ -24,7 +27,8 @@ type UsageRow = { label: string; amount: number };
 /**
  * The journal's right rail (F8, v8 README): mantra + streak, the highest impediment with
  * the other impediments under it, the cues, the celebration, the usage of funds. F10 adds
- * the pinned lesson, Complete sprint once the goal is reached, and End sprint early.
+ * the pinned lesson, Complete sprint once the goal is reached, and End sprint early. F18:
+ * the Highest and Cues cards each carry one Edit menu; the card bodies only read.
  */
 export function Rail({
   sprintId,
@@ -257,11 +261,101 @@ function MantraCard({ sprintId, initial, streakText }: { sprintId: string; initi
   );
 }
 
+type MemberRow = { id: string; name: string; tag: string | null; removable: boolean; note: string | null };
+
+/**
+ * F18: "Add or remove" — the sprint's members of one kind in a dialog: a tag on the
+ * Highest or the Focus, Remove on every row that may go, and one Add button that swaps
+ * this dialog for the picker (never two dialogs at once).
+ */
+function MembersModal({
+  testId,
+  title,
+  rows,
+  max,
+  addLabel,
+  onAdd,
+  onRemove,
+  error,
+  pending,
+  onClose,
+}: {
+  testId: string;
+  title: string;
+  rows: MemberRow[];
+  max: number;
+  addLabel: string;
+  onAdd: () => void;
+  onRemove: (id: string) => void;
+  error: string | null;
+  pending: boolean;
+  onClose: () => void;
+}) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  return (
+    <Modal labelledBy="members-title" onDismiss={onClose} initialFocus={heading} maxWidth={520}>
+      <div className="dialog-head dialog-head-rule">
+        <h2 id="members-title" className="card-title focus-quiet" ref={heading} tabIndex={-1}>
+          {title}
+        </h2>
+        <button type="button" className="link-quiet dialog-x" aria-label="Close the dialog" onClick={onClose}>
+          ×
+        </button>
+      </div>
+      <div className="dialog-body dialog-body-rule" data-testid={testId}>
+        <div className="r-count">
+          {rows.length} of {max}
+        </div>
+        {error ? <ErrorBar className="mt-10">{error}</ErrorBar> : null}
+        {rows.map((r) => (
+          <div key={r.id} className="r-member" data-testid="member-row" data-item-id={r.id}>
+            <span className="r-member-name">
+              {r.name}
+              {r.tag ? <span className="option-tag">{r.tag}</span> : null}
+            </span>
+            {r.removable ? (
+              <button
+                type="button"
+                className="j-link j-link-muted"
+                disabled={pending}
+                // The pressed Remove unmounts with its row; the dialog's heading takes focus (SC 2.4.3).
+                onClick={() => {
+                  heading.current?.focus();
+                  onRemove(r.id);
+                }}
+                aria-label={`Remove ${r.name}`}
+              >
+                Remove
+              </button>
+            ) : r.note ? (
+              <span className="r-member-note">{r.note}</span>
+            ) : null}
+          </div>
+        ))}
+        {rows.length === 0 ? <div className="t-prompt mt-6">Nothing in this sprint yet.</div> : null}
+      </div>
+      <div className="dialog-foot dialog-foot-rule">
+        <button type="button" className="btn btn-ghost" onClick={onClose}>
+          Close
+        </button>
+        {rows.length < max ? (
+          <button type="button" className="btn btn-primary" disabled={pending} onClick={onAdd}>
+            {addLabel}
+          </button>
+        ) : (
+          <span className="hint">The sprint holds its {max} already.</span>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 /**
  * The highest impediment: its WHEN (the name), then THEN / RECOVERED WHEN / APPLIES TO
- * each on its own row (U1, F15), Change (picker over the sprint's impediments, with the
- * response inputs when the pick is incomplete), Edit response, then "Also watching" —
- * the other impediments, with Remove and Add.
+ * each on its own row (U1, F15) and the read-only "Also watching" list. One Edit menu
+ * (F18): Change the Highest (the picker over the sprint's impediments, with the response
+ * inputs when the pick is incomplete), Fix the response (the one-box capture, inline),
+ * Add or remove (the members dialog).
  */
 function HighestCard({
   sprintId,
@@ -279,22 +373,18 @@ function HighestCard({
   const highest = impediments.find((i) => i.is_highest) ?? null;
   const others = impediments.filter((i) => !i.is_highest);
   const [changing, setChanging] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [fixing, setFixing] = useState(false);
+  const [members, setMembers] = useState(false);
   const [adding, setAdding] = useState(false);
   const [pick, setPick] = useState<string | null>(null);
   const [then, setThen] = useState("");
   const [recover, setRecover] = useState("");
+  const [parts, setParts] = useState<Parts>({ then: "", recovered_when: "" });
+  const [phase, setPhase] = useState<CapturePhase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const editButton = useRef<HTMLButtonElement>(null);
-  const wasEditing = useRef(false);
-  useEffect(() => {
-    if (wasEditing.current && !editing) editButton.current?.focus();
-    wasEditing.current = editing;
-  }, [editing]);
   const filled = Boolean(then.trim() && recover.trim());
-  const proofHint = filled ? null : PROOF_HINT;
 
   const picked = impediments.find((i) => i.id === pick) ?? null;
   const needsProof = Boolean(picked && !proofComplete(picked));
@@ -313,10 +403,11 @@ function HighestCard({
     setChanging(true);
   }
 
-  function openEdit() {
-    prefill(highest);
+  function openFix() {
+    setParts({ then: highest?.proof_then ?? "", recovered_when: highest?.proof_recover ?? "" });
+    setPhase(highest?.proof_then ? "manual" : "idle");
     setError(null);
-    setEditing(true);
+    setFixing(true);
   }
 
   function confirmChange() {
@@ -331,22 +422,26 @@ function HighestCard({
     });
   }
 
-  function saveProof() {
-    if (!highest || proofHint || pending) return;
+  const fixHint = phase === "parsing" ? "Reading your words…" : (missingPart("response", parts)?.hint ?? null);
+
+  function saveFix() {
+    if (!highest || pending) return;
+    if (fixHint) {
+      focusMissingPart("fix", "response", parts);
+      return;
+    }
     start(async () => {
-      const res = await callAction(() => saveProofPoint(highest.id, { then, recover }));
+      const res = await callAction(() => saveProofPoint(highest.id, { then: partText(parts, "then"), recover: partText(parts, "recovered_when") }));
       if (res.error) {
         setError(res.error);
         return;
       }
-      setEditing(false);
+      setFixing(false);
     });
   }
 
   function remove(id: string) {
     setListError(null);
-    // The pressed Remove unmounts with its row; the list's heading takes focus (SC 2.4.3).
-    document.getElementById("also-watching")?.focus();
     start(async () => {
       const res = await callAction(() => removeSprintItem(sprintId, "impediment", id));
       if (res.error) setListError(res.error);
@@ -358,9 +453,15 @@ function HighestCard({
       <div className="r-head">
         <h2 className="t-kicker">Highest impediment</h2>
         {highest && !locked ? (
-          <button type="button" className="j-link" onClick={openChange}>
-            Change
-          </button>
+          <Menu
+            id="highest-menu"
+            testId="highest-edit"
+            items={[
+              { label: "Change the Highest", onSelect: openChange },
+              { label: "Fix the response", onSelect: openFix },
+              { label: "Add or remove", onSelect: () => { setListError(null); setMembers(true); } },
+            ]}
+          />
         ) : null}
       </div>
       {highest ? (
@@ -368,7 +469,7 @@ function HighestCard({
           <div className="r-name" data-testid="highest-name">
             <span className="r-part">WHEN</span> {highest.name}
           </div>
-          {!editing ? (
+          {!fixing ? (
             <>
               <div className="r-proof">
                 <span className="r-part">THEN</span> <span data-testid="proof-then">{highest.proof_then}</span>
@@ -379,37 +480,33 @@ function HighestCard({
                   <span data-testid="proof-recover">{highest.proof_recover}</span>
                 ) : (
                   <span className="r-missing" data-testid="proof-recover-missing">
-                    not set — add it under Edit response
+                    not set — add it under Edit → Fix the response
                   </span>
                 )}
               </div>
               <div className="r-proof">
                 <span className="r-part">APPLIES TO</span> <span data-testid="highest-situations">{appliesTo(highest) ?? "no situation yet"}</span>
               </div>
-              {!locked ? (
-                <button ref={editButton} type="button" className="j-link mt-10" onClick={openEdit}>
-                  Edit response
-                </button>
-              ) : null}
             </>
           ) : (
             <form
-              className="r-rule"
+              className="r-fix"
+              data-testid="fix-response"
               onSubmit={(e) => {
                 e.preventDefault();
-                saveProof();
+                saveFix();
               }}
             >
-              <ProofInputs idPrefix="hi" then={then} recover={recover} onThen={setThen} onRecover={setRecover} placeholderThen="" placeholderRecover="" />
+              <CaptureBox kind="response" idPrefix="fix" mode={highest.proof_then ? "fields" : "capture"} parts={parts} onParts={setParts} onPhase={setPhase} disabled={pending} compact />
               {error ? <ErrorBar className="mt-12">{error}</ErrorBar> : null}
               <div className="j-plan-actions">
-                <span className="hint" id="hi-hint" aria-live="polite">
-                  {proofHint ?? ""}
+                <span className="hint" id="fix-hint" aria-live="polite">
+                  {fixHint ?? ""}
                 </span>
-                <button type="button" className="btn btn-ghost" onClick={() => setEditing(false)}>
+                <button type="button" className="btn btn-ghost" onClick={() => setFixing(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" aria-disabled={pending || Boolean(proofHint)} aria-describedby={proofHint ? "hi-hint" : undefined}>
+                <button type="submit" className="btn btn-primary" aria-disabled={pending || Boolean(fixHint)} aria-describedby={fixHint ? "fix-hint" : undefined}>
                   {pending ? "Saving…" : "Save"}
                 </button>
               </div>
@@ -420,30 +517,20 @@ function HighestCard({
         <div className="r-text">No highest impediment is set for this sprint.</div>
       )}
 
-      <div className="r-rule focus-quiet" data-testid="also-watching" id="also-watching" tabIndex={-1}>
+      <div className="r-rule" data-testid="also-watching">
         <div className="r-head">
           <span className="t-prompt">Also watching</span>
           <span className="r-count">{impediments.length} of 3</span>
         </div>
-        {listError ? (
+        {listError && !members ? (
           <ErrorBar className="mt-6" action={{ label: "Dismiss", onClick: () => setListError(null) }}>{listError}</ErrorBar>
         ) : null}
         {others.length === 0 ? <div className="t-prompt mt-6">Only the highest impediment is in this sprint.</div> : null}
         {others.map((i) => (
           <div key={i.id} className="r-item" data-testid="sprint-item" data-item-id={i.id}>
             <span>{i.name}</span>
-            {!locked ? (
-              <button type="button" className="j-link j-link-muted" disabled={pending} onClick={() => remove(i.id)} aria-label={`Remove ${i.name}`}>
-                Remove
-              </button>
-            ) : null}
           </div>
         ))}
-        {!locked && impediments.length < 3 ? (
-          <button type="button" className="j-link mt-6" onClick={() => setAdding(true)}>
-            Add impediment
-          </button>
-        ) : null}
       </div>
 
       {changing ? (
@@ -466,6 +553,23 @@ function HighestCard({
           onCancel={() => setChanging(false)}
         />
       ) : null}
+      {members ? (
+        <MembersModal
+          testId="highest-members"
+          title="Impediments in this sprint"
+          rows={impediments.map((i) => ({ id: i.id, name: i.name, tag: i.is_highest ? "HIGHEST" : null, removable: !i.is_highest, note: i.is_highest ? "change the Highest to remove it" : null }))}
+          max={3}
+          addLabel="Add impediment"
+          onAdd={() => {
+            setMembers(false);
+            setAdding(true);
+          }}
+          onRemove={remove}
+          error={listError}
+          pending={pending}
+          onClose={() => setMembers(false)}
+        />
+      ) : null}
       {adding ? (
         <AddItemPicker kind="impediment" sprintId={sprintId} candidates={candidatesFor("impediment", library, impediments)} situations={situations} onClose={() => setAdding(false)} />
       ) : null}
@@ -473,7 +577,11 @@ function HighestCard({
   );
 }
 
-/** The sprint's cues: name + FOCUS tag or "Set as focus", `WHEN {cue_when}`, `APPLIES TO`, Remove (never on the focus while others remain), Add cue. */
+/**
+ * The sprint's cues: name + FOCUS tag, `WHEN {cue_when}`, `APPLIES TO`. One Edit menu
+ * (F18): Change the focus (a single picker, "Set as focus"), Add or remove (the members
+ * dialog; the focus cannot go while another cue remains).
+ */
 function CuesCard({
   sprintId,
   cues,
@@ -487,15 +595,23 @@ function CuesCard({
   situations: SituationItem[];
   locked: boolean;
 }) {
+  const [changing, setChanging] = useState(false);
+  const [members, setMembers] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [pick, setPick] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const focus = cues.find((c) => c.is_focus) ?? null;
 
-  function act(op: () => Promise<{ error?: string }>) {
+  function act(op: () => Promise<{ error?: string }>, then?: () => void) {
     setError(null);
     start(async () => {
       const res = await callAction(op);
-      if (res.error) setError(res.error);
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      then?.();
     });
   }
 
@@ -503,9 +619,21 @@ function CuesCard({
     <section className="r-card" data-testid="sprint-items">
       <div className="r-head">
         <h2 className="t-kicker">Execution cues</h2>
-        <span className="r-count">{cues.length} of 3</span>
+        <span className="r-head-side">
+          <span className="r-count">{cues.length} of 3</span>
+          {!locked ? (
+            <Menu
+              id="cues-menu"
+              testId="cues-edit"
+              items={[
+                { label: "Change the focus", disabled: cues.length === 0, onSelect: () => { setPick(focus?.id ?? null); setError(null); setChanging(true); } },
+                { label: "Add or remove", onSelect: () => { setError(null); setMembers(true); } },
+              ]}
+            />
+          ) : null}
+        </span>
       </div>
-      {error ? (
+      {error && !changing && !members ? (
         <ErrorBar className="mt-10" action={{ label: "Dismiss", onClick: () => setError(null) }}>{error}</ErrorBar>
       ) : null}
       {cues.map((c) => (
@@ -519,19 +647,6 @@ function CuesCard({
                 </span>
               ) : null}
             </span>
-            {!locked && (!c.is_focus || cues.length === 1) ? (
-              <span className="j-row-actions">
-                {!c.is_focus ? (
-                  <button type="button" className="j-link" disabled={pending} onClick={() => act(() => setFocusCue(sprintId, c.id))} aria-label={`Set as focus: ${c.name}`}>
-                    Set as focus
-                  </button>
-                ) : null}
-                {/* F15: a sprint may hold no cue, so the last one (focus or not) can go. */}
-                <button type="button" className="j-link j-link-muted" disabled={pending} onClick={() => act(() => removeSprintItem(sprintId, "cue" as ItemKind, c.id))} aria-label={`Remove ${c.name}`}>
-                  Remove
-                </button>
-              </span>
-            ) : null}
           </div>
           <div className="r-cue-when">
             {c.cue_when ? (
@@ -548,10 +663,42 @@ function CuesCard({
         </div>
       ))}
       {cues.length === 0 ? <div className="t-prompt mt-6">No execution cue in this sprint — optional.</div> : null}
-      {!locked && cues.length < 3 ? (
-        <button type="button" className="j-link mt-12" onClick={() => setAdding(true)}>
-          Add cue
-        </button>
+
+      {changing ? (
+        <ItemPicker
+          title="Change the focus cue"
+          blurb="Its use is asked first at every Day Close."
+          options={cues.map((c) => ({ id: c.id, label: c.name, sub: c.cue_when ? `WHEN ${c.cue_when}` : null, tag: c.is_focus ? "Current" : null }))}
+          single
+          selected={pick ? [pick] : []}
+          onToggle={setPick}
+          hint={!pick ? "Pick one cue." : null}
+          error={error}
+          doneLabel="Set as focus"
+          pending={pending}
+          onDone={() => {
+            if (pick) act(() => setFocusCue(sprintId, pick), () => setChanging(false));
+          }}
+          onCancel={() => setChanging(false)}
+        />
+      ) : null}
+      {members ? (
+        <MembersModal
+          testId="cue-members"
+          title="Execution cues in this sprint"
+          // F15: a sprint may hold no cue, so the last one (focus or not) can go; the focus stays while others remain.
+          rows={cues.map((c) => ({ id: c.id, name: c.name, tag: c.is_focus ? "FOCUS" : null, removable: !c.is_focus || cues.length === 1, note: c.is_focus ? "change the focus to remove it" : null }))}
+          max={3}
+          addLabel="Add cue"
+          onAdd={() => {
+            setMembers(false);
+            setAdding(true);
+          }}
+          onRemove={(id) => act(() => removeSprintItem(sprintId, "cue" as ItemKind, id))}
+          error={error}
+          pending={pending}
+          onClose={() => setMembers(false)}
+        />
       ) : null}
       {adding ? <AddItemPicker kind="cue" sprintId={sprintId} candidates={candidatesFor("cue", library, cues)} situations={situations} onClose={() => setAdding(false)} /> : null}
     </section>

@@ -11,6 +11,7 @@ export function OptionRow({
   on,
   single = false,
   disabled = false,
+  ariaDisabled = false,
   onPick,
   label,
   sub,
@@ -20,6 +21,8 @@ export function OptionRow({
   on: boolean;
   single?: boolean;
   disabled?: boolean;
+  /** F18: the row stays focusable and readable (its sub line says what finishes it) but a press does nothing. */
+  ariaDisabled?: boolean;
   onPick: () => void;
   label: string;
   sub?: string | null;
@@ -32,7 +35,8 @@ export function OptionRow({
       role={single ? "radio" : "checkbox"}
       aria-checked={on}
       disabled={disabled}
-      onClick={onPick}
+      aria-disabled={ariaDisabled || undefined}
+      onClick={ariaDisabled ? undefined : onPick}
       onKeyDown={single ? onRadioArrowKeys : undefined}
       className={`option-row ${on ? "option-row-on" : ""}`}
       data-testid={testId}
